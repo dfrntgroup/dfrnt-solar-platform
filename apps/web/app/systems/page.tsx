@@ -29,7 +29,8 @@ export default async function Systems({ searchParams }: { searchParams: Promise<
           {chip("phase", "3", "Three phase")}{chip("sort", "battery", "Biggest battery first")}
         </div>
         <p className="muted small">{rows.length} systems · rebates as at {rebateDate()} · prices reviewed monthly</p>
-        {rows.length ? <div className="grid">{rows.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} />)}</div>
+        {rows.length ? <form action="/compare" method="get"><div className="grid">{rows.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} compare />)}</div>
+          <p style={{ marginTop: 14 }}><button className="btn ghost" type="submit">Compare selected</button></p></form>
           : <div className="ok">No system matches those filters. <Link href="/systems">Clear filters</Link> or talk to us and we&apos;ll size one for you.</div>}
       </div></section>
       <Footer />

@@ -4,7 +4,7 @@ import { configOptions, findSystem, priceSystem, type ConfigInput } from "@dfrnt
 import { Configurator } from "@/components/Configurator";
 import { pricingData } from "@/lib/pricing-data";
 import { Header, Footer } from "@/components/Header";
-import { secureSystem } from "@/app/actions";
+import { saveForLater, secureSystem } from "@/app/actions";
 import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate, sitePostcode } from "@/lib/site";
 
@@ -12,10 +12,11 @@ export const dynamic = "force-dynamic";
 
 export default async function SystemPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string>> }) {
   const { slug } = await params;
+  const sp = await searchParams;
   const data = await pricingData();
   const s = findSystem(slug, data.catalogue);
   if (!s) notFound();
-  const postcode = await sitePostcode(await searchParams);
+  const postcode = await sitePostcode(sp);
   const q = priceSystem(s, { postcode, asOf: todayAEST() }, data);
   const st = q.stack, c = q.config, r = q.rebate;
   const opts = configOptions({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode, installDate: q.window.lock_until, ...s.config } as ConfigInput, data.rules);
@@ -55,6 +56,11 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
                 you_pay: st.amount_payable, before_rebates: st.price_inc_gst, rebates: st.less_stcs, gst: st.gst, equipment: st.hardware_ex_gst, installation: st.installation_ex_gst,
                 solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message) }} />
             <div className="ok small">Earliest install date comes from your installer&apos;s real availability when you book.</div>
+            {sp.saved === "1" ? <p className="small ok" style={{ marginTop: 10 }}>Saved — we&apos;ve sent the link to your email.</p> : (
+              <form action={saveForLater} style={{ display: "flex", gap: 6, marginTop: 10 }}>
+                <input type="hidden" name="slug" value={s.slug} /><input type="hidden" name="postcode" value={postcode} />
+                <input name="email" type="email" placeholder="Email me this price" style={{ flex: 1, padding: 8, border: "1px solid var(--line)", borderRadius: 6, font: "inherit" }} required />
+                <button className="btn ghost sm" type="submit">Save</button></form>)}
           </aside>
         </div>
       </div></section>

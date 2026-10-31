@@ -37,3 +37,19 @@ export async function secureSystem(form: FormData) {
   } as never, { status: "secured" });
   redirect(`/quote/${out.result.token}`);
 }
+
+/** B5: save a system's price and email the link (the price is not locked until it's secured). */
+export async function saveForLater(form: FormData) {
+  const data = await pricingData();
+  const base = findSystem(String(form.get("slug")), data.catalogue);
+  const postcode = String(form.get("postcode") ?? ""), email = String(form.get("email") ?? "").trim();
+  if (!base || !/^\d{4}$/.test(postcode)) redirect("/systems");
+  if (!/^\S+@\S+\.\S+$/.test(email)) redirect(`/systems/${base.slug}?saved=bad`);
+  const out = await createQuote({ type: "customer", id: "anonymous" }, {
+    config: { backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, ...base.config, panelSku: base.config.panelSku ?? "", stacks: base.config.stacks ?? 1, postcode },
+    customerEmail: email, title: `${base.brand} · ${base.title}`, systemSlug: base.slug,
+  } as never, { status: "saved" });
+  const { queueMessage } = await import("@/lib/messages");
+  await queueMessage("M9", out.result.token, email, { amount: out.result.amount_payable });
+  redirect(`/systems/${base.slug}?saved=1`);
+}

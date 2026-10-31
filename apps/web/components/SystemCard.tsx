@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { CatalogueSystem, Quote } from "@dfrnt/engine";
 import { aud } from "@/lib/site";
 
-export function SystemCard({ s, q }: { s: CatalogueSystem; q: Quote }) {
+export function SystemCard({ s, q, compare }: { s: CatalogueSystem; q: Quote; compare?: boolean }) {
   const c = q.config;
   return (
     <div className="card">
@@ -16,6 +16,7 @@ export function SystemCard({ s, q }: { s: CatalogueSystem; q: Quote }) {
       </ul>
       <div className="pay"><small>You pay, installed</small>{aud(q.stack.amount_payable)}</div>
       <div className="before">{aud(q.stack.price_inc_gst)} before {aud(q.stack.less_stcs)} rebates</div>
+      {compare && <label className="small"><input type="checkbox" name="s" value={s.slug} /> Compare</label>}
       <Link className="btn" href={`/systems/${s.slug}`}>View system</Link>
     </div>
   );

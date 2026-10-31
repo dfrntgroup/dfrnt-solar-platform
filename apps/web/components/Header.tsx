@@ -29,7 +29,7 @@ export function Footer() {
       <div className="wrap cols">
         <div><strong style={{ color: "#fff" }}>DFRNT Solar</strong><p>Solar and batteries for South East Queensland. Fixed installed prices, installed by licensed local electricians.</p></div>
         <div><Link href="/systems">Solar + battery</Link><br /><Link href="/batteries">Battery only</Link><br /><Link href="/price-list">Price list</Link></div>
-        <div><Link href="/contact">Talk to us</Link><br /><Link href="/brands/solax">SolaX</Link><br /><Link href="/brands/sungrow">Sungrow</Link><br /><Link href="/brands/goodwe">GoodWe</Link></div>
+        <div><Link href="/how-it-works">How it works</Link><br /><Link href="/about">About</Link><br /><Link href="/warranty">Warranty</Link><br /><Link href="/refer">Refer a friend</Link><br /><Link href="/creators">Creators</Link><br /><Link href="/price-index">Price Index</Link><br /><Link href="/installers/apply">For installers</Link><br /><Link href="/contact">Talk to us</Link><br /><Link href="/brands/solax">SolaX</Link><br /><Link href="/brands/sungrow">Sungrow</Link><br /><Link href="/brands/goodwe">GoodWe</Link></div>
         <div className="small">Prices include GST and installation. Rebates are the Small-scale Technology Certificates and Cheaper Home Batteries incentive, assigned to us and taken off your price.</div>
       </div>
     </footer>
