@@ -44,6 +44,11 @@ export async function ledgerApprove(f: FormData) {
       await tx`update pay_ledger set status = ${to}, paid_at = ${to === "paid" ? new Date() : null} where id = any(${ids}) and status = ${to === "paid" ? "approved" : "eligible"}`;
       return { entity: "pay_ledger", entityId: ids.join(","), event: `ledger.${to}`, result: { count: ids.length } };
     });
+    if (to === "paid") {
+      const { completeIfSettled } = await import("@/lib/ops");
+      const qs = await db()`select distinct quote_id from pay_ledger where id = any(${ids})`;
+      for (const r of qs) await completeIfSettled(r.quote_id as string, me.actor);
+    }
   });
 }
 export async function approveProposal(f: FormData) { await decideApproval(f, true); }
@@ -127,4 +132,44 @@ export async function runTimersNow(f: FormData) {
     const r = which === "cutoff" ? await runCutoff() : await runDaily();
     await write({ actor: me.actor, action: `timers.${which}.manual` }, {}, async () => ({ entity: "timers", entityId: which, event: "timers.ran", result: r as never }));
   });
+}
+
+// ---- back office (O5, O14, O15, O16, O19, O20)
+export async function techReview(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  await run(`/ops/job/${id}`, async () => {
+    const q = (await getQuoteById(id))!;
+    const d = s(f, "decision");
+    if (d === "installer") await advance(q, "pricing_installer", me.actor, s(f, "note") || "Tech review: back to the installer");
+    else if (d === "decline") await advance(q, "declined", me.actor, s(f, "note") || "Tech review: declined");
+    else await installerPrice(q, me.actor, f.getAll("codes").map(String), s(f, "note") || "Tech review: priced by ops");
+  });
+}
+export async function draftPO(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  await run(`/ops/job/${id}`, async () => { const { draftPOs } = await import("@/lib/ops"); await draftPOs(id, me.actor); });
+}
+export async function poAction(f: FormData) {
+  const me = await requireStaff(); const back = s(f, "back") || "/ops/purchasing";
+  await run(back, async () => { const { poStep } = await import("@/lib/ops"); await poStep(s(f, "po"), s(f, "to") as never, me.actor, s(f, "eta") || undefined); });
+}
+export async function refund(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  await run(`/ops/job/${id}`, async () => { const { recordRefund } = await import("@/lib/ops"); await recordRefund(id, Number(s(f, "amount")), s(f, "note") || "Refund", me.actor); });
+}
+export async function refundSent(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  await run(`/ops/job/${id}`, async () => { const { markRefundSent } = await import("@/lib/ops"); await markRefundSent(s(f, "payment"), me.actor); });
+}
+export async function newCredit(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/credits", async () => { const { issueCredit } = await import("@/lib/ops"); await issueCredit(Number(s(f, "amount")), s(f, "reason") || "Goodwill", s(f, "email") || null, me.actor); });
+}
+export async function ticketReply(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  await run(`/ops/support/${id}`, async () => { const { replyTicket } = await import("@/lib/ops"); if (!s(f, "body")) throw new Error("Write a reply"); await replyTicket(id, me.name, s(f, "body"), f.get("internal") === "on", f.get("close") === "on"); });
+}
+export async function stcAction(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/stc", async () => { const { stcStep } = await import("@/lib/ops"); await stcStep(s(f, "id"), s(f, "to") as never, me.actor, s(f, "realised") ? Number(s(f, "realised")) : undefined, s(f, "ref") || undefined); });
 }

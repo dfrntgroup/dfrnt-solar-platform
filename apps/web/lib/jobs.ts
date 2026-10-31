@@ -16,13 +16,14 @@ export interface QuoteRow {
   site: SiteAnswers | null; installer_id: string | null; pricing_reasons: string[] | null; lock_until: string; install_date: string | null;
   signed_at: Date | null; signed_name: string | null; payment_method: string | null; payment_reference: string | null; paid_at: Date | null;
   customer_email: string | null; customer_name: string | null; customer_phone: string | null; postcode: string; created_at: Date;
-  discount_code: string | null; referral_discount: number | null;
+  discount_code: string | null; referral_discount: number | null; credit_code: string | null; credit_amount: number | null;
 }
 
 export async function getQuote(token: string): Promise<QuoteRow | null> {
   const [row] = await db()`select id, token, status, title, input, result, snapshot, site, installer_id, pricing_reasons,
     lock_until::text as lock_until, install_date::text as install_date, signed_at, signed_name, payment_method, payment_reference, paid_at,
-    customer_email, customer_name, customer_phone, postcode, created_at, discount_code,
+    customer_email, customer_name, customer_phone, postcode, created_at, discount_code, credit_code,
+    (select amount_inc::float8 from credits c where c.code = quotes.credit_code) as credit_amount,
     (select discount_inc::float8 from codes c where c.code = quotes.discount_code and c.active) as referral_discount from quotes where token = ${token}`;
   return (row as unknown as QuoteRow) ?? null;
 }
@@ -44,7 +45,7 @@ export async function reprice(q: QuoteRow, extra: { site?: SiteAnswers; extraLab
     } : {}),
   };
   const data = await pricingDataFor(q.result.versions);
-  return quote(input, { ...data, asOf: todayAEST(), extraLabour: extra.extraLabour, variations: extra.variations, discounts: { ...(q.referral_discount ? { referral: q.referral_discount } : {}), ...(extra.bank ? { bankTransferPct: 0.01 } : {}) } });
+  return quote(input, { ...data, asOf: todayAEST(), extraLabour: extra.extraLabour, variations: extra.variations, discounts: { ...(q.referral_discount ? { referral: q.referral_discount } : {}), ...(q.credit_amount ? { reportCredit: q.credit_amount } : {}), ...(extra.bank ? { bankTransferPct: 0.01 } : {}) } });
 }
 
 async function installerFor(postcode: string) {
@@ -96,7 +97,7 @@ async function freezePrice(q: QuoteRow, p: Quote, actor: Actor, rationale: strin
 
 /* I2: installer confirms price, optionally adding named lines from the menu */
 export async function installerPrice(q: QuoteRow, actor: Actor, extraCodes: string[], note?: string) {
-  if (q.status !== "pricing_installer") throw new Error("Not waiting for a price");
+  if (q.status !== "pricing_installer" && q.status !== "tech_review") throw new Error("Not waiting for a price");
   const extraLabour = extraCodes.filter(Boolean).map((code) => ({ code }));
   const p = await reprice(q, { extraLabour });
   await freezePrice(q, p, actor, note || (extraCodes.length ? `Installer added ${extraCodes.join(", ")}` : "Installer confirmed standard price"));
@@ -160,6 +161,8 @@ export async function book(q: QuoteRow, date: string) {
 export async function advance(q: QuoteRow, to: JobState, actor: Actor, rationale: string) {
   await move(q, to, actor, "jobs.advance", {}, rationale);
   if (to === "installed") {
+    const st = (q.snapshot ?? q.result);
+    await db()`insert into stc_receivables (quote_id, solar_stcs, battery_stcs, expected_value) values (${q.id}, ${st.rebate.solar_stcs}, ${st.rebate.battery_stcs}, ${st.stack.less_stcs}) on conflict do nothing`;
     await db()`update pay_ledger set status = 'eligible' where quote_id = ${q.id} and status = 'accrued'`;
     if (q.discount_code) await db()`insert into payouts (code, quote_id, amount, status) select code, ${q.id}, reward, 'eligible' from codes where code = ${q.discount_code} on conflict do nothing`;
     const first = (q.customer_name ?? "FRIEND").split(" ")[0]!.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 8) || "FRIEND";
@@ -211,6 +214,15 @@ export async function cancel(q: QuoteRow, actor: Actor, reason: string) {
 export async function applyCode(q: QuoteRow, raw: string) {
   if (!["secured", "pricing_installer", "priced"].includes(q.status)) throw new Error("Codes can be added before you sign");
   const code = raw.trim().toUpperCase();
+  const [credit] = await db()`select code from credits where code = ${code} and status = 'issued' and expires_on >= current_date`;
+  if (credit) {
+    await write({ actor: CUSTOMER, action: "quotes.apply_credit" }, { token: q.token, code }, async (tx) => {
+      await tx`update quotes set credit_code = ${code}, updated_at = now() where id = ${q.id}`;
+      await tx`update credits set status = 'applied', applied_quote_id = ${q.id} where code = ${code}`;
+      return { entity: "quote", entityId: q.id, event: "quote.credit_applied", result: { code } };
+    });
+    return repriceFrozen(q);
+  }
   const [c] = await db()`select code, owner_quote_id from codes where code = ${code} and active`;
   if (!c) throw new Error("That code isn't valid");
   if (c.owner_quote_id === q.id) throw new Error("You can't use your own code");
@@ -218,9 +230,12 @@ export async function applyCode(q: QuoteRow, raw: string) {
     await tx`update quotes set discount_code = ${code}, updated_at = now() where id = ${q.id}`;
     return { entity: "quote", entityId: q.id, event: "quote.code_applied", result: { code } };
   });
-  if (q.status === "priced") {
-    const fresh = (await getQuote(q.token))!;
-    const p = await reprice(fresh, { extraLabour: extraFromSnapshot(fresh) });
-    await db()`update quotes set snapshot = ${db().json(p as never)}, amount_payable = ${p.stack.amount_payable}, price_inc_gst = ${p.stack.price_inc_gst} where id = ${q.id}`;
-  }
+  await repriceFrozen(q);
+}
+
+async function repriceFrozen(q: QuoteRow) {
+  if (q.status !== "priced") return;
+  const fresh = (await getQuote(q.token))!;
+  const p = await reprice(fresh, { extraLabour: extraFromSnapshot(fresh) });
+  await db()`update quotes set snapshot = ${db().json(p as never)}, amount_payable = ${p.stack.amount_payable}, price_inc_gst = ${p.stack.price_inc_gst} where id = ${q.id}`;
 }

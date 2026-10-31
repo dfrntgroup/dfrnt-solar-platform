@@ -8,7 +8,8 @@ import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2 } from "@/lib/site";
-import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote } from "../../actions";
+import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent } from "../../actions";
+import { Step } from "@/components/Step";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,9 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
   const urls = await Promise.all(photos.map(async (ph) => ({ kind: ph.kind as string, url: await photoUrl(ph.path as string) })));
   const audit = await db()`select at, actor_type, actor_id, action, rationale from audit_log where entity = 'quote' and entity_id = ${id} order by id desc limit 50`;
   const msgs = await db()`select template, status, subject, created_at from messages where quote_id = ${id} order by created_at desc`;
-  const pays = await db()`select kind, method, amount::float8 amount, reference, status from payments where quote_id = ${id}`;
+  const pays = await db()`select id, kind, method, amount::float8 amount, reference, status from payments where quote_id = ${id}`;
+  const pos = await db()`select id, number, supplier, total_ex::float8 total, status from purchase_orders where quote_id = ${id} and status <> 'cancelled' order by number`;
+  const received = pays.filter((x) => x.kind !== "refund" && x.status === "received").reduce((a, x) => a + (x.amount as number), 0) - pays.filter((x) => x.kind === "refund").reduce((a, x) => a + (x.amount as number), 0);
   const vars = await db()`select description, sell_inc::float8 sell_inc, status from variations where quote_id = ${id}`;
   const ledger = await db()`select description, amount_ex::float8 amount_ex, status from pay_ledger where quote_id = ${id}`;
   const next = TRANSITIONS[q.status].filter((t) => t !== "cancelled");
@@ -71,6 +74,21 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             {menu.items.filter((i) => ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-CABLE-1P", "SVC-CABLE-3P", "SVC-TRAVEL"].includes(i.code)).map((i) => <label key={i.code} className="small"><input type="checkbox" name="codes" value={i.code} /> {i.description}</label>)}
             <input name="note" placeholder="Note to customer (optional)" style={input} />
             <button className="btn" type="submit">Confirm price</button></form>}
+          {q.status === "tech_review" && <form action={techReview} className="card" style={{ marginBottom: 12 }}>
+            <input type="hidden" name="id" value={id} /><strong>Tech review (O5)</strong><span className="small muted">{q.pricing_reasons?.join(" · ")}</span>
+            {menu.items.filter((i) => ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-CABLE-1P", "SVC-TRAVEL"].includes(i.code)).map((i) => <label key={i.code} className="small"><input type="checkbox" name="codes" value={i.code} /> {i.description}</label>)}
+            <select name="decision" style={input}><option value="price">Proceed — price it (with any surcharge ticked)</option><option value="installer">Send back to an installer</option><option value="decline">Decline the job</option></select>
+            <input name="note" placeholder="Note" style={input} /><button className="btn" type="submit">Decide</button></form>}
+          {(q.status === "awaiting_date" || q.status === "booked") && pos.length === 0 && <div className="card" style={{ marginBottom: 12 }}><strong>Purchase orders</strong><Step action={draftPO} fields={{ id }} label="Draft POs from the parts list" /></div>}
+          {pos.length > 0 && <div className="card" style={{ marginBottom: 12 }}><strong>Purchase orders</strong>{pos.map((po) => <span key={po.id as string} className="small">PO {po.number as number} · {po.supplier as string} · {aud2(po.total as number)} · {po.status as string}
+            {po.status === "draft" && <> <Step action={poAction} fields={{ po: po.id as string, to: "approved", back: `/ops/job/${id}` }} label="Approve" /></>}
+            {po.status === "approved" && <> <Step action={poAction} fields={{ po: po.id as string, to: "sent", back: `/ops/job/${id}` }} label="Mark sent" /></>}
+            {po.status === "sent" && <> <Step action={poAction} fields={{ po: po.id as string, to: "delivered", back: `/ops/job/${id}` }} label="Delivered" /></>}</span>)}</div>}
+          {q.status === "cancelled" && received > 0.005 && <form action={refund} className="card" style={{ marginBottom: 12 }}>
+            <input type="hidden" name="id" value={id} /><strong>Refund</strong><span className="small">Paid and not yet refunded: {aud2(received)}</span>
+            <input name="amount" defaultValue={received.toFixed(2)} style={input} /><input name="note" placeholder="Reason / deductions" style={input} />
+            <button className="btn" type="submit">Record refund</button></form>}
+          {pays.filter((x) => x.kind === "refund" && x.status === "pending").map((x) => <div key={x.id as string} className="card" style={{ marginBottom: 12 }}><strong>Refund {aud2(x.amount as number)} to send</strong><Step action={refundSent} fields={{ id, payment: x.id as string }} label="Bank refund sent" /></div>)}
           {next.length > 0 && <form action={opsAdvance} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Change stage</strong>
             <select name="to" style={input}>{next.map((t) => <option key={t} value={t}>{t}</option>)}</select>
