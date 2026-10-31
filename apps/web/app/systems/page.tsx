@@ -12,7 +12,7 @@ export default async function Systems({ searchParams }: { searchParams: Promise<
   const sp = await searchParams;
   const postcode = await sitePostcode(sp);
   const phase = sp.phase === "3" ? 3 : 1;
-  let rows = priced(postcode, (s) => s.kind === "solar_battery" && s.config.phases === phase && (!sp.brand || s.brand.toLowerCase() === sp.brand));
+  let rows = await priced(postcode, (s) => s.kind === "solar_battery" && s.config.phases === phase && (!sp.brand || s.brand.toLowerCase() === sp.brand));
   const band = sp.kwh ? bands[sp.kwh] : undefined; if (band) { const [lo, hi] = band; rows = rows.filter(({ q }) => q.config.usable_kwh >= lo && q.config.usable_kwh < hi); }
   rows.sort((a, b) => sp.sort === "battery" ? b.q.config.usable_kwh - a.q.config.usable_kwh : a.q.stack.amount_payable - b.q.stack.amount_payable);
   const link = (k: string, v?: string) => { const p = new URLSearchParams({ ...sp }); if (v === undefined || sp[k] === v) p.delete(k); else p.set(k, v); const s = p.toString(); return `/systems${s ? `?${s}` : ""}`; };

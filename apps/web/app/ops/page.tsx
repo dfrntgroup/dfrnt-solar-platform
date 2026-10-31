@@ -3,6 +3,7 @@ import { db } from "@dfrnt/db";
 import { BOARD } from "@dfrnt/engine";
 import { AdminShell } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
+import { runTimersNow } from "./actions";
 import { aud } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,8 @@ export default async function Board() {
   const by = (col: string) => rows.filter((r) => BOARD[r.status as keyof typeof BOARD] === col);
   return (
     <AdminShell who={me.name} area="ops">
-      <h1 style={{ fontSize: 28 }}>Board</h1>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><h1 style={{ fontSize: 28 }}>Board</h1>
+        <form action={runTimersNow} style={{ display: "flex", gap: 6 }}><button className="btn ghost sm" name="which" value="daily">Run daily timers</button><button className="btn ghost sm" formAction={async (f: FormData) => { "use server"; f.set("which", "cutoff"); await runTimersNow(f); }}>Run 5 pm cut-off</button></form></div>
       <p className="small muted">{counts.map((c) => `${c.status} ${c.n}`).join(" · ")}</p>
       {alerts.length > 0 && <div className="note" style={{ margin: "12px 0" }}><strong>Needs attention:</strong> {alerts.map((a, i) => <span key={a.id as string}>{i ? " · " : " "}<Link href={`/ops/job/${a.id}`}>{(a.customer_name as string) ?? a.title} ({a.status as string})</Link></span>)}</div>}
       <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 12 }}>

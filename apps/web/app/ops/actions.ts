@@ -117,3 +117,14 @@ export async function markPayoutPaid(f: FormData) {
     });
   });
 }
+
+export async function runTimersNow(f: FormData) {
+  const me = await requireStaff();
+  const which = s(f, "which");
+  await run("/ops", async () => {
+    if (!me.roles.includes("owner")) throw new Error("Owner only");
+    const { runDaily, runCutoff } = await import("@/lib/timers");
+    const r = which === "cutoff" ? await runCutoff() : await runDaily();
+    await write({ actor: me.actor, action: `timers.${which}.manual` }, {}, async () => ({ entity: "timers", entityId: which, event: "timers.ran", result: r as never }));
+  });
+}

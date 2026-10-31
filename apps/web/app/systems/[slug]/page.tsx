@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { configOptions, findSystem, priceSystem, type ConfigInput } from "@dfrnt/engine";
 import { Configurator } from "@/components/Configurator";
+import { pricingData } from "@/lib/pricing-data";
 import { Header, Footer } from "@/components/Header";
 import { secureSystem } from "@/app/actions";
 import { todayAEST } from "@/lib/api";
@@ -11,12 +12,13 @@ export const dynamic = "force-dynamic";
 
 export default async function SystemPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string>> }) {
   const { slug } = await params;
-  const s = findSystem(slug);
+  const data = await pricingData();
+  const s = findSystem(slug, data.catalogue);
   if (!s) notFound();
   const postcode = await sitePostcode(await searchParams);
-  const q = priceSystem(s, { postcode, asOf: todayAEST() });
+  const q = priceSystem(s, { postcode, asOf: todayAEST() }, data);
   const st = q.stack, c = q.config, r = q.rebate;
-  const opts = configOptions({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode, installDate: q.window.lock_until, ...s.config } as ConfigInput);
+  const opts = configOptions({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode, installDate: q.window.lock_until, ...s.config } as ConfigInput, data.rules);
   const parts = c.bom.filter((b) => !b.included && !b.sku.startsWith("BOS") && !b.sku.startsWith("MNT"));
   return (
     <>

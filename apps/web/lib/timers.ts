@@ -1,0 +1,78 @@
+// Timers (7.2/7.3): run daily at 7 am and at the 5 pm pricing cut-off (Brisbane). Every change is audited as the system.
+import { db, write } from "@dfrnt/db";
+import { todayAEST } from "./api";
+import { queueMessage } from "./messages";
+import { SYSTEM } from "./jobs";
+
+async function setStatus(id: string, from: string, to: string, why: string, extra: Record<string, unknown> = {}) {
+  await write({ actor: SYSTEM, action: "timers.transition", rationale: why }, { id, from, to }, async (tx) => {
+    const [r] = await tx`update quotes set ${tx({ status: to, updated_at: new Date(), ...extra } as never)} where id = ${id} and status = ${from} returning id`;
+    return { entity: "quote", entityId: id, event: `quote.${to}`, result: { changed: !!r } };
+  });
+}
+
+export async function runDaily() {
+  const today = todayAEST();
+  const out: Record<string, number> = {};
+  // Price locks: secured or priced quotes past their lock lapse (the lock is held while we're pricing).
+  const lapsed = await db()`select id, status from quotes where status in ('secured','priced') and lock_until < ${today}`;
+  for (const q of lapsed) await setStatus(q.id as string, q.status as string, "lapsed", "Price lock expired");
+  out.lapsed = lapsed.length;
+  // Saved quotes close after 90 days.
+  const expired = await db()`select id from quotes where status = 'saved' and created_at < now() - interval '90 days'`;
+  for (const q of expired) await setStatus(q.id as string, "saved", "expired", "Saved quote older than 90 days");
+  out.expired = expired.length;
+  // Bank transfer: reminders on day 3 and day 6, released on day 7.
+  const pending = await db()`select id, token, customer_email, customer_name, payment_reference, amount_payable::float8 amount, reminders,
+    extract(day from now() - updated_at)::int age from quotes where status = 'payment_pending'`;
+  let reminded = 0, released = 0;
+  for (const q of pending) {
+    const r = (q.reminders ?? {}) as Record<string, string>;
+    if (q.age >= 7) { await setStatus(q.id as string, "payment_pending", "signed", "Bank transfer not received in 7 days; released"); released++; continue; }
+    for (const day of [3, 6]) if (q.age >= day && !r[`bank_${day}`]) {
+      await queueMessage("PAY", q.token as string, q.customer_email as string, { name: q.customer_name as string, amount: q.amount, reference: q.payment_reference as string });
+      await db()`update quotes set reminders = reminders || ${db().json({ [`bank_${day}`]: today })} where id = ${q.id}`;
+      reminded++;
+    }
+  }
+  out.bank_reminders = reminded; out.bank_released = released;
+  // 48 h date hold after payment.
+  const holds = await db()`update quotes set slot_hold_until = null where status = 'awaiting_date' and slot_hold_until < now() returning id`;
+  out.holds_released = holds.length;
+  // M5: the day before install.
+  const tomorrow = new Date(Date.now() + 34 * 3600_000).toISOString().slice(0, 10);
+  const dayBefore = await db()`select id, token, customer_email, customer_name, reminders from quotes
+    where install_date = ${tomorrow} and status in ('booked','gear_ordered','delivered') and not (reminders ? 'm5')`;
+  for (const q of dayBefore) {
+    await queueMessage("M5", q.token as string, q.customer_email as string, { name: q.customer_name as string });
+    await db()`update quotes set reminders = reminders || '{"m5":true}' where id = ${q.id}`;
+  }
+  out.day_before = dayBefore.length;
+  // Agent proposals expire after 24 h.
+  const exp = await db()`update approvals set status = 'expired', decided_at = now(), decision_note = 'Expired after 24 h'
+    where status = 'pending' and created_at < now() - interval '24 hours' returning id`;
+  out.proposals_expired = exp.length;
+  return out;
+}
+
+/** 5 pm: jobs still waiting for an installer's price go to the next installer for the postcode; none → ops tech review. */
+export async function runCutoff() {
+  const waiting = await db()`select id, installer_id, postcode, pricing_reasons from quotes
+    where status = 'pricing_installer' and updated_at < now() - interval '1 hour'`;
+  let reassigned = 0, toOps = 0;
+  for (const q of waiting) {
+    const pc = parseInt(q.postcode as string, 10);
+    const [next] = await db()`select id from installers where active and id <> ${q.installer_id} and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int) order by is_test, created_at limit 1`;
+    if (next) {
+      await write({ actor: SYSTEM, action: "timers.reassign", rationale: "5 pm cut-off missed" }, { id: q.id }, async (tx) => {
+        await tx`update quotes set installer_id = ${next.id}, updated_at = now() where id = ${q.id}`;
+        return { entity: "quote", entityId: q.id as string, event: "quote.reassigned", result: { installer: next.id } };
+      });
+      reassigned++;
+    } else {
+      await setStatus(q.id as string, "pricing_installer", "tech_review", "5 pm cut-off missed and no other installer covers this postcode");
+      toOps++;
+    }
+  }
+  return { reassigned, to_ops: toOps };
+}

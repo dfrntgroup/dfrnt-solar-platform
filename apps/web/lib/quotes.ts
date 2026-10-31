@@ -2,13 +2,15 @@ import { write, type Actor } from "@dfrnt/db";
 import { quote, rebateWindow } from "@dfrnt/engine";
 import type { QuoteRequest } from "./schema";
 import { todayAEST } from "./api";
+import { pricingData } from "./pricing-data";
 
 /** quotes.create — shared by the API route and the site's "Secure this price" action. */
 export async function createQuote(actor: Actor, req: QuoteRequest, opts: { idempotencyKey?: string; dryRun?: boolean; rationale?: string; status?: "saved" | "secured" } = {}) {
   const { config, discounts, customerEmail, title, systemSlug } = req;
   const asOf = todayAEST();
-  const installDate = config.installDate ?? rebateWindow(asOf).lock_until;
-  const q = quote({ ...config, installDate } as Parameters<typeof quote>[0], { asOf, discounts });
+  const data = await pricingData();
+  const installDate = config.installDate ?? rebateWindow(asOf, data.rebates).lock_until;
+  const q = quote({ ...config, installDate } as Parameters<typeof quote>[0], { ...data, asOf, discounts });
   const { status: _s, ...wopts } = opts;
   return write({ actor, action: "quotes.create", ...wopts }, req, async (tx) => {
     const [row] = await tx`insert into quotes (input, result, versions, amount_payable, price_inc_gst, stcs, lock_until,

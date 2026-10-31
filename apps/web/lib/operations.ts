@@ -2,7 +2,8 @@
 // R read · A act (reversible, internal) · P propose (a person approves in O22) · H human only (never exposed).
 import { z } from "zod";
 import { db, type Actor } from "@dfrnt/db";
-import { DEFAULT_CATALOGUE, priceSystem, quote, type JobState } from "@dfrnt/engine";
+import { priceSystem, quote, type JobState } from "@dfrnt/engine";
+import { pricingData } from "./pricing-data";
 import { ConfigInputSchema, QuoteRequestSchema } from "./schema";
 import { createQuote } from "./quotes";
 import { advance, getQuote, getQuoteById, markPaid, raiseVariation } from "./jobs";
@@ -17,16 +18,16 @@ export const OPERATIONS: Record<string, Op> = {
   "catalogue.list": {
     tier: "R", description: "List launch systems with live prices for a postcode.",
     input: z.object({ postcode: z.string().regex(/^\d{4}$/).default("4551") }),
-    run: async ({ postcode }) => DEFAULT_CATALOGUE.systems.map((s) => {
-      const q = priceSystem(s, { postcode, asOf: todayAEST() });
+    run: async ({ postcode }) => { const data = await pricingData(); return data.catalogue.systems.map((s) => {
+      const q = priceSystem(s, { postcode, asOf: todayAEST() }, data);
       return { slug: s.slug, title: s.title, brand: s.brand, kind: s.kind, you_pay: q.stack.amount_payable, before_rebates: q.stack.price_inc_gst, rebates: q.stack.less_stcs, usable_kwh: q.config.usable_kwh, solar_kw: q.config.panel_kw };
-    }),
+    }); },
   },
   "pricing.price_configuration": {
     tier: "R", description: "Price any configuration without saving it (engine dry run).",
     input: ConfigInputSchema,
     run: async (cfg) => {
-      const q = quote({ ...cfg, installDate: cfg.installDate ?? todayAEST() }, { asOf: todayAEST() });
+      const q = quote({ ...cfg, installDate: cfg.installDate ?? todayAEST() }, { ...(await pricingData()), asOf: todayAEST() });
       return { ok: q.ok, summary: q.config.summary, blockers: q.config.blockers, warnings: q.config.warnings, stack: { ...q.stack, lines: undefined }, rebate: q.rebate, window: q.window };
     },
   },

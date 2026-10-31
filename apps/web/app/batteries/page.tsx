@@ -7,7 +7,7 @@ export const metadata = { title: "Add a battery to your solar" };
 
 export default async function Batteries({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const postcode = await sitePostcode(await searchParams);
-  const rows = priced(postcode, (s) => s.kind === "battery_only").sort((a, b) => a.q.stack.amount_payable - b.q.stack.amount_payable);
+  const rows = (await priced(postcode, (s) => s.kind === "battery_only")).sort((a, b) => a.q.stack.amount_payable - b.q.stack.amount_payable);
   return (
     <>
       <Header postcode={postcode} back="/batteries" />

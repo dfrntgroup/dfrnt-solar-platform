@@ -12,13 +12,13 @@ export default async function Estimate({ searchParams }: { searchParams: Promise
   const postcode = await sitePostcode(sp);
   const bill = Number(sp.bill || 0), home = sp.home ?? "evenings", phase = sp.phase === "3" ? 3 : 1;
   const input = { padding: 10, border: "1px solid var(--line)", borderRadius: 6, font: "inherit", width: "100%" } as const;
-  let picks: ReturnType<typeof priced> = [];
+  let picks: Awaited<ReturnType<typeof priced>> = [];
   let daily = 0;
   if (bill > 0) {
     daily = Math.max(5, (bill - 120) / 0.33 / 91);                // ~$1.30/day supply, ~33 c/kWh
     const share = home === "day" ? 0.45 : home === "allday" ? 0.35 : 0.6;
     const wantKwh = Math.min(32, daily * share), wantKw = Math.min(14, daily / 4.2);
-    picks = priced(postcode, (s) => s.kind === "solar_battery" && s.config.phases === phase)
+    picks = (await priced(postcode, (s) => s.kind === "solar_battery" && s.config.phases === phase))
       .sort((a, b) => Math.abs(a.q.config.usable_kwh - wantKwh) + Math.abs(a.q.config.panel_kw - wantKw) * 1.5 - (Math.abs(b.q.config.usable_kwh - wantKwh) + Math.abs(b.q.config.panel_kw - wantKw) * 1.5))
       .slice(0, 3);
   }

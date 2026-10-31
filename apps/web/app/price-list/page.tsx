@@ -7,7 +7,7 @@ export const metadata = { title: "Price list" };
 
 export default async function PriceList({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const postcode = await sitePostcode(await searchParams);
-  const rows = priced(postcode).sort((a, b) => a.s.kind.localeCompare(b.s.kind) || a.q.stack.amount_payable - b.q.stack.amount_payable);
+  const rows = (await priced(postcode)).sort((a, b) => a.s.kind.localeCompare(b.s.kind) || a.q.stack.amount_payable - b.q.stack.amount_payable);
   return (
     <>
       <Header postcode={postcode} back="/price-list" />

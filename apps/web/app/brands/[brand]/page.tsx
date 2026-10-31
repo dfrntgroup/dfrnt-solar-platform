@@ -17,7 +17,7 @@ export default async function Brand({ params, searchParams }: { params: Promise<
   const b = brands[brand];
   if (!b) notFound();
   const postcode = await sitePostcode(await searchParams);
-  const rows = priced(postcode, (s) => s.brand.toLowerCase() === brand).sort((a, b2) => a.q.stack.amount_payable - b2.q.stack.amount_payable);
+  const rows = (await priced(postcode, (s) => s.brand.toLowerCase() === brand)).sort((a, b2) => a.q.stack.amount_payable - b2.q.stack.amount_payable);
   return (
     <>
       <Header postcode={postcode} back={`/brands/${brand}`} />

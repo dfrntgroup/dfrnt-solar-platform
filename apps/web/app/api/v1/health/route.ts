@@ -1,5 +1,5 @@
 import { db } from "@dfrnt/db";
-import { DEFAULT_RULES, DEFAULT_COSTS, DEFAULT_MENU, DEFAULT_REBATE_SETTINGS } from "@dfrnt/engine";
+import { pricingData } from "@/lib/pricing-data";
 import { json } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export async function GET() {
   }
   return json({
     ok: true,
-    engine: { rules: DEFAULT_RULES.version, costs: DEFAULT_COSTS.version, menu: DEFAULT_MENU.version, rebates: DEFAULT_REBATE_SETTINGS.version },
+    engine: (await pricingData()).versions,
     database,
     commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "local",
   });

@@ -7,10 +7,10 @@ export const dynamic = "force-dynamic";
 
 export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const postcode = await sitePostcode(await searchParams);
-  const all = priced(postcode, (s) => s.kind === "solar_battery");
+  const all = await priced(postcode, (s) => s.kind === "solar_battery");
   const top = all.filter(({ s }) => ["solax-10kw-15kwh", "goodwe-10kw-16kwh", "sungrow-10kw-20kwh"].includes(s.slug));
-  const from = Math.min(...priced(postcode).map(({ q }) => q.stack.amount_payable));
-  const end = windowEnd();
+  const from = Math.min(...(await priced(postcode)).map(({ q }) => q.stack.amount_payable));
+  const end = await windowEnd();
   return (
     <>
       <Header postcode={postcode} />

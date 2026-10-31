@@ -1,11 +1,12 @@
 // Job operations. Every state change goes through `write` (audited, evented, idempotent) and the engine's state machine.
 import { db, write, type Actor } from "@dfrnt/db";
 import {
-  assertTransition, bookableDates, DEFAULT_MENU, instantPriceBlockers, quote, rebateWindow, variationAmount, variationLine,
+  assertTransition, bookableDates, instantPriceBlockers, quote, rebateWindow, variationAmount, variationLine,
   labourLines, type Capacity, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest,
 } from "@dfrnt/engine";
 import { todayAEST } from "./api";
 import { queueMessage } from "./messages";
+import { pricingData, pricingDataFor } from "./pricing-data";
 
 export const SYSTEM: Actor = { type: "system", id: "app" };
 export const CUSTOMER: Actor = { type: "customer", id: "record-link" };
@@ -32,7 +33,7 @@ export async function getQuoteById(id: string) {
 }
 
 /** Re-price with the customer's real site answers, any confirmed extra labour and discounts. */
-export function reprice(q: QuoteRow, extra: { site?: SiteAnswers; extraLabour?: LabourRequest[]; bank?: boolean; variations?: ReturnType<typeof variationLine>[] } = {}) {
+export async function reprice(q: QuoteRow, extra: { site?: SiteAnswers; extraLabour?: LabourRequest[]; bank?: boolean; variations?: ReturnType<typeof variationLine>[] } = {}) {
   const site = extra.site ?? q.site;
   const input: ConfigInput = {
     ...q.input,
@@ -42,7 +43,8 @@ export function reprice(q: QuoteRow, extra: { site?: SiteAnswers; extraLabour?: 
       postcode: site.address.postcode,
     } : {}),
   };
-  return quote(input, { asOf: todayAEST(), extraLabour: extra.extraLabour, variations: extra.variations, discounts: { ...(q.referral_discount ? { referral: q.referral_discount } : {}), ...(extra.bank ? { bankTransferPct: 0.01 } : {}) } });
+  const data = await pricingDataFor(q.result.versions);
+  return quote(input, { ...data, asOf: todayAEST(), extraLabour: extra.extraLabour, variations: extra.variations, discounts: { ...(q.referral_discount ? { referral: q.referral_discount } : {}), ...(extra.bank ? { bankTransferPct: 0.01 } : {}) } });
 }
 
 async function installerFor(postcode: string) {
@@ -66,7 +68,7 @@ export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name
   if (!["saved", "secured", "lapsed"].includes(q.status)) throw new Error("This quote has already been priced");
   if (q.status === "saved" || q.status === "lapsed") { await move(q, "secured", CUSTOMER, "quotes.secure"); q = (await getQuote(q.token))!; }
   const inst = await installerFor(site.address.postcode);
-  const priced = reprice(q, { site });
+  const priced = await reprice(q, { site });
   const reasons = inst ? instantPriceBlockers(site, inst.scope) : ["No installer covers this postcode yet"];
   if (!priced.config.ok) reasons.push(...priced.config.blockers.map((b) => b.message));
   const common = {
@@ -96,7 +98,7 @@ async function freezePrice(q: QuoteRow, p: Quote, actor: Actor, rationale: strin
 export async function installerPrice(q: QuoteRow, actor: Actor, extraCodes: string[], note?: string) {
   if (q.status !== "pricing_installer") throw new Error("Not waiting for a price");
   const extraLabour = extraCodes.filter(Boolean).map((code) => ({ code }));
-  const p = reprice(q, { extraLabour });
+  const p = await reprice(q, { extraLabour });
   await freezePrice(q, p, actor, note || (extraCodes.length ? `Installer added ${extraCodes.join(", ")}` : "Installer confirmed standard price"));
 }
 
@@ -110,7 +112,7 @@ export async function sign(q: QuoteRow, name: string) {
 /* D3/D4b: bank transfer (card switches on with Stripe at go-live) */
 export async function chooseBank(q: QuoteRow) {
   if (q.status !== "signed") throw new Error("Sign first");
-  const p = reprice(q, { bank: true, extraLabour: extraFromSnapshot(q) });
+  const p = await reprice(q, { bank: true, extraLabour: extraFromSnapshot(q) });
   const reference = `DS${q.token.slice(0, 6).toUpperCase()}`;
   await write({ actor: CUSTOMER, action: "payments.create" }, { token: q.token, method: "bank" }, async (tx) => {
     const [pay] = await tx`insert into payments (quote_id, kind, method, amount, reference) values (${q.id}, 'system', 'bank', ${p.stack.amount_payable}, ${reference}) returning id`;
@@ -142,7 +144,7 @@ export async function availableDates(q: QuoteRow) {
     where installer_id = ${q.installer_id} and install_date is not null and status in ('booked','gear_ordered','delivered','on_site','variation_pending') group by 1`;
   const cap = { ...(inst!.capacity as Omit<Capacity, "booked">), booked: Object.fromEntries(booked.map((r) => [r.d, r.n])) };
   const created = q.created_at.toISOString().slice(0, 10);
-  return bookableDates(todayAEST(), cap, rebateWindow(created).window_end, 0, 15);
+  return bookableDates(todayAEST(), cap, rebateWindow(created, (await pricingDataFor(q.result.versions)).rebates).window_end, 0, 15);
 }
 
 export async function book(q: QuoteRow, date: string) {
@@ -169,9 +171,10 @@ export async function advance(q: QuoteRow, to: JobState, actor: Actor, rationale
 /* D6: variation after payment */
 export async function raiseVariation(q: QuoteRow, actor: Actor, code: string, description: string, installerCostEx?: number) {
   if (!["booked", "gear_ordered", "delivered", "on_site"].includes(q.status)) throw new Error("Variations are raised after payment and before install");
-  const item = DEFAULT_MENU.items.find((i) => i.code === code);
-  const line = installerCostEx != null ? variationLine(code, description, installerCostEx)
-    : labourLines([{ code }], { kw: 0, panels: 0 }, { kind: "variation" })[0];
+  const { menu, margins } = await pricingData();
+  const item = menu.items.find((i) => i.code === code);
+  const line = installerCostEx != null ? variationLine(code, description, installerCostEx, margins)
+    : labourLines([{ code }], { kw: 0, panels: 0 }, { kind: "variation", menu, margins })[0];
   if (!line || line.sell_ex_gst == null) throw new Error("Unknown variation; give an installer cost");
   const amt = variationAmount(line);
   await write({ actor, action: "variations.raise" }, { token: q.token, code, description, installerCostEx }, async (tx) => {
@@ -217,7 +220,7 @@ export async function applyCode(q: QuoteRow, raw: string) {
   });
   if (q.status === "priced") {
     const fresh = (await getQuote(q.token))!;
-    const p = reprice(fresh, { extraLabour: extraFromSnapshot(fresh) });
+    const p = await reprice(fresh, { extraLabour: extraFromSnapshot(fresh) });
     await db()`update quotes set snapshot = ${db().json(p as never)}, amount_payable = ${p.stack.amount_payable}, price_inc_gst = ${p.stack.price_inc_gst} where id = ${q.id}`;
   }
 }

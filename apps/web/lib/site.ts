@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
-import { DEFAULT_CATALOGUE, priceSystem, rebateWindow, type CatalogueSystem } from "@dfrnt/engine";
+import { priceSystem, rebateWindow, type CatalogueSystem } from "@dfrnt/engine";
+import { pricingData } from "./pricing-data";
 import { todayAEST } from "./api";
 
 export const aud = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: 0 });
@@ -14,13 +15,14 @@ export async function sitePostcode(sp?: Record<string, string | string[] | undef
   return c && /^\d{4}$/.test(c) ? c : "4551";
 }
 
-export function priced(postcode: string, filter: (s: CatalogueSystem) => boolean = () => true) {
+export async function priced(postcode: string, filter: (s: CatalogueSystem) => boolean = () => true) {
   const asOf = todayAEST();
-  return DEFAULT_CATALOGUE.systems.filter(filter).map((s) => ({ s, q: priceSystem(s, { postcode, asOf }) }));
+  const data = await pricingData();
+  return data.catalogue.systems.filter(filter).map((s) => ({ s, q: priceSystem(s, { postcode, asOf }, data) }));
 }
 
 export const rebateDate = () => {
   const d = new Date(`${todayAEST()}T00:00:00Z`);
   return d.toLocaleDateString("en-AU", { day: "numeric", month: "short", timeZone: "UTC" });
 };
-export const windowEnd = () => rebateWindow(todayAEST()).window_end;
+export const windowEnd = async () => rebateWindow(todayAEST(), (await pricingData()).rebates).window_end;

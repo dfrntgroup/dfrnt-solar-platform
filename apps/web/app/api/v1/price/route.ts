@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { json, problem } from "@/lib/api";
 import { priceChoice } from "@/lib/configure";
+import { pricingData } from "@/lib/pricing-data";
 
 export const dynamic = "force-dynamic";
 const Body = z.object({ slug: z.string(), panels: z.number().int().min(0).max(60), modules: z.number().int().min(0).max(40), backup: z.enum(["none", "whole_home"]).default("none"), postcode: z.string().regex(/^\d{4}$/) });
@@ -9,7 +10,7 @@ const Body = z.object({ slug: z.string(), panels: z.number().int().min(0).max(60
 export async function POST(req: Request) {
   const b = Body.safeParse(await req.json().catch(() => null));
   if (!b.success) return problem(400, "Invalid", b.error.flatten());
-  const r = priceChoice(b.data.slug, b.data, b.data.postcode);
+  const r = priceChoice(b.data.slug, b.data, b.data.postcode, await pricingData());
   if (!r) return problem(404, "Unknown system");
   const { q } = r;
   return json({

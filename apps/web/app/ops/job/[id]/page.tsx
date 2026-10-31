@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
-import { DEFAULT_MENU, TRANSITIONS } from "@dfrnt/engine";
+import { TRANSITIONS } from "@dfrnt/engine";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
 import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
+import { pricingData } from "@/lib/pricing-data";
 import { aud2 } from "@/lib/site";
 import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote } from "../../actions";
 
@@ -18,6 +19,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
   const q = await getQuoteById(id);
   if (!q) notFound();
   const p = q.snapshot ?? q.result;
+  const { menu } = await pricingData();
   const photos = await db()`select kind, path from quote_photos where quote_id = ${id} order by created_at`;
   const urls = await Promise.all(photos.map(async (ph) => ({ kind: ph.kind as string, url: await photoUrl(ph.path as string) })));
   const audit = await db()`select at, actor_type, actor_id, action, rationale from audit_log where entity = 'quote' and entity_id = ${id} order by id desc limit 50`;
@@ -66,7 +68,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
           {q.status === "pricing_installer" && <form action={opsPrice} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Price this job (for the installer)</strong>
             <span className="small muted">Add named lines from the menu if the photos need them.</span>
-            {DEFAULT_MENU.items.filter((i) => ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-CABLE-1P", "SVC-CABLE-3P", "SVC-TRAVEL"].includes(i.code)).map((i) => <label key={i.code} className="small"><input type="checkbox" name="codes" value={i.code} /> {i.description}</label>)}
+            {menu.items.filter((i) => ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-CABLE-1P", "SVC-CABLE-3P", "SVC-TRAVEL"].includes(i.code)).map((i) => <label key={i.code} className="small"><input type="checkbox" name="codes" value={i.code} /> {i.description}</label>)}
             <input name="note" placeholder="Note to customer (optional)" style={input} />
             <button className="btn" type="submit">Confirm price</button></form>}
           {next.length > 0 && <form action={opsAdvance} className="card" style={{ marginBottom: 12 }}>
@@ -76,7 +78,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <button className="btn" type="submit">Move</button></form>}
           {["booked", "gear_ordered", "delivered", "on_site"].includes(q.status) && <form action={opsVariation} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Raise a variation</strong>
-            <select name="code" style={input}>{DEFAULT_MENU.items.map((i) => <option key={i.code} value={i.code}>{i.description}</option>)}<option value="VAR-CUSTOM">Custom (give installer cost)</option></select>
+            <select name="code" style={input}>{menu.items.map((i) => <option key={i.code} value={i.code}>{i.description}</option>)}<option value="VAR-CUSTOM">Custom (give installer cost)</option></select>
             <input name="description" placeholder="Description for the customer" style={input} />
             <input name="cost" placeholder="Installer cost ex GST (custom only)" style={input} />
             <button className="btn" type="submit">Send to customer to approve</button></form>}

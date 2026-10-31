@@ -35,6 +35,6 @@ export function quote(input: ConfigInput, ctx: QuoteContext): Quote {
   return {
     config, rebate, window, stack, ok: config.ok,
     checkout_allowed: config.ok && stack.checkout_allowed,
-    versions: { rules: config.rules_version, costs: costs.version, menu: menu.version, rebates: settings.version },
+    versions: { rules: config.rules_version, costs: costs.version, menu: menu.version, rebates: settings.version, margins: (margins as Margins & { version?: string }).version ?? "default" },
   };
 }
