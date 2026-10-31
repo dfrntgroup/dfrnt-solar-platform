@@ -4,14 +4,11 @@ import { Header, Footer } from "@/components/Header";
 import { SystemCard } from "@/components/SystemCard";
 import { earliestFor } from "@/lib/capacity";
 import { priced, sitePostcode } from "@/lib/site";
+import { BRANDS, PAIRS } from "@/lib/brands";
 
 export const dynamic = "force-dynamic";
 
-const brands: Record<string, { name: string; line: string }> = {
-  solax: { name: "SolaX", line: "Our core range. X1-VAST hybrid inverters with stackable T-BAT HS51 batteries, expandable later." },
-  sungrow: { name: "Sungrow", line: "The world's second-largest inverter maker. SH-RS hybrids with SBH modular batteries." },
-  goodwe: { name: "GoodWe", line: "Our value range. The ESA all-in-one: inverter and Lynx D batteries in one column." },
-};
+const brands = BRANDS;
 
 export default async function Brand({ params, searchParams }: { params: Promise<{ brand: string }>; searchParams: Promise<Record<string, string>> }) {
   const { brand } = await params;
@@ -27,6 +24,7 @@ export default async function Brand({ params, searchParams }: { params: Promise<
         <p className="eyebrow">Brands · {Object.entries(brands).map(([k, v], i) => <span key={k}>{i ? " · " : ""}<Link href={`/brands/${k}`}>{v.name}</Link></span>)}</p>
         <h1>{b.name}</h1>
         <p className="muted">{b.line}</p>
+        <p className="small">Compare: {PAIRS.filter((p) => p.split("-vs-").includes(brand)).map((p, i) => <span key={p}>{i ? " · " : ""}<Link href={`/compare/${p}`}>{p.split("-vs-").map((x) => BRANDS[x]!.name).join(" vs ")}</Link></span>)}</p>
         <div className="grid">{rows.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} earliest={earliest} />)}</div>
       </div></section>
       <Footer />

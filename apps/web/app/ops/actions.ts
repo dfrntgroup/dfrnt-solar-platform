@@ -194,3 +194,29 @@ export async function createInstallerFromApplication(f: FormData) {
     });
   });
 }
+
+/** O17: publish, hide or reply to a review. Every review is published unless it is not from a real install or breaks the rules. */
+export async function reviewDecide(f: FormData) {
+  const me = await requireStaff();
+  const id = String(f.get("id") ?? ""), to = String(f.get("to") ?? ""), reply = String(f.get("reply") ?? "").trim().slice(0, 2000) || null;
+  if (!["published", "hidden", "reply"].includes(to)) redirect("/ops/reviews");
+  await write({ actor: me.actor, action: `reviews.${to}` }, { id, reply }, async (tx) => {
+    if (to === "reply") await tx`update reviews set reply = ${reply} where id = ${id}`;
+    else await tx`update reviews set status = ${to}, published_at = case when ${to} = 'published' then now() else null end where id = ${id}`;
+    return { entity: "review", entityId: id, event: `review.${to}`, result: { id } };
+  });
+  revalidatePath("/reviews"); revalidatePath("/ops/reviews"); redirect("/ops/reviews");
+}
+
+/** A22: show or hide one install photo on the real installs page. Only allowed with the customer's consent. */
+export async function photoPublic(f: FormData) {
+  const me = await requireStaff();
+  const id = String(f.get("photo") ?? ""), job = String(f.get("job") ?? ""), on = f.get("on") === "1";
+  await write({ actor: me.actor, action: "photos.public" }, { id, on }, async (tx) => {
+    const [ok] = await tx`select q.showcase_consent from quote_photos p join quotes q on q.id = p.quote_id where p.id = ${id}`;
+    if (on && !ok?.showcase_consent) throw new Error("The customer hasn't agreed to share photos");
+    await tx`update quote_photos set public = ${on} where id = ${id}`;
+    return { entity: "quote", entityId: job, event: on ? "photo.public" : "photo.private", result: { id, on } };
+  });
+  revalidatePath("/installs"); redirect(`/ops/job/${job}`);
+}

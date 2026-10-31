@@ -95,3 +95,22 @@ export async function addCode(f: FormData) {
   const token = s(f, "token");
   await run(token, async () => applyCode((await getQuote(token))!, s(f, "code")));
 }
+
+/** A21/A22: the customer's review and showcase consent, once the system is installed. */
+export async function leaveReview(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => {
+    if (!(await allow("review", 5))) throw new Error("Too many attempts — please wait a few minutes");
+    const q = await getQuote(token);
+    if (!q || !["installed", "lodged", "settled", "complete"].includes(q.status)) throw new Error("Reviews open once your system is installed");
+    const rating = Number(s(f, "rating")), body = s(f, "body").slice(0, 3000);
+    if (!(rating >= 1 && rating <= 5)) throw new Error("Pick a rating from 1 to 5");
+    if (body.length < 10) throw new Error("Tell us a little more (at least a sentence)");
+    const site = (q.site ?? {}) as { suburb?: string };
+    const first = String(q.customer_name ?? "").split(" ")[0] || null;
+    await db()`insert into reviews (quote_id, installer_id, rating, body, first_name, suburb)
+      values (${q.id}, ${q.installer_id ?? null}, ${rating}, ${body}, ${first}, ${site.suburb ?? null})
+      on conflict (quote_id) do update set rating = excluded.rating, body = excluded.body, status = 'pending', published_at = null`;
+    await db()`update quotes set showcase_consent = ${f.get("showcase") === "on"} where id = ${q.id}`;
+  });
+}

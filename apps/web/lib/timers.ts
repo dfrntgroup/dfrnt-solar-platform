@@ -48,6 +48,14 @@ export async function runDaily() {
     await db()`update quotes set reminders = reminders || '{"m5":true}' where id = ${q.id}`;
   }
   out.day_before = dayBefore.length;
+  // M10: ask for a review once, after the install is lodged (a few days after switch-on).
+  const ask = await db()`select q.id, q.token, q.customer_email, q.customer_name from quotes q
+    where q.status in ('lodged','settled','complete') and not (q.reminders ? 'm10') and not exists (select 1 from reviews r where r.quote_id = q.id)`;
+  for (const q of ask) {
+    await queueMessage("M10", q.token as string, q.customer_email as string, { name: q.customer_name as string });
+    await db()`update quotes set reminders = reminders || '{"m10":true}' where id = ${q.id}`;
+  }
+  out.review_requests = ask.length;
   // Agent proposals expire after 24 h.
   const exp = await db()`update approvals set status = 'expired', decided_at = now(), decision_note = 'Expired after 24 h'
     where status = 'pending' and created_at < now() - interval '24 hours' returning id`;

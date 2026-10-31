@@ -1,4 +1,5 @@
 import { friendlySummary } from "@/lib/images";
+import { leaveReview } from "./actions";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
@@ -49,6 +50,7 @@ export default async function Record({ params, searchParams }: { params: Promise
   const { error } = await searchParams;
   if (!/^[0-9a-f]{36}$/.test(token)) notFound();
   const q = await getQuote(token);
+  const myReview = q ? (await db()`select status from reviews where quote_id = ${q.id}`)[0] as { status: string } | undefined : undefined;
   const inst = q?.installer_id ? (await db()`select id, business_name from installers where id = ${q.installer_id} and active and not is_test`)[0] : undefined;
   if (!q) notFound();
   const shown = q.snapshot ?? q.result;
@@ -178,6 +180,17 @@ export default async function Record({ params, searchParams }: { params: Promise
           <Breakdown q={shown} />
         </>)}
 
+        {["installed", "lodged", "settled", "complete"].includes(state) && (myReview
+          ? <div className="ok" style={{ marginTop: 20 }}>Thanks for your review{myReview.status === "published" ? ". It's live on our reviews page" : ". We publish every review, good or bad, once we've checked it's from this install"}.</div>
+          : <form action={leaveReview} className="card" style={{ marginTop: 20 }}>
+            <input type="hidden" name="token" value={token} />
+            <h3>How did we go?</h3>
+            <p className="small muted">We publish every review, good or bad. Your first name and suburb show; nothing else.</p>
+            <div className="pills" role="radiogroup" aria-label="Rating">{[5, 4, 3, 2, 1].map((n) => <label key={n} style={{ display: "inline-block" }}><input type="radio" name="rating" value={n} required style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">{n} ★</span></label>)}</div>
+            <p><textarea name="body" placeholder="What went well, what didn't" style={{ minHeight: 100 }} required /></p>
+            <p className="small"><label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}><input type="checkbox" name="showcase" /> You can show photos of my install (no address or faces) on your real installs page.</label></p>
+            <button className="btn">Send review</button>
+          </form>)}
         {state === "cancelled" && <div className="note" style={{ marginTop: 16 }}>This order is cancelled. Any refund due goes back to your original payment method. <Link href="/systems">See systems</Link></div>}
         {(state === "expired" || state === "declined") && <div className="note" style={{ marginTop: 16 }}>This quote is closed. <Link href="/systems">Get a new price</Link></div>}
 

@@ -8,7 +8,7 @@ import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2 } from "@/lib/site";
-import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent } from "../../actions";
+import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent, photoPublic } from "../../actions";
 import { Step } from "@/components/Step";
 
 export const dynamic = "force-dynamic";
@@ -21,8 +21,9 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
   if (!q) notFound();
   const p = q.snapshot ?? q.result;
   const { menu } = await pricingData();
-  const photos = await db()`select kind, path from quote_photos where quote_id = ${id} order by created_at`;
-  const urls = await Promise.all(photos.map(async (ph) => ({ kind: ph.kind as string, url: await photoUrl(ph.path as string) })));
+  const photos = await db()`select id, kind, path, public from quote_photos where quote_id = ${id} order by created_at`;
+  const urls = await Promise.all(photos.map(async (ph) => ({ id: ph.id as string, pub: ph.public as boolean, kind: ph.kind as string, url: await photoUrl(ph.path as string) })));
+  const [consent] = await db()`select showcase_consent from quotes where id = ${id}`;
   const audit = await db()`select at, actor_type, actor_id, action, rationale from audit_log where entity = 'quote' and entity_id = ${id} order by id desc limit 50`;
   const msgs = await db()`select template, status, subject, created_at from messages where quote_id = ${id} order by created_at desc`;
   const pays = await db()`select id, kind, method, amount::float8 amount, reference, status from payments where quote_id = ${id}`;
@@ -52,6 +53,8 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
           {q.pricing_reasons?.length ? <div className="note" style={{ marginTop: 8 }}>Needs pricing: {q.pricing_reasons.join(" · ")}</div> : null}
           <h3 style={{ marginTop: 18 }}>Photos</h3>
           <div className="filters">{urls.length ? urls.map((u, i) => u.url ? <a key={i} className="chip" href={u.url} target="_blank">{u.kind}</a> : <span key={i} className="chip">{u.kind} (local)</span>) : <span className="muted small">None</span>}</div>
+          {consent?.showcase_consent && urls.length > 0 && <div className="small" style={{ marginTop: 8 }}><span className="muted">Customer agreed to share photos. Show on real installs:</span>
+            <div className="filters">{urls.map((u) => <form key={u.id} action={photoPublic} style={{ display: "inline" }}><input type="hidden" name="photo" value={u.id} /><input type="hidden" name="job" value={id} /><input type="hidden" name="on" value={u.pub ? "0" : "1"} /><button className={`chip${u.pub ? " on" : ""}`}>{u.pub ? "✓ " : ""}{u.kind}</button></form>)}</div></div>}
           <h3 style={{ marginTop: 18 }}>Price (frozen snapshot)</h3>
           <table className="lines"><tbody>
             {p.stack.lines.map((l) => <tr key={l.code}><td>{l.description} × {l.qty}</td><td className="r">{l.cost_ex_gst != null ? aud2(l.cost_ex_gst) : "–"} cost</td><td className="r">{l.sell_ex_gst != null ? aud2(l.sell_ex_gst) : "pending"}</td></tr>)}

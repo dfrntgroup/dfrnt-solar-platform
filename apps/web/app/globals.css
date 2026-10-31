@@ -168,3 +168,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--teal); outl
 input[type=file] { font: inherit; font-size: 14px; width: 100%; padding: 10px; border: 1px dashed #aebdba; border-radius: var(--r); background: var(--mint); box-sizing: border-box; }
 input[type=file]::file-selector-button { font: inherit; font-weight: 700; border: 0; border-radius: var(--r); background: var(--teal); color: #fff; padding: 8px 12px; margin-right: 10px; cursor: pointer; }
 label { display: block; }
+
+.pill-r { display: inline-block; min-width: 56px; text-align: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r); font-weight: 700; cursor: pointer; background: #fff; }
+input:checked + .pill-r { border: 2px solid var(--teal); background: var(--mint); color: var(--teal-dark); }
+input:focus-visible + .pill-r { outline: 2px solid var(--teal); }
+.stars { color: var(--teal); letter-spacing: 2px; }

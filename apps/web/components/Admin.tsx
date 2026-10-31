@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 export function AdminShell({ who, area, children }: { who: string; area: "ops" | "installer"; children: ReactNode }) {
   const links = area === "ops"
-    ? [["/ops", "Board"], ["/ops/analytics", "Analytics"], ["/ops/pricing", "Pricing"], ["/ops/approvals", "Approvals"], ["/ops/ledger", "Pay run"], ["/ops/purchasing", "POs"], ["/ops/stc", "STCs"], ["/ops/support", "Support"], ["/ops/credits", "Credits"], ["/ops/messages", "Messages"], ["/ops/installers", "Installers"], ["/ops/content", "Content"], ["/ops/growth", "Referrals"], ["/ops/agents", "Agents"], ["/installer", "Installer view"]]
+    ? [["/ops", "Board"], ["/ops/analytics", "Analytics"], ["/ops/pricing", "Pricing"], ["/ops/approvals", "Approvals"], ["/ops/ledger", "Pay run"], ["/ops/purchasing", "POs"], ["/ops/stc", "STCs"], ["/ops/support", "Support"], ["/ops/credits", "Credits"], ["/ops/messages", "Messages"], ["/ops/installers", "Installers"], ["/ops/content", "Content"], ["/ops/reviews", "Reviews"], ["/ops/growth", "Referrals"], ["/ops/agents", "Agents"], ["/installer", "Installer view"]]
     : [["/installer", "My jobs"], ["/installer/profile", "Profile"]];
   return (
     <>

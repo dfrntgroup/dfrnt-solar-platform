@@ -16,6 +16,7 @@ const TEMPLATES: Record<string, (v: Vars, link: string) => { subject: string; bo
   M6: (v, l) => ({ subject: "Your system is installed", body: `Hi ${v.name ?? "there"}, your system is installed and switched on. Your documents and warranty are on your record: ${l}` }),
   M7: (v, l) => ({ subject: "Your order is cancelled", body: `Hi ${v.name ?? "there"}, your order is cancelled. We'll process any refund due to your original payment method. ${l}` }),
   M9: (v, l) => ({ subject: "Your saved solar price", body: `Here's the system you saved: ${aud(v.amount)} installed after rebates. Prices can change, so secure it when you're ready: ${l}` }),
+  M10: (v, l) => ({ subject: "How did we go?", body: `Hi ${v.name ?? "there"}, your system has been running for a few days. Tell us how the install went, good or bad. It takes a minute: ${l}` }),
   PAY: (v, l) => ({ subject: "Reminder: your bank transfer", body: `Hi ${v.name ?? "there"}, we haven't seen your transfer of ${aud(v.amount)} yet. Use reference ${v.reference}. Details: ${l}` }),
   M8: (v, l) => ({ subject: "Please approve a change to your install", body: `Hi ${v.name ?? "there"}, your installer has found work outside the agreed scope (${aud(v.amount)} inc GST). Approve or decline here: ${l}` }),
 };

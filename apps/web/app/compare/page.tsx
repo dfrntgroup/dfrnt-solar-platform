@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Header, Footer } from "@/components/Header";
 import { aud, priced, sitePostcode } from "@/lib/site";
+import { BRANDS, PAIRS } from "@/lib/brands";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Compare systems" };
@@ -31,6 +32,7 @@ export default async function Compare({ searchParams }: { searchParams: Promise<
             {attr.map(([label, f]) => <tr key={label}><td className="muted">{label}</td>{rows.map((r) => <td key={r.s.slug}>{f(r)}</td>)}</tr>)}
             <tr><td />{rows.map((r) => <td key={r.s.slug}><Link className="btn sm" href={`/systems/${r.s.slug}`}>View</Link></td>)}</tr>
           </tbody></table></div>)}
+        <p className="small" style={{ marginTop: 20 }}>Brand against brand: {PAIRS.map((p, i) => <span key={p}>{i ? " · " : ""}<Link href={`/compare/${p}`}>{p.split("-vs-").map((x) => BRANDS[x]!.name).join(" vs ")}</Link></span>)}</p>
       </div></section>
       <Footer />
     </>
