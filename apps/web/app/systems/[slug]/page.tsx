@@ -9,10 +9,21 @@ import { saveForLater, secureSystem } from "@/app/actions";
 import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate, sitePostcode } from "@/lib/site";
 import { Media } from "@/components/SystemCard";
-import { friendlyInverter, friendlyPanel } from "@/lib/images";
+import { friendlyInverter, friendlyPanel, imageFor } from "@/lib/images";
 import { earliestFor, outcome } from "@/lib/capacity";
 
 export const dynamic = "force-dynamic";
+
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const data = await pricingData();
+  const s = findSystem(slug, data.catalogue);
+  if (!s) return { title: "System not found" };
+  const q = priceSystem(s, { postcode: "4551", asOf: todayAEST() }, data);
+  const img = imageFor(s.config.panelSku) ?? null;
+  const description = `${s.brand} ${s.title}, installed for ${aud(q.stack.amount_payable)} after rebates. One price, one contract, licensed local installer.`;
+  return { title: `${s.brand} ${s.title}`, description, openGraph: { title: `${s.brand} ${s.title} · ${aud(q.stack.amount_payable)} installed`, description, images: [img?.src ?? "/img/hero-home.webp"] } };
+}
 
 export default async function SystemPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string>> }) {
   const { slug } = await params;

@@ -1,7 +1,7 @@
-/* DFRNT Solar — matches the live Shopify theme ("Solar — teal design review"): teal #008e89, ink #172426, mint, Arial, 7 px radius. */
+/* DFRNT Solar — matches the live Shopify theme ("Solar — teal design review"): teal #007a75 (darkened from the store's #008e89 to pass WCAG AA contrast), ink #172426, mint, Arial, 7 px radius. */
 @font-face { font-family: "DFRNT Onest"; src: url(/fonts/onest-latin.woff2) format("woff2"); font-weight: 100 900; font-display: swap; }
 :root {
-  --teal: #008e89; --teal-dark: #00736f; --teal-soft: #7fd6cf; --ink: #172426; --mint: #eaf4f0; --muted: #526669; --line: #dce6e3; --bg: #fff;
+  --teal: #007a75; --teal-dark: #00736f; --teal-soft: #7fd6cf; --ink: #172426; --mint: #eaf4f0; --muted: #526669; --line: #dce6e3; --bg: #fff;
   --warn: #8a5a00; --warn-bg: #fff6e0; --r: 7px; --wrap: 1100px;
 }
 * { box-sizing: border-box; }

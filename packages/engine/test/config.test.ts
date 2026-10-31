@@ -19,6 +19,11 @@ describe("config engine", () => {
     expect(o.usable_kwh).toBe(batteryModules * 8);
   });
 
+  it("battery power never exceeds what the inverter can deliver", () => {
+    const o = run({ familyKey: "goodwe_esa_1p", panelCount: 0, panelSku: "", batteryModules: 2, inverterSku: "INV-GW-EHA-5K" } as Partial<ConfigInput>);
+    expect(o.stacks?.power_kw).toBeLessThanOrEqual(5);
+  });
+
   it("GoodWe ESA 1P keeps the 6-module and single-stack limits", () => {
     expect(run({ familyKey: "goodwe_esa_1p", panelCount: 0, panelSku: "", batteryModules: 7 }).ok).toBe(false);
     expect(run({ familyKey: "goodwe_esa_1p", panelCount: 0, panelSku: "", batteryModules: 8, stacks: 2 }).ok).toBe(false);

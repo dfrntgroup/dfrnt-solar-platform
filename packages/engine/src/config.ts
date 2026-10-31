@@ -194,6 +194,9 @@ function checkBattery(fam: BatteryFamilyRule, rule: BatteryStackRule | undefined
     const keys = Object.keys(table).map(Number).sort((a, b) => a - b);
     power = split.reduce((s, n) => { const k = keys.filter((x) => x <= n).pop(); return s + (k != null ? table[String(k)]! : 0); }, 0);
   }
+  // The house can only draw what the inverter can pass through, however big the battery is.
+  const invCapKw = ((inv as { bat_w?: number }).bat_w ?? inv.ac_w) / 1000;
+  if (power != null && power > invCapKw) power = invCapKw;
   if (power != null && power * 1000 < inv.ac_w - 1e-6) warnings.push({ step: "stacks", message: `Battery limited to ${Math.round(power * 10) / 10} kW (inverter ${inv.ac_w / 1000} kW)` });
   return { blockers, warnings, split, parts, power: power != null ? Math.round(power * 100) / 100 : null };
 }

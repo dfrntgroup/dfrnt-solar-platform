@@ -10,7 +10,7 @@ type Vars = Record<string, unknown> & { name?: string | null };
 const TEMPLATES: Record<string, (v: Vars, link: string) => { subject: string; body: string }> = {
   M1: (v, l) => ({ subject: "We've got your photos", body: `Hi ${v.name ?? "there"}, thanks. Your installer is checking your home and will confirm your price, usually today. Your record: ${l}` }),
   M2: (v, l) => ({ subject: "Your price is confirmed", body: `Hi ${v.name ?? "there"}, your installed price is confirmed at ${aud(v.amount)} after rebates. Sign and pay here: ${l}` }),
-  M3: (v, l) => ({ subject: "Payment received — pick your install date", body: `Hi ${v.name ?? "there"}, we've received your payment. Choose your install date here: ${l}` }),
+  M3: (v, l) => ({ subject: "Payment received — pick your install date", body: `Hi ${v.name ?? "there"}, we've received your payment. Choose your install date here: ${l}\n\nYour tax invoice: ${l}/doc/invoice` }),
   M4: (v, l) => ({ subject: "Your install is booked", body: `Hi ${v.name ?? "there"}, your install is booked for ${v.date}. Everything about your system lives here: ${l}` }),
   M5: (v, l) => ({ subject: "We're installing tomorrow", body: `Hi ${v.name ?? "there"}, your installer arrives tomorrow between 7 and 8 am. ${l}` }),
   M6: (v, l) => ({ subject: "Your system is installed", body: `Hi ${v.name ?? "there"}, your system is installed and switched on. Your documents and warranty are on your record: ${l}` }),

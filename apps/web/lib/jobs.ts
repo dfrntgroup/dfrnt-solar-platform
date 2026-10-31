@@ -135,6 +135,8 @@ export async function markPaid(q: QuoteRow, actor: Actor) {
   if (!["payment_pending", "payment_review"].includes(q.status)) throw new Error("Not awaiting payment");
   await db()`update payments set status = 'received', received_at = now() where quote_id = ${q.id} and kind = 'system' and status in ('pending','review')`;
   await move(q, "awaiting_date", actor, "payments.receive", { paid_at: new Date(), slot_hold_until: new Date(Date.now() + 48 * 3600_000) }, "Funds matched to reference");
+  // Tax invoice number is issued at the moment payment is received.
+  await db()`update quotes set invoice_number = 'INV-' || nextval('invoice_seq') where id = ${q.id} and invoice_number is null`;
   await queueMessage("M3", q.token, q.customer_email, { name: q.customer_name });
 }
 
