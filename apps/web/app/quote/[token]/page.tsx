@@ -6,7 +6,7 @@ import { Header, Footer } from "@/components/Header";
 import { availableDates, getQuote } from "@/lib/jobs";
 import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate } from "@/lib/site";
-import { approveVariation, declineVariation, cancelOrder, payByBank, pickDate, signAgreement, submitHome } from "./actions";
+import { addCode, approveVariation, declineVariation, cancelOrder, payByBank, pickDate, signAgreement, submitHome } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your solar record", robots: { index: false } };
@@ -53,6 +53,8 @@ export default async function Record({ params, searchParams }: { params: Promise
   const step = STEPS.findIndex(([, ss]) => ss.includes(state));
   const dates = state === "awaiting_date" ? await availableDates(q) : [];
   const variations = await db()`select id, description, sell_inc::float8 as sell_inc, status from variations where quote_id = ${q.id} order by created_at`;
+  const [mine] = await db()`select code from codes where owner_quote_id = ${q.id} and active`;
+  const myCode = mine?.code as string | undefined;
   const docs = ["Signed agreement", "Tax invoice", "Certificate of compliance", "STC assignment form", "Warranty cards"];
   const canCancel = ["signed", "payment_pending", "payment_review", "awaiting_date", "booked", "gear_ordered", "delivered"].includes(state);
   const rule = canCancel && q.signed_at ? refundRule(q.signed_at.toISOString().slice(0, 10), todayAEST(), state) : null;
@@ -105,6 +107,10 @@ export default async function Record({ params, searchParams }: { params: Promise
           {q.pricing_reasons?.length ? <p className="muted small">Why it needs a look: {q.pricing_reasons.join(" · ")}</p> : null}
         </>)}
 
+        {["secured", "priced", "pricing_installer"].includes(state) && (q.discount_code
+          ? <p className="small ok" style={{ marginTop: 12 }}>Code {q.discount_code} applied: {aud(q.referral_discount ?? 0)} off before GST.</p>
+          : <form action={addCode} style={{ display: "flex", gap: 8, marginTop: 12 }}><input type="hidden" name="token" value={token} />
+              <input name="code" placeholder="Referral or creator code" style={{ ...input, width: 220 }} /><button className="btn ghost sm" type="submit">Apply</button></form>)}
         {state === "priced" && (<>
           <h2 style={{ marginTop: 20 }}>Your confirmed price</h2>
           <Breakdown q={shown} />
@@ -158,6 +164,7 @@ export default async function Record({ params, searchParams }: { params: Promise
                   <button className="btn sm" type="submit">Approve and pay</button>
                   <button className="btn ghost sm" formAction={declineVariation}>Decline</button></form>}
               </div>))}</>}
+          {["installed", "lodged", "settled", "complete"].includes(state) && myCode && <div className="ok" style={{ marginTop: 16 }}>Your referral code: <strong>{myCode}</strong>. Friends get $250 off, and we pay you $250 after their install.</div>}
           <h2 style={{ marginTop: 24 }}>Your documents</h2>
           <table className="lines"><tbody>{docs.map((d) => <tr key={d}><td>{d}</td><td className="r muted">{["installed", "lodged", "settled", "complete"].includes(state) || d === "Signed agreement" ? "ready" : "after install"}</td></tr>)}</tbody></table>
           <h2 style={{ marginTop: 24 }}>What you paid</h2>

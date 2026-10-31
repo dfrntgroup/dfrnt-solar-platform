@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@dfrnt/db";
 import type { SiteAnswers } from "@dfrnt/engine";
-import { book, chooseBank, CUSTOMER, cancel, decideVariation, getQuote, sign, submitSite } from "@/lib/jobs";
+import { applyCode, book, chooseBank, CUSTOMER, cancel, decideVariation, getQuote, sign, submitSite } from "@/lib/jobs";
 import { putPhoto } from "@/lib/storage";
 
 const back = (token: string, err?: string) => redirect(`/quote/${token}${err ? `?error=${encodeURIComponent(err)}` : ""}`);
@@ -85,4 +85,9 @@ export async function cancelOrder(f: FormData) {
     if (f.get("confirm") !== "on") throw new Error("Tick the box to confirm you want to cancel");
     await cancel((await getQuote(token))!, CUSTOMER, s(f, "reason") || "Customer cancelled");
   });
+}
+
+export async function addCode(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => applyCode((await getQuote(token))!, s(f, "code")));
 }

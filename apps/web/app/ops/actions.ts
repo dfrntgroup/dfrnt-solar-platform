@@ -75,3 +75,45 @@ export async function addStaffNote(f: FormData) {
     await db()`insert into events (type, entity, entity_id, payload) values ('note.added', 'quote', ${id}, ${db().json({ by: me.name, note: s(f, "note") })})`;
   });
 }
+
+export async function saveContent(f: FormData) {
+  const me = await requireStaff();
+  const id = s(f, "id");
+  const back = `/ops/content/${id}`;
+  let saved = id;
+  try {
+    const slug = s(f, "slug").toLowerCase();
+    if (!/^[a-z0-9-]+$/.test(slug)) throw new Error("Slug: lowercase letters, numbers and dashes");
+    const v = { slug, title: s(f, "title"), summary: s(f, "summary"), body: s(f, "body"), system_slug: s(f, "system_slug") || null,
+      tags: s(f, "tags").split(",").map((t) => t.trim()).filter(Boolean), status: s(f, "status") || "draft", author: me.name };
+    await write({ actor: me.actor, action: "content.save" }, v, async (tx) => {
+      const [row] = id === "new"
+        ? await tx`insert into content_items ${tx(v as never)} returning id`
+        : await tx`update content_items set ${tx(v as never)}, updated_at = now(), published_at = case when ${v.status} = 'published' then coalesce(published_at, now()) else published_at end where id = ${id} returning id`;
+      saved = row!.id as string;
+      return { entity: "content", entityId: saved, event: `content.${v.status}`, result: { slug } };
+    });
+  } catch (e) { redirect(`${back}?error=${encodeURIComponent((e as Error).message)}`); }
+  revalidatePath("/learn"); redirect(`/ops/content/${saved}`);
+}
+export async function addCreatorCode(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/growth", async () => {
+    const code = s(f, "code").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (code.length < 4) throw new Error("Code needs at least 4 letters or numbers");
+    await write({ actor: me.actor, action: "codes.create" }, { code }, async (tx) => {
+      await tx`insert into codes (code, kind, creator_name, creator_email, reward) values (${code}, 'creator', ${s(f, "name")}, ${s(f, "email") || null}, ${Number(s(f, "reward") || 300)})`;
+      return { entity: "code", entityId: code, event: "code.created", result: { code } };
+    });
+  });
+}
+export async function markPayoutPaid(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/growth", async () => {
+    const id = s(f, "id");
+    await write({ actor: me.actor, action: "payouts.paid" }, { id }, async (tx) => {
+      await tx`update payouts set status = 'paid', paid_at = now() where id = ${id} and status = 'eligible'`;
+      return { entity: "payout", entityId: id, event: "payout.paid", result: { ok: true } };
+    });
+  });
+}

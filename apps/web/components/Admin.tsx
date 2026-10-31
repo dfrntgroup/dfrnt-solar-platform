@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 
 export function AdminShell({ who, area, children }: { who: string; area: "ops" | "installer"; children: ReactNode }) {
   const links = area === "ops"
-    ? [["/ops", "Board"], ["/ops/approvals", "Approvals"], ["/ops/ledger", "Pay run"], ["/ops/messages", "Messages"], ["/ops/installers", "Installers"], ["/ops/agents", "Agents"], ["/installer", "Installer view"]]
+    ? [["/ops", "Board"], ["/ops/approvals", "Approvals"], ["/ops/ledger", "Pay run"], ["/ops/messages", "Messages"], ["/ops/installers", "Installers"], ["/ops/content", "Content"], ["/ops/growth", "Referrals"], ["/ops/agents", "Agents"], ["/installer", "Installer view"]]
     : [["/installer", "My jobs"]];
   return (
     <>

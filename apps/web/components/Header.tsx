@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { setPostcode } from "@/app/actions";
 
-const links = [["/systems", "Solar + battery"], ["/batteries", "Battery only"], ["/brands/solax", "Brands"], ["/price-list", "Price list"]];
+const links = [["/systems", "Solar + battery"], ["/batteries", "Battery only"], ["/estimate", "Estimate"], ["/price-list", "Price list"], ["/learn", "Learn"]];
 
 export function Header({ postcode, back = "/" }: { postcode: string; back?: string }) {
   return (
