@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { findSystem, priceSystem } from "@dfrnt/engine";
+import { configOptions, findSystem, priceSystem, type ConfigInput } from "@dfrnt/engine";
+import { Configurator } from "@/components/Configurator";
 import { Header, Footer } from "@/components/Header";
 import { secureSystem } from "@/app/actions";
 import { todayAEST } from "@/lib/api";
@@ -15,6 +16,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const postcode = await sitePostcode(await searchParams);
   const q = priceSystem(s, { postcode, asOf: todayAEST() });
   const st = q.stack, c = q.config, r = q.rebate;
+  const opts = configOptions({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode, installDate: q.window.lock_until, ...s.config } as ConfigInput);
   const parts = c.bom.filter((b) => !b.included && !b.sku.startsWith("BOS") && !b.sku.startsWith("MNT"));
   return (
     <>
@@ -30,7 +32,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
               <tr><td>Racking, cabling, isolators and all balance-of-system parts</td><td className="r">✓</td></tr>
               <tr><td>Standard installation by a licensed electrician, grid connection paperwork, rebate paperwork</td><td className="r">✓</td></tr>
             </tbody></table>
-            <h2 style={{ marginTop: 28 }}>How the price is made</h2>
+            <h2 style={{ marginTop: 28 }}>How the price is made <span className="small muted">(as listed)</span></h2>
             <table className="lines"><tbody>
               <tr><td>Equipment</td><td className="r">{aud2(st.hardware_ex_gst)}</td></tr>
               <tr><td>Installation</td><td className="r">{aud2(st.installation_ex_gst)}</td></tr>
@@ -45,14 +47,11 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
           <aside className="buybox">
             <div className="tag small muted">{s.brand} · {s.tier}</div>
             <h1 style={{ fontSize: 28 }}>{s.title}</h1>
-            <div className="pay"><small>You pay, installed</small>{aud(st.amount_payable)}</div>
-            <p className="before">{aud(st.price_inc_gst)} before {aud(st.less_stcs)} rebates · inc GST</p>
-            <form action={secureSystem}>
-              <input type="hidden" name="slug" value={s.slug} />
-              <input type="hidden" name="postcode" value={postcode} />
-              <button className="btn block" type="submit">Secure this price for 14 days</button>
-            </form>
-            <p className="small muted">No payment now. Your price and rebate are locked until {longDate(q.window.lock_until)}. Next you send a few photos of your home and we confirm the install.</p>
+            <Configurator slug={s.slug} postcode={postcode} panels={opts.panels} modules={opts.modules} backupAvailable={opts.backup} moduleKwh={opts.moduleKwh} panelW={opts.panelW}
+              start={{ panels: s.config.panelCount, modules: s.config.batteryModules }} lockUntil={longDate(q.window.lock_until)} secure={secureSystem}
+              initial={{ ok: q.config.ok, summary: c.summary, solar_kw: c.panel_kw, usable_kwh: c.usable_kwh, inverter: c.inverter?.model, towers: c.stacks?.physical_towers ?? 0,
+                you_pay: st.amount_payable, before_rebates: st.price_inc_gst, rebates: st.less_stcs, gst: st.gst, equipment: st.hardware_ex_gst, installation: st.installation_ex_gst,
+                solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message) }} />
             <div className="ok small">Earliest install date comes from your installer&apos;s real availability when you book.</div>
           </aside>
         </div>

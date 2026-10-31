@@ -5,3 +5,4 @@ export * from "./config";
 export * from "./quote";
 export * from "./catalogue";
 export * from "./jobs";
+export * from "./options";
