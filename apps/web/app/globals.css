@@ -173,3 +173,7 @@ label { display: block; }
 input:checked + .pill-r { border: 2px solid var(--teal); background: var(--mint); color: var(--teal-dark); }
 input:focus-visible + .pill-r { outline: 2px solid var(--teal); }
 .stars { color: var(--teal); letter-spacing: 2px; }
+.legal h3 { font-size: 17px; margin: 22px 0 6px; }
+.legal p { margin: 0 0 10px; line-height: 1.55; }
+.legal.compact { max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; background: #fff; font-size: 14px; }
+.legal.compact h3 { font-size: 15px; margin-top: 14px; }

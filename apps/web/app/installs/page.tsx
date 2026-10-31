@@ -13,7 +13,7 @@ export default async function Installs({ searchParams }: { searchParams: Promise
   const postcode = await sitePostcode(await searchParams);
   let jobs: { id: string; title: string | null; summary: string; suburb: string | null; d: string; photos: string[] }[] = [];
   try {
-    const rows = await db()`select q.id, q.title, q.result->'config'->>'summary' summary, q.site->>'suburb' suburb, coalesce(q.install_date::text, '') d,
+    const rows = await db()`select q.id, q.title, q.result->'config'->>'summary' summary, q.site->'address'->>'suburb' suburb, coalesce(q.install_date::text, '') d,
         array(select p.path from quote_photos p where p.quote_id = q.id and p.public order by p.created_at) photos
       from quotes q where q.showcase_consent and q.status in ('installed','lodged','settled','complete')
         and exists (select 1 from quote_photos p where p.quote_id = q.id and p.public) order by q.install_date desc nulls last limit 60`;

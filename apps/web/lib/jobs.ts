@@ -11,17 +11,18 @@ import { pricingData, pricingDataFor } from "./pricing-data";
 export const SYSTEM: Actor = { type: "system", id: "app" };
 export const CUSTOMER: Actor = { type: "customer", id: "record-link" };
 
+import { AGREEMENT_VERSION } from "./legal";
 export interface QuoteRow {
   id: string; token: string; status: JobState; title: string | null; input: ConfigInput; result: Quote; snapshot: Quote | null;
   site: SiteAnswers | null; installer_id: string | null; pricing_reasons: string[] | null; lock_until: string; install_date: string | null;
-  signed_at: Date | null; signed_name: string | null; payment_method: string | null; payment_reference: string | null; paid_at: Date | null;
+  signed_at: Date | null; signed_name: string | null; agreement_version: string | null; invoice_number: string | null; payment_method: string | null; payment_reference: string | null; paid_at: Date | null;
   customer_email: string | null; customer_name: string | null; customer_phone: string | null; postcode: string; created_at: Date;
   discount_code: string | null; referral_discount: number | null; credit_code: string | null; credit_amount: number | null;
 }
 
 export async function getQuote(token: string): Promise<QuoteRow | null> {
   const [row] = await db()`select id, token, status, title, input, result, snapshot, site, installer_id, pricing_reasons,
-    lock_until::text as lock_until, install_date::text as install_date, signed_at, signed_name, payment_method, payment_reference, paid_at,
+    lock_until::text as lock_until, install_date::text as install_date, signed_at, signed_name, agreement_version, invoice_number, payment_method, payment_reference, paid_at,
     customer_email, customer_name, customer_phone, postcode, created_at, discount_code, credit_code,
     (select amount_inc::float8 from credits c where c.code = quotes.credit_code) as credit_amount,
     (select discount_inc::float8 from codes c where c.code = quotes.discount_code and c.active) as referral_discount from quotes where token = ${token}`;
@@ -107,7 +108,7 @@ export async function installerPrice(q: QuoteRow, actor: Actor, extraCodes: stri
 export async function sign(q: QuoteRow, name: string) {
   if (q.status !== "priced") throw new Error("Nothing to sign");
   if (q.lock_until < todayAEST()) { await move(q, "lapsed", SYSTEM, "quotes.lapse", {}, "Lock expired before signing"); throw new Error("This price has expired. Secure it again at today's price."); }
-  await move(q, "signed", CUSTOMER, "quotes.sign", { signed_at: new Date(), signed_name: name });
+  await move(q, "signed", CUSTOMER, "quotes.sign", { signed_at: new Date(), signed_name: name, agreement_version: AGREEMENT_VERSION });
 }
 
 /* D3/D4b: bank transfer (card switches on with Stripe at go-live) */

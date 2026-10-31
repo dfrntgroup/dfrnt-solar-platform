@@ -1,11 +1,19 @@
+import Link from "next/link";
 import { Static } from "@/components/Static";
 export const metadata = { title: "About us" };
+// Copy from Karl's Pylon "About us" (1 Nov 2026). Accreditation line left out until confirmed current.
 export default function Page() {
   return (
-    <Static eyebrow="About" title="Built by people who've installed 29,000 systems.">
-      <p>DFRNT Solar is a family-owned solar and battery company in South East Queensland. The founders built and sold one of Australia&apos;s largest solar installers before starting again with a simpler idea: show the real price, take the rebate off for you, and use the best local electricians.</p>
-      <p>We don&apos;t send salespeople. Every price is on the website. Your installer is a licensed local electrician who prices your home from photos and is paid fairly for the work.</p>
-      <p className="small muted">[placeholder — final wording and photos from Karl]</p>
+    <Static eyebrow="About us" title="We built one of Australia's largest solar companies. Then we sold it. Now we're back.">
+      <p className="lead">In 2014, Karl Brown invested $2,500 into InStyle Solar. Over nine years, we installed 29,000+ systems, generated $50M+ in annual revenue, ranked #3 on the AFR Fast 100, and completed an eight-figure exit to Hanwha Energy in 2023.</p>
+      <p>Walking away gave us clarity. We saw how incentives distort behaviour, how confusion closes deals, and how often homeowners are left undersupported or disappointed. So we came back.</p>
+      <h2>Most solar companies want you confused. We want you confident.</h2>
+      <p>We want you to understand every component and why it was chosen. See exactly where your money goes. Know what your system should produce, and hold us to it. A confident customer doesn&apos;t need to be sold. They just need the truth.</p>
+      <p>That&apos;s why every price is on this website, installed, with the rebate already taken off. No salespeople, no pressure tactics, no shortcuts, no disappearing after install.</p>
+      <h2>Accountable after the install</h2>
+      <p>Every system comes with its own system record: serial numbers, warranty details, compliance certificate and full photo documentation, kept on one page you can come back to any time. We back every install with a 10-year workmanship warranty.</p>
+      <p>We&apos;re not building the biggest solar company. We&apos;re building the one homeowners actually deserve. Family-owned, based in South East Queensland.</p>
+      <p><Link className="btn" href="/systems">See every price</Link> <Link className="btn ghost" href="/contact?kind=callback">Talk to us</Link></p>
     </Static>
   );
 }

@@ -1,6 +1,8 @@
 import { friendlySummary } from "@/lib/images";
 import { leaveReview } from "./actions";
 import { Share } from "@/components/Share";
+import { LegalText } from "@/components/Legal";
+import { AGREEMENT } from "@/lib/legal";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
@@ -124,11 +126,13 @@ export default async function Record({ params, searchParams }: { params: Promise
           <h2 style={{ marginTop: 20 }}>Your confirmed price</h2>
           <Breakdown q={shown} />
           <h2 style={{ marginTop: 28 }}>Sign</h2>
-          <p className="muted small">One contract covers the equipment, the installation, and assigning your STCs to us. You have a 10 business-day cooling-off period after signing. <em>Agreement wording is a placeholder until legal review.</em></p>
+          <p className="muted small">One agreement covers the equipment, the installation, and assigning your STCs to us. You have 10 business days after signing to cancel for any reason with a full refund.</p>
+          <LegalText sections={AGREEMENT} compact />
+          <p className="small"><Link href="/agreement" target="_blank">Open the agreement in full</Link> · <Link href="/privacy" target="_blank">Privacy policy</Link></p>
           <form action={signAgreement}>
             <input type="hidden" name="token" value={token} />
             <Field label="Type your full name"><input name="name" style={input} defaultValue={q.customer_name ?? ""} /></Field>
-            <label className="small"><input type="checkbox" name="agree" /> I accept the agreement and assign the STCs for this system to DFRNT Solar.</label>
+            <label className="small"><input type="checkbox" name="agree" /> I have read and accept the installation agreement, and assign the STCs for this system to DFRNT Solar.</label>
             <p><button className="btn block" type="submit">Sign agreement</button></p>
           </form>
         </>)}
@@ -143,6 +147,7 @@ export default async function Record({ params, searchParams }: { params: Promise
 
         {(state === "payment_pending" || state === "payment_review") && (<>
           <h2 style={{ marginTop: 20 }}>{state === "payment_review" ? "We're checking your payment" : "Pay by bank transfer"}</h2>
+          <p className="small"><a href={`/quote/${token}/doc/agreement`} target="_blank">Your signed agreement (PDF)</a></p>
           <table className="lines"><tbody>
             <tr><td>Amount</td><td className="r"><strong>{aud2(shown.stack.amount_payable)}</strong></td></tr>
             <tr><td>Reference</td><td className="r"><strong>{q.payment_reference}</strong></td></tr>
@@ -177,7 +182,10 @@ export default async function Record({ params, searchParams }: { params: Promise
           {["booked", "gear_ordered", "delivered"].includes(state) && <p className="small"><Link href={`/contact?quote=${token}&kind=question`}>Need a different date?</Link> Tell us and we&apos;ll offer the next free days{shown.window.window_end ? ` (moving past ${longDate(shown.window.window_end)} means re-pricing at the new rebate)` : ""}.</p>}
           <p className="small"><Link href={`/contact?quote=${token}`}>Questions about your system?</Link></p>
           <h2 style={{ marginTop: 24 }}>Your documents</h2>
-          <table className="lines"><tbody>{docs.map((d) => <tr key={d}><td>{d}</td><td className="r muted">{["installed", "lodged", "settled", "complete"].includes(state) || d === "Signed agreement" ? "ready" : "after install"}</td></tr>)}</tbody></table>
+          <table className="lines"><tbody>{docs.map((d) => {
+            const href = d === "Signed agreement" ? `/quote/${token}/doc/agreement` : d === "Tax invoice" && q.paid_at ? `/quote/${token}/doc/invoice` : null;
+            return <tr key={d}><td>{href ? <a href={href} target="_blank">{d}</a> : d}</td><td className="r muted">{href ? "PDF" : d === "Tax invoice" ? "once paid" : "after install"}</td></tr>;
+          })}</tbody></table>
           <h2 style={{ marginTop: 24 }}>What you paid</h2>
           <Breakdown q={shown} />
         </>)}

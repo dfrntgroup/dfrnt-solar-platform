@@ -106,7 +106,7 @@ export async function leaveReview(f: FormData) {
     const rating = Number(s(f, "rating")), body = s(f, "body").slice(0, 3000);
     if (!(rating >= 1 && rating <= 5)) throw new Error("Pick a rating from 1 to 5");
     if (body.length < 10) throw new Error("Tell us a little more (at least a sentence)");
-    const site = (q.site ?? {}) as { suburb?: string };
+    const site = ((q.site as { address?: { suburb?: string } } | null)?.address ?? {}) as { suburb?: string };
     const first = String(q.customer_name ?? "").split(" ")[0] || null;
     await db()`insert into reviews (quote_id, installer_id, rating, body, first_name, suburb)
       values (${q.id}, ${q.installer_id ?? null}, ${rating}, ${body}, ${first}, ${site.suburb ?? null})
