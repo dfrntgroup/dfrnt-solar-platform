@@ -30,3 +30,21 @@ export function friendlyPanel(model: string | undefined) {
   if (model.startsWith("TSM")) return "Trina Vertex S+ 475 W";
   return model;
 }
+
+/** Swap part codes in a config summary for names people recognise. */
+export function friendlySummary(summary: string | undefined) {
+  if (!summary) return "";
+  return summary
+    .replace(/RSM96-11-475BNDG/g, "Risen 475 W panels").replace(/LR7-54HV[HB]-475M/g, "Longi 475 W panels").replace(/TSM-475NEG9RH\.28/g, "Trina 475 W panels")
+    .replace(/X1-VAST-(\d+)K/g, "SolaX X1-VAST $1 kW inverter").replace(/X3-Hybrid-([\d.]+)-D/g, "SolaX X3-Hybrid $1 kW inverter")
+    .replace(/(\d+)× TB-HS51/g, "$1 SolaX battery modules").replace(/TB-HS51/g, "SolaX battery module")
+    .replace(/GW([\d.]+)K-EHA-G20/g, "GoodWe ESA $1 kW inverter").replace(/GW([\d.]+)K-ETA-G20/g, "GoodWe ESA $1 kW three-phase inverter")
+    .replace(/SH([\d.]+)RS/g, "Sungrow SH$1RS inverter");
+}
+
+/** Plain-words version of engine warnings shown to customers. */
+export function friendlyWarning(w: string) {
+  const m = w.match(/^Battery limited to ([\d.]+) kW/);
+  if (m) return `Battery delivers up to ${m[1]} kW at once`;
+  return w;
+}

@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { track } from "./Analytics";
+import { outcome } from "@/lib/outcome";
+import { friendlySummary, friendlyWarning } from "@/lib/images";
 
 interface Price { ok: boolean; summary: string; solar_kw: number; usable_kwh: number; inverter?: string; towers: number; you_pay: number; before_rebates: number; rebates: number; gst: number; equipment: number; installation: number; solar_stcs: number; battery_stcs: number; warnings: string[]; blockers: string[] }
 const aud = (n: number, d = 0) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: d, minimumFractionDigits: d });
@@ -29,6 +31,14 @@ export function Configurator(props: {
     return () => clearTimeout(t);
   }, [panels, modules, backup, props.slug, props.postcode]);
 
+  useEffect(() => {
+    if (!p.ok || (panels === props.start.panels && modules === props.start.modules)) return;
+    const kw = Math.round(p.solar_kw * 10) / 10, kwh = Math.round(p.usable_kwh * 10) / 10;
+    const t = document.getElementById("sys-title"), o = document.getElementById("sys-outcome");
+    if (t) t.textContent = kwh ? `${kw} kW solar + ${kwh} kWh battery` : `${kw} kW solar`;
+    if (o) o.textContent = outcome(p.usable_kwh, p.solar_kw);
+  }, [p, panels, modules, props.start.panels, props.start.modules]);
+
   const step = (list: number[], v: number, dir: 1 | -1) => { const i = list.indexOf(v); return list[Math.min(list.length - 1, Math.max(0, (i < 0 ? 0 : i) + dir))] ?? v; };
   const Stepper = ({ label, value, sub, list, set }: { label: string; value: number; sub: string; list: number[]; set: (n: number) => void }) => (
     <div className="cfg-row">
@@ -43,13 +53,12 @@ export function Configurator(props: {
   return (
     <div>
       {props.panels.length > 0 && <Stepper label="Solar panels" value={panels} sub={`${(panels * props.panelW / 1000).toFixed(2)} kW`} list={props.panels} set={setPanels} />}
-      {props.modules.length > 0 && props.modules.length <= 10 && (
+      {props.modules.length > 0 && (
         <div className="cfg-row" style={{ display: "block" }}>
-          <strong>Battery size</strong><div className="small muted">{p.towers > 1 ? `${p.towers} towers · ` : ""}usable kWh</div>
-          <div className="filters" style={{ margin: "8px 0 0" }}>{props.modules.map((m) => (
-            <button key={m} type="button" className={`chip${m === modules ? " on" : ""}`} onClick={() => setModules(m)} aria-pressed={m === modules}>{Math.round(m * props.moduleKwh * 10) / 10} kWh</button>))}</div>
+          <div><strong>Battery size</strong><div className="small muted">{modules} module{modules === 1 ? "" : "s"} · usable capacity{p.towers > 1 ? ` · ${p.towers} towers` : ""}</div></div>
+          <div className="pills" role="group" aria-label="Battery size">{props.modules.map((m) => (
+            <button key={m} type="button" className={m === modules ? "on" : ""} onClick={() => setModules(m)} aria-pressed={m === modules}>{Math.round(m * props.moduleKwh * 10) / 10}<small>kWh</small></button>))}</div>
         </div>)}
-      {props.modules.length > 10 && <Stepper label="Battery modules" value={modules} sub={`${Math.round(modules * props.moduleKwh * 10) / 10} kWh usable${p.towers > 1 ? ` · ${p.towers} towers` : ""}`} list={props.modules} set={setModules} />}
       {props.backupAvailable && (
         <label style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--line)", cursor: "pointer" }}>
           <span><strong>Whole-home backup</strong><div className="small muted">Keeps the house running in a blackout</div></span>
@@ -58,8 +67,8 @@ export function Configurator(props: {
       <div style={{ borderTop: "2px solid var(--ink)", paddingTop: 12, opacity: busy ? 0.5 : 1, transition: "opacity .15s" }}>
         <div className="pay"><small>You pay, installed</small>{aud(p.you_pay)}</div>
         <p className="before">{aud(p.before_rebates)} before {aud(p.rebates)} rebates · inc GST</p>
-        <p className="small muted">{p.inverter} inverter · {p.solar_kw > 0 ? `${p.solar_kw} kW solar · ` : ""}{p.usable_kwh} kWh battery</p>
-        {p.warnings.length > 0 && <p className="small muted">{p.warnings.join(" · ")}</p>}
+        <p className="small muted">{friendlySummary(p.inverter ?? "")}{/inverter$/.test(friendlySummary(p.inverter ?? "")) ? "" : " inverter"} · {p.solar_kw > 0 ? `${p.solar_kw} kW solar · ` : ""}{p.usable_kwh} kWh battery</p>
+        {p.warnings.length > 0 && <p className="small muted">{p.warnings.map(friendlyWarning).join(" · ")}</p>}
         {!p.ok && <div className="note small">{p.blockers.join(" · ")}</div>}
         <details className="small" style={{ margin: "8px 0" }}><summary>How the price is made</summary>
           <table className="lines"><tbody>

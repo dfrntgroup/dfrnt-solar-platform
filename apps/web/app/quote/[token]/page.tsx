@@ -1,3 +1,4 @@
+import { friendlySummary } from "@/lib/images";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
@@ -48,6 +49,7 @@ export default async function Record({ params, searchParams }: { params: Promise
   const { error } = await searchParams;
   if (!/^[0-9a-f]{36}$/.test(token)) notFound();
   const q = await getQuote(token);
+  const inst = q?.installer_id ? (await db()`select id, business_name from installers where id = ${q.installer_id} and active and not is_test`)[0] : undefined;
   if (!q) notFound();
   const shown = q.snapshot ?? q.result;
   const state = q.status;
@@ -65,8 +67,9 @@ export default async function Record({ params, searchParams }: { params: Promise
       <Header postcode={q.postcode} back={`/quote/${token}`} />
       <section><div className="wrap" style={{ maxWidth: 720 }}>
         <p className="eyebrow">Your solar record · {BOARD[state]}</p>
-        <h1 style={{ fontSize: 30 }}>{q.title ?? shown.config.summary}</h1>
-        <p className="muted small">{shown.config.summary}</p>
+        <h1 style={{ fontSize: 30 }}>{q.title ?? friendlySummary(shown.config.summary)}</h1>
+        <p className="muted small">{friendlySummary(shown.config.summary)}</p>
+        {inst && !["saved", "secured", "lapsed"].includes(state) && <p className="small">Installed by <Link href={`/installers/${inst.id}`}>{inst.business_name as string}</Link></p>}
         {step >= 0 && <div className="filters">{STEPS.map(([n], i) => <span key={n} className={`chip${i === step ? " on" : ""}`} style={{ opacity: i > step ? 0.5 : 1 }}>{i < step ? "✓ " : ""}{n}</span>)}</div>}
         {error && <div className="note" style={{ margin: "12px 0" }}>{error}</div>}
 

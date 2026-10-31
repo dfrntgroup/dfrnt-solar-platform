@@ -38,8 +38,8 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
             <Media s={s} q={q} className="gallery" />
             <div className="gallery-note">Manufacturer product imagery. Final configuration is confirmed from your photos before you pay.</div>
             <p className="eyebrow" style={{ marginTop: 26 }}>{s.brand} · {s.kind === "battery_only" ? "Battery only" : "Supply + installation"}</p>
-            <h1 style={{ fontSize: "clamp(30px, 6vw, 44px)" }}>{s.title}</h1>
-            <p style={{ color: "var(--teal-dark)", fontWeight: 700, marginTop: -6 }}>{outcome(c.usable_kwh, c.panel_kw)}</p>
+            <h1 id="sys-title" style={{ fontSize: "clamp(30px, 6vw, 44px)" }}>{s.title}</h1>
+            <p id="sys-outcome" style={{ color: "var(--teal-dark)", fontWeight: 700, marginTop: -6 }}>{outcome(c.usable_kwh, c.panel_kw)}</p>
             <h3 style={{ marginTop: 18 }}>What is included</h3>
             <table className="incl"><tbody>
               {c.panel_kw > 0 && <tr><td className="k">Panels</td><td>{s.config.panelCount} × {friendlyPanel(rulesPanel)} ({c.panel_kw} kW)</td></tr>}
