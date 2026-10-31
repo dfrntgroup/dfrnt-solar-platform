@@ -5,3 +5,5 @@ node_modules
 .vercel
 coverage
 dist
+next-env.d.ts
+*.tsbuildinfo
