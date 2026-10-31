@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { track } from "./Analytics";
 
 interface Price { ok: boolean; summary: string; solar_kw: number; usable_kwh: number; inverter?: string; towers: number; you_pay: number; before_rebates: number; rebates: number; gst: number; equipment: number; installation: number; solar_stcs: number; battery_stcs: number; warnings: string[]; blockers: string[] }
 const aud = (n: number, d = 0) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: d, minimumFractionDigits: d });
@@ -19,6 +20,7 @@ export function Configurator(props: {
   useEffect(() => {
     if (first.current) { first.current = false; return; }
     setBusy(true);
+    track("configure", { slug: props.slug, panels, modules, backup });
     const t = setTimeout(async () => {
       const r = await fetch("/api/v1/price", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug: props.slug, panels, modules, backup, postcode: props.postcode }) });
       if (r.ok) setP(await r.json());
@@ -61,7 +63,7 @@ export function Configurator(props: {
             <tr><td>Less assignment of STCs ({p.solar_stcs + p.battery_stcs})</td><td className="r">−{aud(p.rebates, 2)}</td></tr>
           </tbody></table></details>
       </div>
-      <form action={props.secure}>
+      <form action={props.secure} onSubmit={() => track("secure_click", { slug: props.slug, panels, modules, backup })}>
         <input type="hidden" name="slug" value={props.slug} /><input type="hidden" name="postcode" value={props.postcode} />
         <input type="hidden" name="panels" value={panels} /><input type="hidden" name="modules" value={modules} /><input type="hidden" name="backup" value={backup} />
         <button className="btn block" type="submit" disabled={!p.ok || busy}>Secure this price for 14 days</button>

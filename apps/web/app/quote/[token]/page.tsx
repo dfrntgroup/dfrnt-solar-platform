@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
 import { BOARD, refundRule, type JobState, type Quote } from "@dfrnt/engine";
 import { Header, Footer } from "@/components/Header";
+import { PhotoInput } from "@/components/PhotoInput";
 import { availableDates, getQuote } from "@/lib/jobs";
 import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate } from "@/lib/site";
@@ -79,7 +80,8 @@ export default async function Record({ params, searchParams }: { params: Promise
             <Field label="Your name"><input name="name" style={input} required defaultValue={q.customer_name ?? ""} /></Field>
             <Field label="Email"><input name="email" type="email" style={input} required defaultValue={q.customer_email ?? ""} /></Field>
             <Field label="Mobile"><input name="phone" style={input} defaultValue={q.customer_phone ?? ""} /></Field>
-            <Field label="Unit or lot (if any) — it must match your title exactly"><input name="unit" style={input} /></Field>
+            <Field label="Is your home a unit, townhouse, duplex or on a strata title?"><select name="multi" style={input}><option value="no">No — a house on its own block</option><option value="yes">Yes</option></select></Field>
+            <Field label="Unit or lot number (needed if you answered yes — it must match your title exactly)"><input name="unit" style={input} /></Field>
             <Field label="Street address"><input name="line1" style={input} required /></Field>
             <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
               <Field label="Suburb"><input name="suburb" style={input} required /></Field>
@@ -96,7 +98,7 @@ export default async function Record({ params, searchParams }: { params: Promise
             <h3 style={{ marginTop: 18 }}>Photos</h3>
             <p className="muted small">Switchboard with the door open · electricity meter · roof from the street · where the battery goes.</p>
             {["switchboard", "meter", "roof", "battery_location"].map((k) => (
-              <Field key={k} label={k.replace("_", " ")}><input type="file" name={`photo_${k}`} accept="image/*" capture="environment" /></Field>
+              <Field key={k} label={k.replace("_", " ")}><PhotoInput name={`photo_${k}`} /></Field>
             ))}
             <button className="btn block" type="submit">Get my confirmed price</button>
           </form>
@@ -165,6 +167,8 @@ export default async function Record({ params, searchParams }: { params: Promise
                   <button className="btn ghost sm" formAction={declineVariation}>Decline</button></form>}
               </div>))}</>}
           {["installed", "lodged", "settled", "complete"].includes(state) && myCode && <div className="ok" style={{ marginTop: 16 }}>Your referral code: <strong>{myCode}</strong>. Friends get $250 off, and we pay you $250 after their install.</div>}
+          {["booked", "gear_ordered", "delivered"].includes(state) && <p className="small"><Link href={`/contact?quote=${token}&kind=question`}>Need a different date?</Link> Tell us and we&apos;ll offer the next free days{shown.window.window_end ? ` (moving past ${longDate(shown.window.window_end)} means re-pricing at the new rebate)` : ""}.</p>}
+          <p className="small"><Link href={`/contact?quote=${token}`}>Questions about your system?</Link></p>
           <h2 style={{ marginTop: 24 }}>Your documents</h2>
           <table className="lines"><tbody>{docs.map((d) => <tr key={d}><td>{d}</td><td className="r muted">{["installed", "lodged", "settled", "complete"].includes(state) || d === "Signed agreement" ? "ready" : "after install"}</td></tr>)}</tbody></table>
           <h2 style={{ marginTop: 24 }}>What you paid</h2>

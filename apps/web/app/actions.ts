@@ -14,8 +14,11 @@ export async function setPostcode(form: FormData) {
   redirect(back.startsWith("/") ? back : "/");
 }
 
+import { allow } from "@/lib/ratelimit";
+
 /** "Secure this price": saves the system as a quote at today's price with the 14-day / window-end lock. */
 export async function secureSystem(form: FormData) {
+  if (!(await allow("secure", 20))) redirect("/contact?kind=question");
   const data = await pricingData();
   const kwhPerModule = (fam: string) => data.rules.battery_families[data.rules.families[fam]!.battery_family]?.module.kwh_usable_cec ?? 0;
   const base = findSystem(String(form.get("slug")), data.catalogue);
@@ -40,6 +43,7 @@ export async function secureSystem(form: FormData) {
 
 /** B5: save a system's price and email the link (the price is not locked until it's secured). */
 export async function saveForLater(form: FormData) {
+  if (!(await allow("save", 10))) redirect("/systems");
   const data = await pricingData();
   const base = findSystem(String(form.get("slug")), data.catalogue);
   const postcode = String(form.get("postcode") ?? ""), email = String(form.get("email") ?? "").trim();

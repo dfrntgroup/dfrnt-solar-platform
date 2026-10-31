@@ -23,6 +23,8 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const parts = c.bom.filter((b) => !b.included && !b.sku.startsWith("BOS") && !b.sku.startsWith("MNT"));
   return (
     <>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "Product", name: `${s.brand} ${s.title}, installed`, brand: { "@type": "Brand", name: s.brand },
+        description: c.summary, offers: { "@type": "Offer", priceCurrency: "AUD", price: st.amount_payable.toFixed(2), availability: "https://schema.org/InStock", url: `/systems/${s.slug}` } }) }} />
       <Header postcode={postcode} back={`/systems/${slug}`} />
       <section><div className="wrap">
         <p className="eyebrow"><Link href="/systems">Systems</Link> · {s.brand}</p>

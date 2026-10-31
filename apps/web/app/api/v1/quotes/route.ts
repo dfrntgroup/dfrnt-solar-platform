@@ -1,6 +1,7 @@
 import { QuoteRequestSchema } from "@/lib/schema";
 import { json, problem, resolveActor, writeOptions } from "@/lib/api";
 import { createQuote } from "@/lib/quotes";
+import { allow } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
 
@@ -8,6 +9,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   const actor = await resolveActor(req);
   if (actor instanceof Response) return actor;
+  if (actor.type === "customer" && !(await allow("api-quote", 20))) return problem(429, "Slow down");
   const parsed = QuoteRequestSchema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return problem(400, "Invalid quote request", parsed.error.flatten());
   const out = await createQuote(actor, parsed.data, writeOptions(req));

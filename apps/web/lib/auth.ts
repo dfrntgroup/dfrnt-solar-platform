@@ -34,9 +34,17 @@ export async function currentStaff(): Promise<Staff | null> {
   return (s as unknown as Staff) ?? null;
 }
 
+/** If the user has an authenticator enrolled, the session must have passed it (aal2). */
+async function requireSecondFactor(next: string) {
+  if (devAuth() || !process.env.NEXT_PUBLIC_SUPABASE_URL) return;
+  const { data } = await (await supabase()).auth.mfa.getAuthenticatorAssuranceLevel();
+  if (data && data.nextLevel === "aal2" && data.currentLevel !== "aal2") redirect(`/login/mfa?next=${encodeURIComponent(next)}`);
+}
+
 export async function requireStaff(): Promise<Staff & { actor: Actor }> {
   const s = await currentStaff();
   if (!s) redirect("/login?next=/ops");
+  await requireSecondFactor("/ops");
   return { ...s, actor: { type: "staff", id: s.id } };
 }
 

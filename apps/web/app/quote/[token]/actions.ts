@@ -5,6 +5,7 @@ import { db } from "@dfrnt/db";
 import type { SiteAnswers } from "@dfrnt/engine";
 import { applyCode, book, chooseBank, CUSTOMER, cancel, decideVariation, getQuote, sign, submitSite } from "@/lib/jobs";
 import { putPhoto } from "@/lib/storage";
+import { allow } from "@/lib/ratelimit";
 
 const back = (token: string, err?: string) => redirect(`/quote/${token}${err ? `?error=${encodeURIComponent(err)}` : ""}`);
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
@@ -18,6 +19,7 @@ async function run(token: string, fn: () => Promise<unknown>) {
 export async function submitHome(f: FormData) {
   const token = s(f, "token");
   await run(token, async () => {
+    if (!(await allow("site", 15))) throw new Error("Too many attempts — please wait a few minutes");
     const q = await getQuote(token);
     if (!q) throw new Error("Quote not found");
     const photos: Record<string, boolean> = {};
@@ -48,6 +50,8 @@ export async function submitHome(f: FormData) {
       photos,
     };
     if (!/^\d{4}$/.test(site.address.postcode)) throw new Error("Enter a 4-digit postcode");
+    if (s(f, "multi") === "yes" && !site.address.unit) throw new Error("Add your unit or lot number — the rebate is rejected without it");
+    if (/^\s*\d+\s*[-–]\s*\d+\s/.test(site.address.line1) && !site.address.unit) throw new Error("That street number is a range (like 19–21). Add your unit or lot number");
     if (!s(f, "name") || !/^\S+@\S+\.\S+$/.test(s(f, "email"))) throw new Error("Enter your name and a valid email");
     await submitSite(q, site, { name: s(f, "name"), email: s(f, "email"), phone: s(f, "phone") });
   });

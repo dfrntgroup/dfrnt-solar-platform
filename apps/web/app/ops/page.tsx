@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { db } from "@dfrnt/db";
-import { BOARD } from "@dfrnt/engine";
+import { BOARD, earliestDate, type Capacity } from "@dfrnt/engine";
+import { todayAEST } from "@/lib/api";
+import { longDate } from "@/lib/site";
 import { AdminShell } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
 import { runTimersNow } from "./actions";
@@ -19,12 +21,18 @@ export default async function Board() {
   const alerts = await db()`select id, title, status, customer_name from quotes
     where (status = 'pricing_installer' and updated_at < now() - interval '4 hours') or status = 'payment_review'
        or (status = 'payment_pending' and updated_at < now() - interval '3 days') order by updated_at limit 20`;
+  const insts = await db()`select business_name, capacity, (select json_object_agg(d, n) from (select install_date::text d, count(*)::int n from quotes q where q.installer_id = i.id and install_date is not null and status in ('booked','gear_ordered','delivered','on_site','variation_pending') group by 1) x) booked from installers i where active`;
+  const earliest = insts.map((i) => ({ name: i.business_name as string, d: earliestDate(todayAEST(), { ...(i.capacity as Omit<Capacity, "booked">), booked: (i.booked ?? {}) as Record<string, number> }) }));
+  const days = (d: string | null) => d ? Math.round((Date.parse(d) - Date.parse(todayAEST())) / 86400000) : 999;
+  const throttle = earliest.length > 0 && earliest.every((e) => days(e.d) > 21);
   const by = (col: string) => rows.filter((r) => BOARD[r.status as keyof typeof BOARD] === col);
   return (
     <AdminShell who={me.name} area="ops">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><h1 style={{ fontSize: 28 }}>Board</h1>
         <form action={runTimersNow} style={{ display: "flex", gap: 6 }}><button className="btn ghost sm" name="which" value="daily">Run daily timers</button><button className="btn ghost sm" formAction={async (f: FormData) => { "use server"; f.set("which", "cutoff"); await runTimersNow(f); }}>Run 5 pm cut-off</button></form></div>
       <p className="small muted">{counts.map((c) => `${c.status} ${c.n}`).join(" · ")}</p>
+      <p className="small">Earliest install: {earliest.map((e) => `${e.name} ${e.d ? longDate(e.d) : "none"}`).join(" · ")}</p>
+      {throttle && <div className="note" style={{ margin: "12px 0" }}><strong>Throttle:</strong> every installer&apos;s earliest date is more than 21 days out. Pause creator and paid spend until capacity frees up (O18).</div>}
       {alerts.length > 0 && <div className="note" style={{ margin: "12px 0" }}><strong>Needs attention:</strong> {alerts.map((a, i) => <span key={a.id as string}>{i ? " · " : " "}<Link href={`/ops/job/${a.id}`}>{(a.customer_name as string) ?? a.title} ({a.status as string})</Link></span>)}</div>}
       <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 12 }}>
         {COLUMNS.map((c) => (

@@ -3,12 +3,14 @@ import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { db } from "@dfrnt/db";
 import { devAuth, supabase } from "@/lib/auth";
+import { allow } from "@/lib/ratelimit";
 
 const safeNext = (n: string) => (n.startsWith("/") && !n.startsWith("//") ? n : "/ops");
 
 export async function sendLink(f: FormData) {
   const email = String(f.get("email") ?? "").trim().toLowerCase();
   const next = safeNext(String(f.get("next") ?? "/ops"));
+  if (!(await allow("login", 5))) redirect("/login?sent=1");
   // Only people we know get a link; the reply is the same either way so emails can't be probed.
   const [known] = await db()`select 1 from staff where lower(email) = ${email} and active union select 1 from installers where lower(email) = ${email}`;
   if (known) {
