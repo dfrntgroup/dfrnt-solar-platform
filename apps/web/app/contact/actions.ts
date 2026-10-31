@@ -10,7 +10,10 @@ export async function contactUs(f: FormData) {
   if (!v("name") || !/^\S+@\S+\.\S+$/.test(v("email")) || !v("body")) redirect("/contact");
   let quoteId: string | undefined;
   if (/^[0-9a-f]{36}$/.test(v("quote"))) { const [q] = await db()`select id from quotes where token = ${v("quote")}`; quoteId = q?.id as string | undefined; }
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(v("day")) ? new Date(`${v("day")}T00:00:00Z`).toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }) : "";
+  const when = [day, v("slot").slice(0, 30)].filter(Boolean).join(", ");
+  if (when) f.set("kind", "callback");
   const kinds = ["question", "callback", "fault", "complaint", "waitlist"];
-  await openTicket({ kind: kinds.includes(v("kind")) ? v("kind") : "question", name: v("name"), email: v("email"), phone: v("phone"), subject: `${v("kind") === "callback" ? "Call back: " : ""}${v("body").slice(0, 60)}`, body: v("body"), quoteId });
+  await openTicket({ kind: kinds.includes(v("kind")) ? v("kind") : "question", name: v("name"), email: v("email"), phone: v("phone"), subject: `${when ? `Call ${when}: ` : v("kind") === "callback" ? "Call back: " : ""}${v("body").slice(0, 60)}`, body: v("body"), quoteId });
   redirect("/contact?sent=1");
 }

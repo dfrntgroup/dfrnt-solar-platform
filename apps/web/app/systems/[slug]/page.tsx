@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { configOptions, findSystem, priceSystem, type ConfigInput } from "@dfrnt/engine";
+import { Share } from "@/components/Share";
 import { Configurator } from "@/components/Configurator";
 import { pricingData } from "@/lib/pricing-data";
 import { Header, Footer } from "@/components/Header";
@@ -80,6 +81,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
               <span className="small muted">The founders behind 29,000+ solar installs. No salespeople, no pressure.</span>
               <Link className="link" href={`/contact?kind=callback&quote=`}>Book a call</Link>
             </div>
+          <p style={{ marginTop: 12 }}><Share title={s.title} text={`${s.brand} ${s.title}: ${aud(q.stack.amount_payable)} installed after rebates.`} /></p>
             {sp.saved === "1" ? <p className="small ok" style={{ marginTop: 10 }}>Saved — we&apos;ve sent the link to your email.</p> : (
               <form action={saveForLater} style={{ display: "flex", gap: 6, marginTop: 10 }}>
                 <input type="hidden" name="slug" value={s.slug} /><input type="hidden" name="postcode" value={postcode} />

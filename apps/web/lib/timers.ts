@@ -3,6 +3,9 @@ import { db, write } from "@dfrnt/db";
 import { todayAEST } from "./api";
 import { queueMessage } from "./messages";
 import { SYSTEM } from "./jobs";
+import { rebateWindow } from "@dfrnt/engine";
+import { pricingData } from "./pricing-data";
+import { longDate } from "./site";
 
 async function setStatus(id: string, from: string, to: string, why: string, extra: Record<string, unknown> = {}) {
   await write({ actor: SYSTEM, action: "timers.transition", rationale: why }, { id, from, to }, async (tx) => {
@@ -48,6 +51,21 @@ export async function runDaily() {
     await db()`update quotes set reminders = reminders || '{"m5":true}' where id = ${q.id}`;
   }
   out.day_before = dayBefore.length;
+  // M11: two gentle follow-ups for saved prices (day 2 and day 10), then nothing.
+  const { rebates } = await pricingData();
+  const w = rebateWindow(today, rebates);
+  const saved = await db()`select id, token, customer_email, customer_name, amount_payable::float8 amount, reminders, extract(day from now() - created_at)::int age
+    from quotes where status = 'saved' and customer_email is not null and created_at > now() - interval '30 days'`;
+  let nudged = 0;
+  for (const q of saved) {
+    const r = (q.reminders ?? {}) as Record<string, unknown>;
+    const due = [2, 10].find((d) => q.age >= d && !r[`m11_${d}`]);
+    if (!due) continue;
+    await queueMessage("M11", q.token as string, q.customer_email as string, { name: q.customer_name as string, amount: q.amount, drop: w.window_end ? longDate(w.window_end) : "" });
+    await db()`update quotes set reminders = reminders || ${db().json({ [`m11_${due}`]: today })} where id = ${q.id}`;
+    nudged++;
+  }
+  out.saved_followups = nudged;
   // M10: ask for a review once, after the install is lodged (a few days after switch-on).
   const ask = await db()`select q.id, q.token, q.customer_email, q.customer_name from quotes q
     where q.status in ('lodged','settled','complete') and not (q.reminders ? 'm10') and not exists (select 1 from reviews r where r.quote_id = q.id)`;

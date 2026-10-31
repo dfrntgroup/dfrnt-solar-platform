@@ -1,5 +1,6 @@
 import { friendlySummary } from "@/lib/images";
 import { leaveReview } from "./actions";
+import { Share } from "@/components/Share";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
@@ -78,6 +79,7 @@ export default async function Record({ params, searchParams }: { params: Promise
         {(state === "saved" || state === "secured" || state === "lapsed") && (<>
           <div className="pay" style={{ margin: "16px 0 6px" }}><small>You pay, installed</small>{aud(q.result.stack.amount_payable)}</div>
           <div className="ok">Price and rebate locked until <strong>{longDate(q.lock_until)}</strong>. Keep this link: it&apos;s your record.</div>
+          <p style={{ marginTop: 10 }}><Share title="Our solar price" text={`${q.title ?? "Solar and battery"}: ${aud(q.result.stack.amount_payable)} installed, locked until ${longDate(q.lock_until)}.`} label="Send to someone at home" /></p>
           <h2 style={{ marginTop: 28 }}>Tell us about your home</h2>
           <p className="muted">Two minutes. If your home fits your installer&apos;s standard job, you get your confirmed price straight away.</p>
           <form action={submitHome}>

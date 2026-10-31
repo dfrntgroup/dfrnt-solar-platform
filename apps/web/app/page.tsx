@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { publishedReviews } from "@/lib/reviews";
 import { Header, Footer } from "@/components/Header";
 import { SystemCard } from "@/components/SystemCard";
 import { earliestFor } from "@/lib/capacity";
@@ -9,6 +10,7 @@ export const dynamic = "force-dynamic";
 export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const postcode = await sitePostcode(await searchParams);
   const earliest = await earliestFor(postcode);
+  const reviews = await publishedReviews(3);
   const all = await priced(postcode);
   const top = all.filter(({ s }) => ["solax-10kw-15kwh", "goodwe-10kw-16kwh", "sungrow-10kw-20kwh"].includes(s.slug));
   const from = Math.min(...all.map(({ q }) => q.stack.amount_payable));
@@ -72,6 +74,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         </div>
       </div></section>
 
+      {reviews.count >= 3 && <section className="shade"><div className="wrap">
+        <p className="eyebrow">Reviews{reviews.average != null ? ` · ${reviews.average} / 5 from ${reviews.count}` : ""}</p>
+        <h2>From people we&apos;ve installed for.</h2>
+        <div className="grid" style={{ marginTop: 16 }}>{reviews.rows.slice(0, 3).map((r) => <div key={r.id} className="card"><p className="stars">{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</p><p>{r.body.length > 220 ? `${r.body.slice(0, 220)}…` : r.body}</p><p className="small muted">{[r.first_name, r.suburb].filter(Boolean).join(", ")}</p></div>)}</div>
+        <p style={{ marginTop: 14 }}><Link className="link" href="/reviews">Read every review</Link></p>
+      </div></section>}
       <section className="dark"><div className="wrap">
         <p className="eyebrow" style={{ color: "var(--teal-soft)" }}>How it works</p>
         <h2>From price to power in five steps.</h2>

@@ -5,6 +5,18 @@ import { contactUs } from "./actions";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Talk to us" };
 
+/** The next five business days in Brisbane time. */
+function days() {
+  const out: { v: string; label: string }[] = [];
+  const d = new Date(Date.now() + 10 * 3600_000);
+  while (out.length < 5) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    if (d.getUTCDay() === 0 || d.getUTCDay() === 6) continue;
+    out.push({ v: d.toISOString().slice(0, 10), label: d.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", timeZone: "UTC" }) });
+  }
+  return out;
+}
+
 export default async function Contact({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
   const postcode = await sitePostcode(sp);
@@ -14,6 +26,7 @@ export default async function Contact({ searchParams }: { searchParams: Promise<
       <Header postcode={postcode} back="/contact" />
       <section><div className="wrap" style={{ maxWidth: 560 }}>
         <p className="eyebrow">Talk to us</p><h1>Ask us anything, or book a call.</h1>
+        <p className="lead">A real person replies within one business day. No salespeople: we&apos;ll answer the question, not chase a sale.</p>
         {sp.sent ? <div className="ok">Thanks — a real person will get back to you within one business day.</div> : (
           <form action={contactUs}>
             <input type="hidden" name="quote" value={sp.quote ?? ""} />
@@ -21,6 +34,11 @@ export default async function Contact({ searchParams }: { searchParams: Promise<
             <p><input name="name" placeholder="Name" style={input} required /></p>
             <p><input name="email" type="email" placeholder="Email" style={input} required /></p>
             <p><input name="phone" placeholder="Mobile (for a call back)" style={input} /></p>
+            <fieldset style={{ border: "1px solid var(--line)", borderRadius: 7, padding: 12, margin: "0 0 14px" }}>
+              <legend className="small muted" style={{ padding: "0 6px" }}>Want a call? Pick a time (optional)</legend>
+              <div className="pills" role="radiogroup" aria-label="Day">{days().map((d) => <label key={d.v}><input type="radio" name="day" value={d.v} style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">{d.label}</span></label>)}</div>
+              <div className="pills" role="radiogroup" aria-label="Time">{["Morning (8–12)", "Afternoon (12–5)"].map((t) => <label key={t}><input type="radio" name="slot" value={t} style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">{t}</span></label>)}</div>
+            </fieldset>
             <p><textarea name="body" placeholder="How can we help?" style={{ ...input, minHeight: 120 }} required /></p>
             <p style={{ position: "absolute", left: -9999 }} aria-hidden><input name="website" tabIndex={-1} autoComplete="off" /></p>
             <button className="btn block" type="submit">Send</button>
