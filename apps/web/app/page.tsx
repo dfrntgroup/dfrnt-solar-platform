@@ -1,36 +1,42 @@
-import { quote } from "@dfrnt/engine";
+import Link from "next/link";
+import { Header, Footer } from "@/components/Header";
+import { SystemCard } from "@/components/SystemCard";
+import { aud, priced, rebateDate, sitePostcode, windowEnd, longDate } from "@/lib/site";
 
-const aud = (n: number) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD" });
+export const dynamic = "force-dynamic";
 
-export default function Home() {
-  const q = quote(
-    { familyKey: "solax_x1vast", panelSku: "PNL-RISEN-475", panelCount: 21, batteryModules: 3, stacks: 1, backup: "none",
-      phases: 1, postcode: "4551", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false,
-      installDate: "2026-11-15", preferInverterSku: "INV-SOLAX-VAST-10K", inverterMeterIntegration: true },
-    { asOf: "2026-11-01" },
-  );
-  const s = q.stack;
+export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
+  const postcode = await sitePostcode(await searchParams);
+  const all = priced(postcode, (s) => s.kind === "solar_battery");
+  const top = all.filter(({ s }) => ["solax-10kw-15kwh", "goodwe-10kw-16kwh", "sungrow-10kw-20kwh"].includes(s.slug));
+  const from = Math.min(...priced(postcode).map(({ q }) => q.stack.amount_payable));
+  const end = windowEnd();
   return (
-    <main style={{ maxWidth: 640, margin: "0 auto", padding: "48px 20px" }}>
-      <p style={{ letterSpacing: 2, fontSize: 12, color: "#526669" }}>DFRNT SOLAR · BUILD PREVIEW</p>
-      <h1 style={{ fontSize: 40, margin: "8px 0 24px" }}>One price. <span style={{ color: "#008e89" }}>Installed.</span></h1>
-      <p>{q.config.summary}</p>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: 16 }}>
-        <tbody>
-          {[
-            ["Hardware", s.hardware_ex_gst], ["Installation", s.installation_ex_gst], ["System price ex GST", s.price_ex_gst],
-            ["GST", s.gst], ["Total inc GST", s.price_inc_gst], ["Less assignment of STCs", -s.less_stcs], ["You pay", s.amount_payable],
-          ].map(([k, v]) => (
-            <tr key={k as string} style={{ borderTop: "1px solid #dce6e3" }}>
-              <td style={{ padding: "10px 0" }}>{k}</td>
-              <td style={{ padding: "10px 0", textAlign: "right", fontWeight: k === "You pay" ? 700 : 400 }}>{aud(v as number)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      <p style={{ fontSize: 12, color: "#526669", marginTop: 24 }}>
-        Live from the pricing engine · rules {q.versions.rules} · rebate locked to {q.window.lock_until}
-      </p>
-    </main>
+    <>
+      <Header postcode={postcode} />
+      <div className="hero"><div className="wrap">
+        <p className="eyebrow">Solar + batteries · South East Queensland</p>
+        <h1>The price you see is <span className="teal">the price you pay.</span></h1>
+        <p className="lead">Fixed installed prices for solar and home batteries. One contract, one price, one payment, with the government rebates already taken off.</p>
+        <p><Link className="btn" href="/systems">See every system and price</Link> &nbsp; <Link className="btn ghost" href="/batteries">Add a battery to my solar</Link></p>
+        <p className="muted small">Systems from {aud(from)} installed, after rebates, for postcode {postcode}.</p>
+      </div></div>
+      <div className="trust"><div className="wrap"><span>✓ Licensed local electricians</span><span>✓ Tier-one panels, CEC-listed batteries</span><span>✓ Rebates assigned and taken off for you</span><span>✓ Price locked for 14 days</span></div></div>
+      <section><div className="wrap">
+        <h2>Most chosen systems</h2>
+        <p className="muted">Prices for {postcode}, rebates as at {rebateDate()}.{end ? ` Battery rebates step down after ${longDate(end)}; a price you secure now is locked for installs on or before then.` : ""}</p>
+        <div className="grid">{top.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} />)}</div>
+        <p style={{ marginTop: 18 }}><Link href="/systems">All {all.length} solar + battery systems →</Link></p>
+      </div></section>
+      <section className="shade"><div className="wrap">
+        <h2>How it works</h2>
+        <div className="grid">
+          <div className="card"><h3>1. Pick a system</h3><p className="muted">Every system shows the price after rebates. No home visit to get a number.</p></div>
+          <div className="card"><h3>2. Secure the price</h3><p className="muted">Lock today&apos;s price and rebate for 14 days. Send us a few photos of your home.</p></div>
+          <div className="card"><h3>3. Sign, pay, book</h3><p className="muted">One contract and one payment. Your installer&apos;s real availability sets the date.</p></div>
+        </div>
+      </div></section>
+      <Footer />
+    </>
   );
 }

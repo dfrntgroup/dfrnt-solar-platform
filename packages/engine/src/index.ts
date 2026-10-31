@@ -3,3 +3,4 @@ export * from "./rebates";
 export * from "./pricing";
 export * from "./config";
 export * from "./quote";
+export * from "./catalogue";

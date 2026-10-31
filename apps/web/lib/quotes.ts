@@ -1,0 +1,27 @@
+import { write, type Actor } from "@dfrnt/db";
+import { quote, rebateWindow } from "@dfrnt/engine";
+import type { QuoteRequest } from "./schema";
+import { todayAEST } from "./api";
+
+/** quotes.create — shared by the API route and the site's "Secure this price" action. */
+export async function createQuote(actor: Actor, req: QuoteRequest, opts: { idempotencyKey?: string; dryRun?: boolean; rationale?: string } = {}) {
+  const { config, discounts, customerEmail, title, systemSlug } = req;
+  const asOf = todayAEST();
+  const installDate = config.installDate ?? rebateWindow(asOf).lock_until;
+  const q = quote({ ...config, installDate } as Parameters<typeof quote>[0], { asOf, discounts });
+  return write({ actor, action: "quotes.create", ...opts }, req, async (tx) => {
+    const [row] = await tx`insert into quotes (input, result, versions, amount_payable, price_inc_gst, stcs, lock_until,
+        checkout_allowed, customer_email, postcode, created_by_type, created_by_id, title, system_slug)
+      values (${tx.json({ ...config, installDate } as never)}, ${tx.json(q as never)}, ${tx.json(q.versions)}, ${q.stack.amount_payable},
+        ${q.stack.price_inc_gst}, ${q.stack.stcs}, ${q.window.lock_until}, ${q.checkout_allowed}, ${customerEmail ?? null},
+        ${config.postcode}, ${actor.type}, ${actor.id}, ${title ?? q.config.summary}, ${systemSlug ?? null})
+      returning id, token`;
+    const result = {
+      id: row!.id as string, token: row!.token as string, ok: q.ok, checkout_allowed: q.checkout_allowed,
+      summary: q.config.summary, amount_payable: q.stack.amount_payable, price_inc_gst: q.stack.price_inc_gst,
+      gst: q.stack.gst, less_stcs: q.stack.less_stcs, lock_until: q.window.lock_until,
+      blockers: q.config.blockers, warnings: q.config.warnings, price_pending: q.stack.price_pending, versions: q.versions,
+    };
+    return { entity: "quote", entityId: result.id, event: "quote.created", result, payload: { amount_payable: result.amount_payable, postcode: config.postcode } };
+  });
+}

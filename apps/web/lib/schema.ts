@@ -28,5 +28,7 @@ export const QuoteRequestSchema = z.object({
   config: ConfigInputSchema,
   discounts: z.object({ referral: z.number().min(0).optional(), reportCredit: z.number().min(0).optional(), bankTransferPct: z.number().min(0).max(0.05).optional() }).optional(),
   customerEmail: z.string().email().optional(),
+  title: z.string().max(200).optional(),
+  systemSlug: z.string().max(100).optional(),
 });
 export type QuoteRequest = z.infer<typeof QuoteRequestSchema>;
