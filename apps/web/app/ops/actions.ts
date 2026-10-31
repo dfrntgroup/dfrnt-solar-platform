@@ -46,10 +46,12 @@ export async function ledgerApprove(f: FormData) {
     });
   });
 }
-export async function decideApproval(f: FormData) {
+export async function approveProposal(f: FormData) { await decideApproval(f, true); }
+export async function rejectProposal(f: FormData) { await decideApproval(f, false); }
+async function decideApproval(f: FormData, approve: boolean) {
   const me = await requireStaff();
   await run("/ops/approvals", async () => {
-    const id = s(f, "id"), approve = s(f, "decision") === "approve";
+    const id = s(f, "id");
     const { executeProposal } = await import("@/lib/agents");
     await executeProposal(id, approve, me.id, s(f, "note"));
   });

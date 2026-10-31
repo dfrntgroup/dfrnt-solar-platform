@@ -1,7 +1,7 @@
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
-import { decideApproval } from "../actions";
+import { approveProposal, rejectProposal } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,13 +18,13 @@ export default async function Approvals({ searchParams }: { searchParams: Promis
       {error && <div className="note">{error}</div>}
       {pending.length === 0 && <div className="ok">Nothing waiting.</div>}
       {pending.map((p) => (
-        <form key={p.id as string} action={decideApproval} className="card" style={{ marginBottom: 12 }}>
+        <form key={p.id as string} action={approveProposal} className="card" style={{ marginBottom: 12 }}>
           <input type="hidden" name="id" value={p.id as string} />
           <strong>{p.action as string} · from {p.proposer_id as string}</strong>
           <span className="small">{p.rationale as string}</span>
           <pre className="small" style={{ whiteSpace: "pre-wrap", background: "var(--mint)", padding: 8, borderRadius: 6 }}>{JSON.stringify(p.payload, null, 2)}</pre>
           <input name="note" placeholder="Note (optional)" style={input} />
-          <div style={{ display: "flex", gap: 8 }}><button className="btn sm" name="decision" value="approve">Approve and run</button><button className="btn ghost sm" name="decision" value="reject">Reject</button></div>
+          <div style={{ display: "flex", gap: 8 }}><button className="btn sm" type="submit">Approve and run</button><button className="btn ghost sm" formAction={rejectProposal}>Reject</button></div>
         </form>))}
       <h3 style={{ marginTop: 24 }}>Agents</h3>
       <table className="lines"><tbody>{agents.map((a) => <tr key={a.id as string}><td>{a.name as string}</td><td>max tier {a.max_tier as string}</td><td>{a.enabled ? "on" : "off"}</td></tr>)}</tbody></table>

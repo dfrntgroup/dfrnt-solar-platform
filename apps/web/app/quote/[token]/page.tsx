@@ -6,7 +6,7 @@ import { Header, Footer } from "@/components/Header";
 import { availableDates, getQuote } from "@/lib/jobs";
 import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate } from "@/lib/site";
-import { answerVariation, cancelOrder, payByBank, pickDate, signAgreement, submitHome } from "./actions";
+import { approveVariation, declineVariation, cancelOrder, payByBank, pickDate, signAgreement, submitHome } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your solar record", robots: { index: false } };
@@ -153,10 +153,10 @@ export default async function Record({ params, searchParams }: { params: Promise
             {variations.map((v) => (
               <div key={v.id as string} className="card" style={{ marginBottom: 10 }}>
                 <div>{v.description as string} — <strong>{aud2(v.sell_inc as number)}</strong> inc GST · {v.status as string}</div>
-                {v.status === "proposed" && <form action={answerVariation} style={{ display: "flex", gap: 8 }}>
+                {v.status === "proposed" && <form action={approveVariation} style={{ display: "flex", gap: 8 }}>
                   <input type="hidden" name="token" value={token} /><input type="hidden" name="variation" value={v.id as string} />
-                  <button className="btn sm" name="decision" value="approve">Approve and pay</button>
-                  <button className="btn ghost sm" name="decision" value="decline">Decline</button></form>}
+                  <button className="btn sm" type="submit">Approve and pay</button>
+                  <button className="btn ghost sm" formAction={declineVariation}>Decline</button></form>}
               </div>))}</>}
           <h2 style={{ marginTop: 24 }}>Your documents</h2>
           <table className="lines"><tbody>{docs.map((d) => <tr key={d}><td>{d}</td><td className="r muted">{["installed", "lodged", "settled", "complete"].includes(state) || d === "Signed agreement" ? "ready" : "after install"}</td></tr>)}</tbody></table>

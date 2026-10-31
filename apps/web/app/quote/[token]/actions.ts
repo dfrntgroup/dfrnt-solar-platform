@@ -72,9 +72,11 @@ export async function pickDate(f: FormData) {
   await run(token, async () => book((await getQuote(token))!, s(f, "date")));
 }
 
-export async function answerVariation(f: FormData) {
+export async function approveVariation(f: FormData) { await answerVariation(f, true); }
+export async function declineVariation(f: FormData) { await answerVariation(f, false); }
+async function answerVariation(f: FormData, approve: boolean) {
   const token = s(f, "token");
-  await run(token, async () => decideVariation((await getQuote(token))!, s(f, "variation"), s(f, "decision") === "approve"));
+  await run(token, async () => decideVariation((await getQuote(token))!, s(f, "variation"), approve));
 }
 
 export async function cancelOrder(f: FormData) {
