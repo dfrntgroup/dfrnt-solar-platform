@@ -31,19 +31,25 @@ export function Configurator(props: {
 
   const step = (list: number[], v: number, dir: 1 | -1) => { const i = list.indexOf(v); return list[Math.min(list.length - 1, Math.max(0, (i < 0 ? 0 : i) + dir))] ?? v; };
   const Stepper = ({ label, value, sub, list, set }: { label: string; value: number; sub: string; list: number[]; set: (n: number) => void }) => (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--line)" }}>
+    <div className="cfg-row">
       <div><strong>{label}</strong><div className="small muted">{sub}</div></div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <button type="button" className="btn ghost sm" aria-label={`Fewer ${label}`} disabled={list.indexOf(value) <= 0} onClick={() => set(step(list, value, -1))}>−</button>
-        <strong style={{ minWidth: 28, textAlign: "center" }}>{value}</strong>
-        <button type="button" className="btn ghost sm" aria-label={`More ${label}`} disabled={list.indexOf(value) >= list.length - 1} onClick={() => set(step(list, value, 1))}>+</button>
+      <div className="stepper">
+        <button type="button" aria-label={`Fewer ${label}`} disabled={list.indexOf(value) <= 0} onClick={() => set(step(list, value, -1))}>−</button>
+        <output>{value}</output>
+        <button type="button" aria-label={`More ${label}`} disabled={list.indexOf(value) >= list.length - 1} onClick={() => set(step(list, value, 1))}>+</button>
       </div>
     </div>);
 
   return (
     <div>
       {props.panels.length > 0 && <Stepper label="Solar panels" value={panels} sub={`${(panels * props.panelW / 1000).toFixed(2)} kW`} list={props.panels} set={setPanels} />}
-      {props.modules.length > 0 && <Stepper label="Battery modules" value={modules} sub={`${Math.round(modules * props.moduleKwh * 10) / 10} kWh usable${p.towers > 1 ? ` · ${p.towers} towers` : ""}`} list={props.modules} set={setModules} />}
+      {props.modules.length > 0 && props.modules.length <= 10 && (
+        <div className="cfg-row" style={{ display: "block" }}>
+          <strong>Battery size</strong><div className="small muted">{p.towers > 1 ? `${p.towers} towers · ` : ""}usable kWh</div>
+          <div className="filters" style={{ margin: "8px 0 0" }}>{props.modules.map((m) => (
+            <button key={m} type="button" className={`chip${m === modules ? " on" : ""}`} onClick={() => setModules(m)} aria-pressed={m === modules}>{Math.round(m * props.moduleKwh * 10) / 10} kWh</button>))}</div>
+        </div>)}
+      {props.modules.length > 10 && <Stepper label="Battery modules" value={modules} sub={`${Math.round(modules * props.moduleKwh * 10) / 10} kWh usable${p.towers > 1 ? ` · ${p.towers} towers` : ""}`} list={props.modules} set={setModules} />}
       {props.backupAvailable && (
         <label style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--line)", cursor: "pointer" }}>
           <span><strong>Whole-home backup</strong><div className="small muted">Keeps the house running in a blackout</div></span>
@@ -63,12 +69,17 @@ export function Configurator(props: {
             <tr><td>Less assignment of STCs ({p.solar_stcs + p.battery_stcs})</td><td className="r">−{aud(p.rebates, 2)}</td></tr>
           </tbody></table></details>
       </div>
-      <form action={props.secure} onSubmit={() => track("secure_click", { slug: props.slug, panels, modules, backup })}>
+      <form id="secure-form" action={props.secure} onSubmit={() => track("secure_click", { slug: props.slug, panels, modules, backup })}>
         <input type="hidden" name="slug" value={props.slug} /><input type="hidden" name="postcode" value={props.postcode} />
         <input type="hidden" name="panels" value={panels} /><input type="hidden" name="modules" value={modules} /><input type="hidden" name="backup" value={backup} />
         <button className="btn block" type="submit" disabled={!p.ok || busy}>Secure this price for 14 days</button>
       </form>
       <p className="small muted">No payment now. Price and rebate locked until {props.lockUntil}.</p>
+      <div className="paybar" style={{ opacity: busy ? 0.6 : 1 }}>
+        <div><div className="small muted" style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700 }}>You pay, installed</div><div className="pay">{aud(p.you_pay)}</div></div>
+        <button className="btn" type="submit" form="secure-form" disabled={!p.ok || busy}>Secure price →</button>
+      </div>
+      <div className="paybar-space" style={{ height: 70 }} />
     </div>
   );
 }

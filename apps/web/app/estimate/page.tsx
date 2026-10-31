@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Header, Footer } from "@/components/Header";
 import { SystemCard } from "@/components/SystemCard";
+import { earliestFor } from "@/lib/capacity";
 import { priced, sitePostcode } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,7 @@ export const metadata = { title: "Free estimate from your power bill" };
 export default async function Estimate({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
   const postcode = await sitePostcode(sp);
+  const earliest = await earliestFor(postcode);
   const bill = Number(sp.bill || 0), home = sp.home ?? "evenings", phase = sp.phase === "3" ? 3 : 1;
   const input = { padding: 10, border: "1px solid var(--line)", borderRadius: 6, font: "inherit", width: "100%" } as const;
   let picks: Awaited<ReturnType<typeof priced>> = [];
@@ -36,7 +38,7 @@ export default async function Estimate({ searchParams }: { searchParams: Promise
         </form>
         {bill > 0 && <>
           <p className="muted" style={{ marginTop: 20 }}>About {Math.round(daily)} kWh a day. These three fit best; your installer confirms the size from your photos.</p>
-          <div className="grid">{picks.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} />)}</div>
+          <div className="grid">{picks.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} earliest={earliest} />)}</div>
           <p className="small muted" style={{ marginTop: 12 }}>Not sure? <Link href="/systems">See every system</Link>, or secure one of these and your installer confirms the size from your photos before you pay.</p>
         </>}
       </div></section>
