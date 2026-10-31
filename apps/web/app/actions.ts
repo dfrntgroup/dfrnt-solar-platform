@@ -24,6 +24,6 @@ export async function secureSystem(form: FormData) {
       installDate: rebateWindow(todayAEST()).lock_until,
     },
     title: `${s.brand} · ${s.title}`, systemSlug: s.slug,
-  } as never);
+  } as never, { status: "secured" });
   redirect(`/quote/${out.result.token}`);
 }
