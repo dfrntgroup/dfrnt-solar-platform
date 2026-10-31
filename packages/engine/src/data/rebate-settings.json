@@ -1,0 +1,29 @@
+{
+  "version": "2026-11-01.1",
+  "notes": "Customer rebate priced at our fixed STC rate, never a live feed. Schedules are effective-dated; a change on a date is a data change, not a code change.",
+  "stc_rate": 37,
+  "lock_days": 14,
+  "solar_deeming": [
+    {"from": "2026-01-01", "years": 5},
+    {"from": "2027-01-01", "years": 4},
+    {"from": "2028-01-01", "years": 3},
+    {"from": "2029-01-01", "years": 2},
+    {"from": "2030-01-01", "years": 1},
+    {"from": "2031-01-01", "years": 0}
+  ],
+  "battery_factor": [
+    {"from": "2026-05-01", "factor": 6.8},
+    {"from": "2027-01-01", "factor": 5.7},
+    {"from": "2027-07-01", "factor": 5.2},
+    {"from": "2028-01-01", "factor": 4.6},
+    {"from": "2028-07-01", "factor": 4.1},
+    {"from": "2029-01-01", "factor": 3.6},
+    {"from": "2029-07-01", "factor": 3.1},
+    {"from": "2030-01-01", "factor": 2.6},
+    {"from": "2030-07-01", "factor": 2.1},
+    {"from": "2031-01-01", "factor": 0}
+  ],
+  "battery_tiers": [[14, 1], [28, 0.6], [50, 0.15]],
+  "battery_min_nominal_kwh": 5,
+  "battery_max_nominal_kwh": 100
+}

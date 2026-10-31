@@ -1,0 +1,279 @@
+{
+ "version": "2026-11-01.1",
+ "notes": "Exported from Solar Ops component_costs 1 Nov 2026. cost_ex_gst null = price pending (quote ok, checkout blocked). PRT-SOLAX-HS51-BASE 0 = included with BMS. source=estimate rows are placeholders to replace before go-live.",
+ "included_zero_cost": [
+  "PRT-SOLAX-HS51-BASE"
+ ],
+ "items": {
+  "BAT-SGR-SBH150": {
+   "cost_ex_gst": 6423,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "BAT-SGR-SBH200": {
+   "cost_ex_gst": 8173,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "BAT-SGR-SBH250": {
+   "cost_ex_gst": 9923,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "BAT-SGR-SBH300": {
+   "cost_ex_gst": 11673,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "BAT-SOLAX-THS10.2": {
+   "cost_ex_gst": 2945,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "BAT-SOLAX-THS15.3": {
+   "cost_ex_gst": 4155,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "BAT-SOLAX-THS20.4": {
+   "cost_ex_gst": 5365,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "BOS-KIT": {
+   "cost_ex_gst": 150,
+   "margin_class": "bos",
+   "source": "estimate"
+  },
+  "EV-SGR-AC22E-01": {
+   "cost_ex_gst": 750,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "EV-SOLAX-X1-HAC-7P": {
+   "cost_ex_gst": 565,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "EV-SOLAX-X3-HAC-22P": {
+   "cost_ex_gst": 680,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "INV-GW-EHA-10K": {
+   "cost_ex_gst": 1785,
+   "margin_class": "hardware",
+   "source": "catalogue"
+  },
+  "INV-GW-EHA-5K": {
+   "cost_ex_gst": 1150,
+   "margin_class": "hardware",
+   "source": "catalogue"
+  },
+  "INV-GW-ETA-10K": {
+   "cost_ex_gst": 1795,
+   "margin_class": "hardware",
+   "source": "catalogue"
+  },
+  "INV-GW-ETA-15K": {
+   "cost_ex_gst": 1795,
+   "margin_class": "hardware",
+   "source": "catalogue"
+  },
+  "INV-SGR-SH10RS": {
+   "cost_ex_gst": 2750,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "INV-SGR-SH5.0RS": {
+   "cost_ex_gst": 1750,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "INV-SGR-SH8.0RS": {
+   "cost_ex_gst": 2400,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "INV-SOLAX-HYB-10K": {
+   "cost_ex_gst": 1602,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "INV-SOLAX-HYB-15K": {
+   "cost_ex_gst": 1804,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "INV-SOLAX-HYB-8K": {
+   "cost_ex_gst": 1355,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "INV-SOLAX-VAST-10K": {
+   "cost_ex_gst": 1753,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "INV-SOLAX-VAST-5K": {
+   "cost_ex_gst": 1527,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "INV-SOLAX-VAST-8K": {
+   "cost_ex_gst": 1651,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "MNT-KLIPLOK-PP": {
+   "cost_ex_gst": 28,
+   "margin_class": "bos",
+   "source": "estimate"
+  },
+  "MNT-TILE-PP": {
+   "cost_ex_gst": 25,
+   "margin_class": "bos",
+   "source": "estimate"
+  },
+  "MNT-TIN-PP": {
+   "cost_ex_gst": 18,
+   "margin_class": "bos",
+   "source": "estimate"
+  },
+  "PNL-LONGI-475": {
+   "cost_ex_gst": 118.75,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PNL-LONGI-475-BLACK": {
+   "cost_ex_gst": 140.13,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PNL-RISEN-475": {
+   "cost_ex_gst": 99.75,
+   "margin_class": "hardware",
+   "source": "catalogue"
+  },
+  "PNL-TRINA-475": {
+   "cost_ex_gst": 104.5,
+   "margin_class": "hardware",
+   "source": "catalogue"
+  },
+  "PRT-BARRIER-CFC-6MM": {
+   "cost_ex_gst": 18,
+   "margin_class": "bos",
+   "source": "estimate"
+  },
+  "PRT-BOLLARD-PAIR": {
+   "cost_ex_gst": 139.98,
+   "margin_class": "bos",
+   "source": "catalogue"
+  },
+  "PRT-DC-ISOLATOR": {
+   "cost_ex_gst": 36.79,
+   "margin_class": "bos",
+   "source": "catalogue"
+  },
+  "PRT-GW-DC-BREAKER-100A": {
+   "cost_ex_gst": 121,
+   "margin_class": "bos",
+   "source": "catalogue"
+  },
+  "PRT-GW-DC-BREAKER-125A": {
+   "cost_ex_gst": 121,
+   "margin_class": "bos",
+   "source": "catalogue"
+  },
+  "PRT-GW-ESA-EXPANSION-KIT": {
+   "cost_ex_gst": null,
+   "margin_class": "bos",
+   "source": "manual"
+  },
+  "PRT-GW-GMK110": {
+   "cost_ex_gst": 135,
+   "margin_class": "bos",
+   "source": "catalogue"
+  },
+  "PRT-GW-GMK330": {
+   "cost_ex_gst": 195,
+   "margin_class": "bos",
+   "source": "catalogue"
+  },
+  "PRT-GW-LX-D-5.1-G20": {
+   "cost_ex_gst": 1500,
+   "margin_class": "hardware",
+   "source": "catalogue"
+  },
+  "PRT-GW-LX-D-8.3-G20": {
+   "cost_ex_gst": 1920,
+   "margin_class": "hardware",
+   "source": "catalogue"
+  },
+  "PRT-GW-LX-D-9.0-G20": {
+   "cost_ex_gst": 2100,
+   "margin_class": "hardware",
+   "source": "catalogue"
+  },
+  "PRT-SGR-CHANGEOVER-63A": {
+   "cost_ex_gst": 120,
+   "margin_class": "hardware",
+   "source": "estimate"
+  },
+  "PRT-SGR-SBH-ACCESSORY-KIT": {
+   "cost_ex_gst": 1173,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PRT-SGR-SJR050-04-COMBINER": {
+   "cost_ex_gst": 835,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PRT-SGR-SMR050": {
+   "cost_ex_gst": 1750,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PRT-SGR-Y-CONNECTOR-B0B01253": {
+   "cost_ex_gst": 70,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PRT-SOLAX-2IN1-SPLITTER": {
+   "cost_ex_gst": null,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PRT-SOLAX-CHANGEOVER": {
+   "cost_ex_gst": 250,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PRT-SOLAX-HS51-BASE": {
+   "cost_ex_gst": 0,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PRT-SOLAX-SERIES-BOX-TB-HS51": {
+   "cost_ex_gst": 740,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PRT-SOLAX-TB-HS51": {
+   "cost_ex_gst": 1210,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PRT-SOLAX-TBMS-S51-8": {
+   "cost_ex_gst": 525,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  },
+  "PRT-SOLAX-X3-MATEBOX": {
+   "cost_ex_gst": 358,
+   "margin_class": "hardware",
+   "source": "one_pager"
+  }
+ }
+}
