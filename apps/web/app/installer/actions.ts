@@ -60,3 +60,53 @@ export async function saveScope(f: FormData) {
     });
   });
 }
+
+const prof = (f: FormData) => `/installer/profile${s(f, "as") ? `?as=${s(f, "as")}` : ""}`;
+export async function saveProfile(f: FormData) {
+  const me = await requireInstaller(s(f, "as") || undefined);
+  await run(prof(f), async () => {
+    const v = { business_name: s(f, "business_name"), abn: s(f, "abn").replace(/\s/g, "") || null, contact_name: s(f, "contact_name"), phone: s(f, "phone") || null,
+      address: s(f, "address") || null, licence_no: s(f, "licence_no") || null, saa_accreditation: s(f, "saa_accreditation") || null, insurance_expiry: s(f, "insurance_expiry") || null };
+    if (v.abn && !/^\d{11}$/.test(v.abn)) throw new Error("ABN must be 11 digits");
+    await write({ actor: me.actor, action: "installers.profile" }, v, async (tx) => {
+      await tx`update installers set ${tx(v as never)} where id = ${me.id}`;
+      return { entity: "installer", entityId: me.id, event: "installer.profile", result: { ok: true } };
+    });
+  });
+}
+export async function addTechnician(f: FormData) {
+  const me = await requireInstaller(s(f, "as") || undefined);
+  await run(prof(f), async () => {
+    const [{ n }] = await db()`select count(*)::int n from technicians where installer_id = ${me.id} and active` as never as [{ n: number }];
+    await db()`insert into technicians (installer_id, name, saa_number, formbay_id, phone, is_default) values (${me.id}, ${s(f, "name")}, ${s(f, "saa_number") || null}, ${s(f, "formbay_id") || null}, ${s(f, "phone") || null}, ${n === 0})`;
+  });
+}
+export async function setDefaultTech(f: FormData) {
+  const me = await requireInstaller(s(f, "as") || undefined);
+  await run(prof(f), async () => {
+    await db()`update technicians set is_default = (id = ${s(f, "id")}) where installer_id = ${me.id}`;
+  });
+}
+export async function uploadDoc(f: FormData) {
+  const me = await requireInstaller(s(f, "as") || undefined);
+  await run(prof(f), async () => {
+    const file = f.get("file");
+    if (!(file instanceof File) || !file.size) throw new Error("Choose a file");
+    if (file.size > 15_000_000) throw new Error("File over 15 MB");
+    const { putPhoto } = await import("@/lib/storage");
+    const path = `installers/${me.id}/${s(f, "kind")}-${Date.now()}-${file.name.replace(/[^\w.-]/g, "_")}`;
+    await putPhoto(path, await file.arrayBuffer(), file.type || "application/octet-stream");
+    await db()`insert into installer_documents (installer_id, kind, path, expires_on) values (${me.id}, ${s(f, "kind")}, ${path}, ${s(f, "expires_on") || null})`;
+  });
+}
+export async function setTechnician(f: FormData) {
+  await run(back(f), async () => {
+    const { me, q } = await own(f);
+    const [t] = await db()`select id from technicians where id = ${s(f, "technician")} and installer_id = ${me.id}`;
+    if (!t) throw new Error("Pick one of your technicians");
+    await write({ actor: me.actor, action: "jobs.set_technician" }, { id: q.id, technician: t.id }, async (tx) => {
+      await tx`update quotes set technician_id = ${t.id} where id = ${q.id}`;
+      return { entity: "quote", entityId: q.id, event: "job.technician_set", result: { technician: t.id } };
+    });
+  });
+}

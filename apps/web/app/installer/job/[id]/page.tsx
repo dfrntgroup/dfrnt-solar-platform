@@ -7,7 +7,7 @@ import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2, longDate } from "@/lib/site";
-import { confirmPrice, installerStage, installerVariation } from "../../actions";
+import { confirmPrice, installerStage, installerVariation, setTechnician } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +22,8 @@ export default async function InstallerJob({ params, searchParams }: { params: P
   const photos = await db()`select kind, path from quote_photos where quote_id = ${id}`;
   const urls = await Promise.all(photos.map(async (ph) => ({ kind: ph.kind as string, url: await photoUrl(ph.path as string) })));
   const site = q.site;
+  const techs = await db()`select id, name, is_default from technicians where installer_id = ${me.id} and active order by is_default desc, name`;
+  const [curTech] = await db()`select technician_id from quotes where id = ${id}`;
   const hid = <><input type="hidden" name="id" value={id} />{me.viaStaff && <input type="hidden" name="as" value={me.id} />}</>;
   const parts = p.config.bom.filter((b) => !b.included);
   return (
@@ -49,6 +51,9 @@ export default async function InstallerJob({ params, searchParams }: { params: P
             {menu.items.filter((i) => ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-TERRACOTTA", "SVC-INST-2STY"].includes(i.code)).map((i) => <label key={i.code} className="small"><input type="checkbox" name="codes" value={i.code} /> {i.description} ({aud2(i.installer_cost ?? i.menu_rate / 1.1)})</label>)}
             <input name="note" placeholder="Note for the customer" style={input} />
             <button className="btn">Confirm price</button></form>}
+          {["booked", "gear_ordered", "delivered"].includes(q.status) && techs.length > 0 && <form action={setTechnician} className="card" style={{ marginBottom: 12 }}>{hid}
+            <strong>Technician on this job</strong><select name="technician" defaultValue={(curTech?.technician_id as string) ?? (techs.find((t) => t.is_default)?.id as string)} style={input}>{techs.map((t) => <option key={t.id as string} value={t.id as string}>{t.name as string}</option>)}</select>
+            <button className="btn ghost sm">Set technician</button></form>}
           {["booked", "gear_ordered"].includes(q.status) && <div className="ok" style={{ marginBottom: 12 }}>Gear is being ordered and delivered to site before install day.</div>}
           {q.status === "delivered" && <form action={installerStage} className="card" style={{ marginBottom: 12 }}>{hid}<input type="hidden" name="to" value="on_site" /><button className="btn">I&apos;m on site</button></form>}
           {q.status === "on_site" && <form action={installerStage} className="card" style={{ marginBottom: 12 }}>{hid}<input type="hidden" name="to" value="installed" /><strong>Commissioned and handed over?</strong><button className="btn">Mark installed</button></form>}

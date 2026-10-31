@@ -67,6 +67,10 @@ export async function saveInstaller(f: FormData) {
     const num = (k: string, d: number) => (s(f, k) ? Number(s(f, k)) : d);
     const capacity = { jobsPerDay: num("jobsPerDay", 1), leadDays: num("leadDays", 3), workingDays: f.getAll("workingDays").map(Number), blackouts: s(f, "blackouts").split(/[\s,]+/).filter(Boolean) };
     const ranges = s(f, "ranges").split(/[\s,]+/).filter(Boolean).map((r) => r.split("-").map(Number));
+    if (f.get("active") === "on") {
+      const [i] = await db()`select abn, licence_no, insurance_expiry::text ins, is_test from installers where id = ${id}`;
+      if (!i!.is_test && (!i!.abn || !i!.licence_no || !i!.ins || (i!.ins as string) < new Date().toISOString().slice(0, 10))) throw new Error("Can't activate: ABN, licence and current insurance must be on the installer's profile");
+    }
     await write({ actor: me.actor, action: "installers.update" }, { id, capacity, ranges }, async (tx) => {
       await tx`update installers set capacity = ${tx.json(capacity)}, active = ${f.get("active") === "on"},
         postcode_ranges = ${ranges.map(([a, b]) => `[${a},${(b ?? a ?? 0) + 1})`)}::int4range[] where id = ${id}`;
@@ -172,4 +176,21 @@ export async function ticketReply(f: FormData) {
 export async function stcAction(f: FormData) {
   const me = await requireStaff();
   await run("/ops/stc", async () => { const { stcStep } = await import("@/lib/ops"); await stcStep(s(f, "id"), s(f, "to") as never, me.actor, s(f, "realised") ? Number(s(f, "realised")) : undefined, s(f, "ref") || undefined); });
+}
+
+export async function createInstallerFromApplication(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/installers", async () => {
+    const [a] = await db()`select * from installer_applications where id = ${s(f, "id")} and status = 'new'`;
+    if (!a) throw new Error("Application not found");
+    const ranges = String(a.postcodes ?? "").split(/[\s,]+/).filter(Boolean).map((r) => r.split("-").map(Number)).filter(([x]) => x! > 0);
+    await write({ actor: me.actor, action: "installers.create" }, { application: a.id }, async (tx) => {
+      const [i] = await tx`insert into installers (business_name, abn, contact_name, email, phone, licence_no, postcode_ranges, active, scope, capacity)
+        values (${a.business_name}, ${a.abn}, ${a.contact_name}, ${a.email}, ${a.phone}, ${a.licence_no}, ${ranges.map(([x, y]) => `[${x},${(y ?? x ?? 0) + 1})`)}::int4range[], false,
+        ${tx.json({ version: 1, maxStoreys: 1, roofTypes: ["tin"], batteryLocations: ["garage", "outdoor_wall"], switchboardOk: true, maxCableRunM: 10, phases: [1] })},
+        ${tx.json({ jobsPerDay: 1, leadDays: 5, workingDays: [1, 2, 3, 4, 5], blackouts: [] })}) returning id`;
+      await tx`update installer_applications set status = 'accepted' where id = ${a.id}`;
+      return { entity: "installer", entityId: i!.id as string, event: "installer.created", result: { id: i!.id } };
+    });
+  });
 }

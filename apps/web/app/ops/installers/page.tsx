@@ -1,7 +1,8 @@
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
-import { saveInstaller } from "../actions";
+import { saveInstaller, createInstallerFromApplication } from "../actions";
+import { Step } from "@/components/Step";
 
 export const dynamic = "force-dynamic";
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -11,10 +12,13 @@ export default async function Installers({ searchParams }: { searchParams: Promi
   const { error } = await searchParams;
   const rows = await db()`select id, business_name, contact_name, email, active, is_test, capacity, scope,
     array_to_string(array(select (lower(r)::text || '-' || (upper(r)-1)::text) from unnest(postcode_ranges) r), ', ') ranges from installers order by created_at`;
+  const apps = await db()`select id, business_name, contact_name, email, postcodes, licence_no from installer_applications where status = 'new' order by created_at`;
   return (
     <AdminShell who={me.name} area="ops">
       <h1 style={{ fontSize: 28 }}>Installers</h1>
       {error && <div className="note">{error}</div>}
+      {apps.length > 0 && <><h3>Applications</h3>{apps.map((a) => <div key={a.id as string} className="card" style={{ marginBottom: 8 }}><strong>{a.business_name as string}</strong><span className="small">{a.contact_name as string} · {a.email as string} · {a.postcodes as string ?? ""} · licence {a.licence_no as string ?? "—"}</span>
+        <Step action={createInstallerFromApplication} fields={{ id: a.id as string }} label="Create installer (inactive until profile complete)" /></div>)}</>}
       {rows.map((r) => { const c = r.capacity as { jobsPerDay: number; leadDays: number; workingDays: number[]; blackouts: string[] }; return (
         <form key={r.id as string} action={saveInstaller} className="card" style={{ marginBottom: 16 }}>
           <input type="hidden" name="id" value={r.id as string} />
