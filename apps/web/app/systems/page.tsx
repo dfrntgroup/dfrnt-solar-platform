@@ -41,7 +41,7 @@ export default async function Systems({ searchParams }: { searchParams: Promise<
           {chip("brand", "solax", "SolaX")}{chip("brand", "sungrow", "Sungrow")}{chip("brand", "goodwe", "GoodWe")}
           {chip("sort", "battery", "Biggest battery first")}
         </div>
-        {earliest === null && <div className="note" style={{ marginTop: 12 }}>We don&apos;t install at {postcode} yet. Prices are shown so you can plan; <Link href={`/contact?kind=waitlist`}>join the waitlist</Link> and we&apos;ll tell you when an installer covers your area.</div>}
+        {earliest === null && <div className="note" style={{ marginTop: 12 }}>We don&apos;t install at {postcode} yet. Prices are shown so you can plan; <Link href={`/contact?kind=waitlist&postcode=${postcode}`}>join the waitlist</Link> and we&apos;ll tell you when an installer covers your area.</div>}
         <p className="muted small">{rows.length} systems · prices reviewed monthly</p>
         {rows.length ? <form action="/compare" method="get"><div className="grid">{rows.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} compare earliest={earliest} />)}</div>
           <p style={{ marginTop: 18 }}><button className="btn ghost" type="submit">Compare selected →</button></p></form>

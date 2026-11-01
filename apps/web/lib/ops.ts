@@ -92,9 +92,9 @@ export async function issueCredit(amount: number, reason: string, email: string 
 }
 
 /* O15: support */
-export async function openTicket(t: { kind: string; name?: string; email?: string; phone?: string; subject: string; body: string; quoteId?: string }) {
-  const [row] = await db()`insert into tickets (kind, name, email, phone, subject, body, quote_id)
-    values (${t.kind}, ${t.name ?? null}, ${t.email ?? null}, ${t.phone ?? null}, ${t.subject}, ${t.body}, ${t.quoteId ?? null}) returning id`;
+export async function openTicket(t: { kind: string; name?: string; email?: string; phone?: string; subject: string; body: string; quoteId?: string; postcode?: string }) {
+  const [row] = await db()`insert into tickets (kind, name, email, phone, subject, body, quote_id, postcode)
+    values (${t.kind}, ${t.name ?? null}, ${t.email ?? null}, ${t.phone ?? null}, ${t.subject}, ${t.body}, ${t.quoteId ?? null}, ${t.postcode ?? null}) returning id`;
   await db()`insert into events (type, entity, entity_id, payload) values ('ticket.opened', 'ticket', ${row!.id}, ${db().json({ kind: t.kind })})`;
   return row!.id as string;
 }

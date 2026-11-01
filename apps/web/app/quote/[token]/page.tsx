@@ -13,14 +13,18 @@ import { getQuote, REVISABLE } from "@/lib/jobs";
 import { daysFor, needsOf } from "@/lib/schedule";
 import { DayPicker, dayLabel } from "@/components/DayPicker";
 import { JobThread } from "@/components/JobThread";
+import { SystemRecord } from "@/components/SystemRecord";
+import { AddOns } from "@/components/AddOns";
+import { ServicePlan } from "@/components/ServicePlan";
 import { Checkout, stepFor } from "@/components/Checkout";
 import { CallBack } from "@/components/CallBack";
 import { Trust } from "@/components/Trust";
+import { getSetting } from "@/lib/settings";
 import { installersFor } from "@/lib/installers";
 import { siteUrl } from "@/lib/messages";
 import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate } from "@/lib/site";
-import { takeEarlierDay, changeMyDay, saveAccess, customerMessage, acceptRevision, keepOriginal, addCode, approveVariation, declineVariation, cancelOrder, payByBank, pickDate, signAgreement, submitHome } from "./actions";
+import { joinPlan, addAddonAction, removeAddonAction, reportProblem, passRecord, saveHeard, takeEarlierDay, changeMyDay, saveAccess, customerMessage, acceptRevision, keepOriginal, addCode, approveVariation, declineVariation, cancelOrder, payByBank, pickDate, signAgreement, submitHome } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your solar record", robots: { index: false } };
@@ -62,7 +66,15 @@ export default async function Record({ params, searchParams }: { params: Promise
   const error = sp.error;
   if (!/^[0-9a-f]{36}$/.test(token)) notFound();
   const q = await getQuote(token);
-  const myReview = q ? (await db()`select status from reviews where quote_id = ${q.id}`)[0] as { status: string } | undefined : undefined;
+  if (!q) {
+    const { movedTo } = await import("@/lib/record");
+    const moved = await movedTo(token);
+    if (moved) return (<><Header postcode="4551" /><section><div className="wrap" style={{ maxWidth: 640 }}><h1 style={{ fontSize: 28 }}>This record has moved</h1>
+      <p>It was passed to the home&apos;s new owner on {moved.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric", timeZone: "Australia/Brisbane" })}, with a new private link. Questions? <Link href="/contact">Talk to us</Link>.</p></div></section><Footer /></>);
+  }
+  if (q && sp.c && /^[0-9a-f-]{36}$/.test(sp.c)) await db()`update campaign_sends set clicked_at = coalesce(clicked_at, now()) where id = ${sp.c} and quote_id = ${q.id}`;
+  const myReview = q ? (await db()`select status, rating, body from reviews where quote_id = ${q.id}`)[0] as { status: string; rating: number; body: string } | undefined : undefined;
+  const googleReview = myReview && myReview.rating >= 4 ? (await getSetting("trust")).google_review_url : undefined;
   const inst = q?.installer_id ? (await db()`select id, business_name, licence_no, saa_accreditation from installers where id = ${q.installer_id} and active and not is_test`)[0] : undefined;
   if (!q) notFound();
   const shown = q.snapshot ?? q.result;
@@ -144,6 +156,8 @@ export default async function Record({ params, searchParams }: { params: Promise
         {state === "priced" && (<>
           <h2 style={{ marginTop: 20 }}>Your confirmed price</h2>
           <Breakdown q={shown} />
+          <AddOns q={q} add={addAddonAction} remove={removeAddonAction} />
+          <ServicePlan q={q} join={joinPlan} />
           <h2 style={{ marginTop: 28 }}>Sign</h2>
           <p className="muted small">One agreement covers the equipment, the installation, and assigning your STCs to us. You have 10 business days after signing to cancel for any reason with a full refund.</p>
           <LegalText sections={AGREEMENT} compact />
@@ -178,6 +192,13 @@ export default async function Record({ params, searchParams }: { params: Promise
           <Breakdown q={shown} />
         </>)}
 
+        {["awaiting_date", "booked", "gear_ordered", "delivered"].includes(state) && !q.heard_from && (
+          <form action={saveHeard} className="card" style={{ marginTop: 16 }}><input type="hidden" name="token" value={token} />
+            <strong>Quick one: how did you hear about us?</strong>
+            <div className="filters">{([["facebook", "Facebook or Instagram"], ["google", "Google"], ["youtube", "YouTube"], ["friend", "A friend or family"], ["saw_install", "Saw one of our installs"], ["other", "Something else"]] as const).map(([v, t]) =>
+              <button key={v} className="chip" name="heard" value={v} type="submit">{t}</button>)}</div>
+            <input name="note" placeholder="Anything more? (optional, e.g. which video)" style={{ ...input, marginTop: 6 }} />
+          </form>)}
         {picking && choice && (<>
           <h2 style={{ marginTop: 20 }}>{q.rebook ? "Pick your new install day" : "Pick your install day"}</h2>
           <DayPicker token={token} choice={choice} action={pickDate} rebook={q.rebook} />
@@ -192,6 +213,7 @@ export default async function Record({ params, searchParams }: { params: Promise
 
         {["booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed", "lodged", "settled", "complete"].includes(state) && (<>
           {!q.rebook && <div className="ok" style={{ marginTop: 16 }}>{q.install_date ? <>Install day: <strong>{dayLabel([q.install_date], q.install_part)}{q.job_days && q.job_days > 1 ? ` (${q.job_days} days)` : ""}</strong>, arriving 7–8 am.</> : "Installed."} Status: <strong>{BOARD[state]}</strong>.</div>}
+          {["booked", "gear_ordered", "delivered"].includes(state) && <AddOns q={q} add={addAddonAction} remove={removeAddonAction} />}
           {["booked", "gear_ordered", "delivered"].includes(state) && !q.rebook && (
             <form action={saveAccess} className="card" style={{ marginTop: 12 }}><input type="hidden" name="token" value={token} />
               <strong>Access on the day</strong><span className="small muted">Gate code, pets, where to park, who&apos;ll be home. Your installer sees this.</span>
@@ -213,17 +235,22 @@ export default async function Record({ params, searchParams }: { params: Promise
           {["installed", "lodged", "settled", "complete"].includes(state) && myCode && <div className="ok" style={{ marginTop: 16 }}>Your referral code: <strong>{myCode}</strong>. Friends get $250 off, and we pay you $250 after their install.</div>}
           {threadOpen && <JobThread quoteId={q.id} action={customerMessage} hidden={<input type="hidden" name="token" value={token} />} me="customer" />}
           <p className="small"><Link href={`/contact?quote=${token}`}>Questions about your system?</Link></p>
+          {["installed", "lodged", "settled", "complete"].includes(state) ? <><ServicePlan q={q} join={joinPlan} /><SystemRecord q={q} report={reportProblem} transfer={passRecord} sent={sp.sent} /></> : <>
           <h2 style={{ marginTop: 24 }}>Your documents</h2>
           <table className="lines"><tbody>{docs.map((d) => {
             const href = d === "Signed agreement" ? `/quote/${token}/doc/agreement` : d === "Tax invoice" && q.paid_at ? `/quote/${token}/doc/invoice` : null;
             return <tr key={d}><td>{href ? <a href={href} target="_blank">{d}</a> : d}</td><td className="r muted">{href ? "PDF" : d === "Tax invoice" ? "once paid" : "after install"}</td></tr>;
-          })}</tbody></table>
+          })}</tbody></table></>}
           <h2 style={{ marginTop: 24 }}>What you paid</h2>
           <Breakdown q={shown} />
         </>)}
 
         {["installed", "lodged", "settled", "complete"].includes(state) && (myReview
-          ? <div className="ok" style={{ marginTop: 20 }}>Thanks for your review{myReview.status === "published" ? ". It's live on our reviews page" : ". We publish every review, good or bad, once we've checked it's from this install"}.</div>
+          ? <><div className="ok" style={{ marginTop: 20 }}>Thanks for your review{myReview.status === "published" ? ". It's live on our reviews page" : ". We publish every review, good or bad, once we've checked it's from this install"}.</div>
+            {googleReview && <div className="card" style={{ marginTop: 10 }}><strong>Would you post it on Google too?</strong>
+              <span className="small muted">It helps local families find an installer they can trust. Copy your words, then tap the button.</span>
+              <textarea readOnly defaultValue={myReview.body} style={{ ...input, minHeight: 80 }} />
+              <a className="btn" href={googleReview} target="_blank" rel="noreferrer">Post on Google</a></div>}</>
           : <form action={leaveReview} className="card" style={{ marginTop: 20 }}>
             <input type="hidden" name="token" value={token} />
             <h3>How did we go?</h3>

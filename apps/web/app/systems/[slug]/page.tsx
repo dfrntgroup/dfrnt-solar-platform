@@ -37,6 +37,8 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const q = priceSystem(s, { postcode, asOf: todayAEST() }, data);
   const st = q.stack, c = q.config, r = q.rebate;
   const opts = configOptions({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode, installDate: q.window.lock_until, ...s.config } as ConfigInput, data.rules);
+  const { activeAddons } = await import("@/lib/addons");
+  const addons = await activeAddons().catch(() => []);
   const jobNeeds = { brand: s.brand, kind: s.kind === "battery_only" ? "battery_only" as const : "solar_battery" as const, panelKw: c.panel_kw };
   const next = await nextDays(postcode, jobNeeds, 3);
   const earliest = next === null ? null : next?.[0];
@@ -97,6 +99,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
               <tr><td className="k">Installed by</td><td>A licensed, SAA-accredited local electrician, named before you pay.</td></tr>
               <tr><td className="k">Warranty</td><td>Panels 25 yr · inverter 10 yr · battery 10 yr · our workmanship 10 yr</td></tr>
             </tbody></table>
+            {addons.length > 0 && <p className="small muted" style={{ marginTop: 10 }}>Add at checkout: {addons.map((a) => a.name).join(", ")}.</p>}
             <Trust />
             <CallBack back={`/systems/${slug}`} state={sp.callback} />
           <p style={{ marginTop: 12 }}><Share title={s.title} text={`${s.brand} ${s.title}: ${aud(q.stack.amount_payable)} installed after rebates.`} /></p>

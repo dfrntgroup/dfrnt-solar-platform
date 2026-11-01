@@ -33,6 +33,10 @@ const TEMPLATES: Record<string, (v: Vars, link: string) => { subject: string; bo
   I2: (v) => ({ subject: "Paid job: please offer install days", body: `Hi ${v.name ?? "there"}, a customer at ${v.place} has paid. Please offer up to three days that suit you${v.until ? `, on or before ${v.until} (their rebate deadline)` : ""}: ${siteUrl()}/installer/job/${v.jobId}\n\nConnect your Google Calendar and customers will book your free days themselves: ${siteUrl()}/installer/calendar` }),
   I3: (v) => ({ subject: `Message from ${v.from}`, body: `Hi ${v.name ?? "there"}, ${v.from} wrote:\n\n${v.preview}\n\nReply on the job: ${siteUrl()}/installer/job/${v.jobId}` }),
   I4: (v) => ({ subject: `Tomorrow: ${v.title}`, body: `${v.sheet}` }),
+  M22: (v, l) => ({ subject: "Your home's solar and battery record", body: `Hi ${v.name ?? "there"}, the previous owner of your home has passed you the record for its solar and battery system: what's installed, serial numbers, warranties, documents and how to get help. Keep this link: ${l}` }),
+  M23: (v, l) => ({ subject: "Your warranties are registered", body: `Hi ${v.name ?? "there"}, we've registered the manufacturer warranties for your system. The warranty cards are on your record with everything else: ${l}` }),
+  M24: (v) => ({ subject: "Thank you. One small favour?", body: `Hi ${v.name ?? "there"}, thanks for your review. If you have a minute, posting the same words on Google helps other local families find us: ${v.url}\n\nNo worries if not. Thanks for choosing us.` }),
+  M25: (v, l) => ({ subject: "Your yearly service plan", body: `Hi ${v.name ?? "there"}, ${v.renewal ? `your service plan renews on ${v.date}` : "thanks for joining the service plan"}. ${v.amount ? `It's ${v.amount} by bank transfer with reference ${v.reference}. ` : ""}Details are on your record: ${l}` }),
   M8: (v, l) => ({ subject: "Please approve a change to your install", body: `Hi ${v.name ?? "there"}, your installer has found work outside the agreed scope (${aud(v.amount)} inc GST). Approve or decline here: ${l}` }),
 };
 

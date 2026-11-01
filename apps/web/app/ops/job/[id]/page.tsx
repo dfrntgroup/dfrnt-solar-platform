@@ -8,7 +8,7 @@ import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2 } from "@/lib/site";
-import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent, photoPublic, formbaySend, formbayLink, formbaySyncNow, opsDesignFeePaid, opsRevise, opsReleaseDay, opsMessage } from "../../actions";
+import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent, photoPublic, formbaySend, formbayLink, formbaySyncNow, opsDesignFeePaid, opsRevise, opsReleaseDay, opsMessage, opsAddDocument, opsPullFormbay, opsWarranty } from "../../actions";
 import { buildFormbayJob } from "@/lib/formbay-job";
 import { formbayConfigured } from "@/lib/formbay";
 import { Step } from "@/components/Step";
@@ -42,6 +42,9 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
   const ledger = await db()`select description, amount_ex::float8 amount_ex, status from pay_ledger where quote_id = ${id}`;
   const next = TRANSITIONS[q.status].filter((t) => t !== "cancelled");
   const site = q.site;
+  const { recordDocuments, brandOf } = await import("@/lib/record");
+  const recDocs = await recordDocuments(id);
+  const brand = brandOf(q);
   return (
     <AdminShell who={me.name} area="ops">
       <p className="small"><Link href="/ops">← Board</Link> · <Link href={`/quote/${q.token}`}>Customer record</Link></p>
@@ -65,6 +68,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             {q.site_draft?.address && <p className="small">{q.site_draft.address.unit ? `${q.site_draft.address.unit}/` : ""}{q.site_draft.address.line1}, {q.site_draft.address.suburb} {q.site_draft.address.postcode}{q.site_draft.address.gnafPid ? ` · G-NAF ${q.site_draft.address.gnafPid}` : " · typed, not matched"}</p>}
           </div>}
           {q.design_review && <p className="small muted">Went to an installer photo check.</p>}
+          {(q.heard_from || q.attribution) && <p className="small muted">Heard from: {q.heard_from ?? "not answered"}{q.heard_note ? ` (${q.heard_note})` : ""} · Tracking: {q.attribution?.gclid ? "Google Ads click" : q.attribution?.fbclid || q.attribution?.fbc ? "Meta ad click" : q.attribution?.utm_source ? `utm ${q.attribution.utm_source}/${q.attribution.utm_campaign ?? ""}` : q.attribution?.ref ? `from ${q.attribution.ref}` : "direct"}{q.attribution?.landing ? `, landed on ${q.attribution.landing}` : ""}</p>}
           {(q.install_date || q.rebook) && <p className="small">Install: {q.rebook ? "customer picking a new day" : `${q.install_date}${q.install_part === "am" ? " (morning)" : ""}`} · {q.job_days ?? "?"} crew-day(s) · booked via {q.booked_via ?? "–"}{q.google_event_id ? " · in installer's Google Calendar" : ""}{q.access_notes ? ` · access: ${q.access_notes}` : ""}</p>}
           {q.pricing_reasons?.length ? <div className="note" style={{ marginTop: 8 }}>Needs pricing: {q.pricing_reasons.join(" · ")}</div> : null}
           <h3 style={{ marginTop: 18 }}>Photos</h3>
@@ -150,6 +154,22 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
           {TRANSITIONS[q.status].includes("cancelled") && <form action={opsCancel} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Cancel</strong><input name="reason" placeholder="Reason" style={input} />
             <button className="btn ghost" type="submit">Cancel job</button></form>}
+          {["installed", "lodged", "settled", "complete", "on_site"].includes(q.status) && <div className="card" style={{ marginBottom: 12 }}>
+            <strong>System Record</strong>
+            <span className="small">{recDocs.length} document(s){q.serials?.length ? ` · ${q.serials.length} serials` : " · no serials yet"}{q.commissioned_on ? ` · commissioned ${q.commissioned_on}` : ""}</span>
+            {recDocs.map((d) => <span key={d.id as string} className="small"><a href={`/quote/${q.token}/file/${d.id}`} target="_blank">{d.title as string}</a></span>)}
+            <form action={opsPullFormbay}><input type="hidden" name="id" value={id} /><button className="btn ghost sm">Pull Formbay pack and serials now</button></form>
+            <form action={opsAddDocument} style={{ display: "grid", gap: 6, marginTop: 6 }}><input type="hidden" name="id" value={id} />
+              <select name="kind" style={input}><option value="warranty_card">Warranty card</option><option value="coc">Certificate of compliance</option><option value="stc_form">STC form</option><option value="service_report">Service report</option><option value="other">Other</option></select>
+              <input name="title" placeholder="Title the customer sees" style={input} /><input type="file" name="file" required />
+              <button className="btn ghost sm">Add to their record</button></form>
+            <span className="small" style={{ marginTop: 8 }}><strong>Warranty registration</strong> (log in to the manufacturer&apos;s partner portal yourself, register the serials, then mark it here)</span>
+            {[brand, ...(p.config.bom.some((b) => b.sku.startsWith("PNL")) ? ["Panel manufacturer"] : [])].map((b) => q.warranty?.[b]?.registered_at
+              ? <span key={b} className="small ok">{b}: registered {q.warranty[b]!.registered_at}{q.warranty[b]!.ref ? ` · ref ${q.warranty[b]!.ref}` : ""}</span>
+              : <form key={b} action={opsWarranty} style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}><input type="hidden" name="id" value={id} /><input type="hidden" name="brand" value={b} />
+                  <span className="small">{b}</span><input name="ref" placeholder="Registration ref" style={{ ...input, width: 150 }} />
+                  <label className="small"><input type="checkbox" name="tell" /> email customer</label><button className="btn ghost sm">Mark registered</button></form>)}
+          </div>}
           <div className="card" style={{ marginBottom: 12 }}><strong>Payments</strong>{pays.length ? pays.map((x, i) => <span key={i} className="small">{x.kind as string} · {x.method as string} · {aud2(x.amount as number)} · {x.reference as string} · {x.status as string}</span>) : <span className="small muted">None</span>}</div>
           <div className="card" style={{ marginBottom: 12 }}><strong>Variations</strong>{vars.length ? vars.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.sell_inc as number)} · {x.status as string}</span>) : <span className="small muted">None</span>}</div>
           <div className="card" style={{ marginBottom: 12 }}><strong>Installer pay</strong>{ledger.length ? ledger.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.amount_ex as number)} · {x.status as string}</span>) : <span className="small muted">None yet</span>}</div>

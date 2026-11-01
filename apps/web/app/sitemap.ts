@@ -10,5 +10,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const systems = (await pricingData()).catalogue.systems.map((s) => `/systems/${s.slug}`);
   let articles: string[] = [];
   try { articles = (await db()`select slug from content_items where status = 'published'`).map((r) => `/learn/${r.slug}`); } catch { /* first build */ }
-  return [...fixed, ...systems, ...articles].map((p) => ({ url: `${base}${p}`, changeFrequency: "weekly" }));
+  let subs: string[] = [];
+  try { const { suburbs } = await import("@/lib/suburbs"); subs = (await suburbs()).map((x) => `/solar/${x.slug}`); } catch { /* none yet */ }
+  return [...fixed, ...systems, ...articles, ...subs].map((p) => ({ url: `${base}${p}`, changeFrequency: "weekly" }));
 }

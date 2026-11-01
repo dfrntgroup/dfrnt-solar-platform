@@ -4,12 +4,16 @@ import { db } from "@dfrnt/db";
 export interface DesignCheck { fee_on: boolean; amount: number }
 export interface BookingDesk { mode: "off" | "all" | "help" }
 export interface Scheduling { gear_lead_days: number; decline_hours: number; earlier_offer_hours: number }
-export interface Trust { founder_line: string; founder_video: string; licence: string; insurance: string; accreditations: string; callback_to: string }
+export interface ServicePlan { on: boolean; price: number; includes: string }
+export interface XeroSettings { tenant_id?: string; tenant_name?: string; refresh_token_enc?: string; connected_at?: string; codes: { sales: string; stc: string; installer: string; bank: string; stc_sale?: string; sales_tax?: string; stc_tax?: string; stc_sale_tax?: string; installer_tax?: string } }
+export interface Trust { founder_line: string; founder_video: string; licence: string; insurance: string; accreditations: string; callback_to: string; google_review_url?: string }
 
 const DEFAULTS = {
   design_check: { fee_on: false, amount: 99 } as DesignCheck,
   booking_desk: { mode: "off" } as BookingDesk,
   scheduling: { gear_lead_days: 3, decline_hours: 24, earlier_offer_hours: 12 } as Scheduling,
+  service_plan: { on: false, price: 0, includes: "Yearly health check, panel clean, firmware and settings check, written report on your record." } as ServicePlan,
+  xero: { codes: { sales: "", stc: "", installer: "", bank: "" } } as XeroSettings,
   trust: { founder_line: "Built by the team that grew InStyle Solar to 29,000+ installs.", founder_video: "", licence: "", insurance: "", accreditations: "", callback_to: "hello@dfrntsolar.com.au" } as Trust,
 };
 type Key = keyof typeof DEFAULTS;

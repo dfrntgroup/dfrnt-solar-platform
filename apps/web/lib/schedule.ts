@@ -109,7 +109,8 @@ export async function daysFor(q: QuoteRow, opts: { fresh?: boolean; max?: number
   const inst = await installerRow(q.installer_id);
   if (!inst) return { mode: "none", days: 1, slots: [], until };
   const profile = profileOf(inst);
-  const days = q.job_days ? Number(q.job_days) : jobDays(profile, needsOf(q));
+  const [ex] = await db()`select coalesce(sum(extra_days), 0)::float8 d from quote_addons where quote_id = ${q.id} and status = 'in_quote'`;
+  const days = q.job_days ? Number(q.job_days) : jobDays(profile, needsOf(q)) + ((ex?.d as number) ?? 0);
   const today = todayAEST();
   const crews = await liveCrews(inst.id, profile, today, addDays(today, 90), !!opts.fresh, q.id);
   if (crews.length) {

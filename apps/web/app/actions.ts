@@ -16,6 +16,14 @@ export async function setPostcode(form: FormData) {
 
 import { allow } from "@/lib/ratelimit";
 
+async function saveAttribution(quoteId: string) {
+  try {
+    const { attributionNow } = await import("@/lib/conversions");
+    const { db } = await import("@dfrnt/db");
+    await db()`update quotes set attribution = ${db().json((await attributionNow()) as never)} where id = ${quoteId} and attribution is null`;
+  } catch { /* never blocks a quote */ }
+}
+
 /** "Secure this price": saves the system as a quote at today's price with the 14-day / window-end lock. */
 export async function secureSystem(form: FormData) {
   if (!(await allow("secure", 20))) redirect("/contact?kind=question");
@@ -38,6 +46,7 @@ export async function secureSystem(form: FormData) {
     title: changed ? `${s.brand} · ${s.config.panelCount ? `${(s.config.panelCount * 0.475).toFixed(2)} kW solar + ` : ""}${Math.round(s.config.batteryModules * kwhPerModule(s.config.familyKey) * 10) / 10} kWh battery${backup === "whole_home" ? " + whole-home backup" : ""}` : `${s.brand} · ${s.title}`,
     systemSlug: s.slug,
   } as never, { status: "secured" });
+  await saveAttribution(out.result.id);
   redirect(`/quote/${out.result.token}`);
 }
 
@@ -53,6 +62,7 @@ export async function saveForLater(form: FormData) {
     config: { backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, ...base.config, panelSku: base.config.panelSku ?? "", stacks: base.config.stacks ?? 1, postcode },
     customerEmail: email, title: `${base.brand} · ${base.title}`, systemSlug: base.slug,
   } as never, { status: "saved" });
+  await saveAttribution(out.result.id);
   const { queueMessage } = await import("@/lib/messages");
   await queueMessage("M9", out.result.token, email, { amount: out.result.amount_payable });
   redirect(`/systems/${base.slug}?saved=1`);

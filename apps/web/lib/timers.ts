@@ -55,7 +55,8 @@ export async function runDaily() {
   const { rebates } = await pricingData();
   const w = rebateWindow(today, rebates);
   const saved = await db()`select id, token, customer_email, customer_name, amount_payable::float8 amount, reminders, extract(day from now() - created_at)::int age
-    from quotes where status = 'saved' and customer_email is not null and created_at > now() - interval '30 days'`;
+    from quotes where status = 'saved' and customer_email is not null and created_at > now() - interval '30 days'
+      and not exists (select 1 from marketing_optout o where o.email = lower(quotes.customer_email))`;
   let nudged = 0;
   for (const q of saved) {
     const r = (q.reminders ?? {}) as Record<string, unknown>;
@@ -76,6 +77,31 @@ export async function runDaily() {
   out.review_requests = ask.length;
   // C5: checkout follow-ups for anyone who stopped partway.
   out.checkout_followups = await runCheckoutFollowups();
+  // R1: service plan: first-year bill once installed, renewal reminders 30 days out, lapse 30 days after.
+  const plans = await db()`select m.id, m.status, m.price::float8 price, m.reference, m.renews_on::text renews_on, q.token, q.customer_email, q.customer_name, q.status qs, q.reminders
+    from memberships m join quotes q on q.id = m.quote_id where m.status in ('pending','active')`;
+  let planMsgs = 0;
+  for (const m of plans) {
+    const r = (m.reminders ?? {}) as Record<string, unknown>;
+    if (m.status === "pending" && ["installed", "lodged", "settled", "complete"].includes(m.qs as string) && !r.plan_first) {
+      await queueMessage("M25", m.token as string, m.customer_email as string, { name: m.customer_name as string, amount: `$${m.price}`, reference: m.reference as string });
+      await db()`update quotes set reminders = reminders || '{"plan_first":true}' where token = ${m.token}`; planMsgs++;
+    }
+    if (m.status === "active" && m.renews_on) {
+      const days = (Date.parse(`${m.renews_on}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400_000;
+      const k = `plan_${m.renews_on}`;
+      if (days <= 30 && days > 0 && !r[k]) {
+        await queueMessage("M25", m.token as string, m.customer_email as string, { name: m.customer_name as string, renewal: true, date: longDate(m.renews_on as string), amount: `$${m.price}`, reference: m.reference as string });
+        await db()`update quotes set reminders = reminders || ${db().json({ [k]: true })} where token = ${m.token}`; planMsgs++;
+      }
+      if (days < -30) await db()`update memberships set status = 'lapsed' where id = ${m.id}`;
+    }
+  }
+  out.service_plan = planMsgs;
+  // B1: Xero.
+  try { const { syncXero } = await import("./xero"); out.xero = (await syncXero()) as never; } catch { /* shown in Ops → Xero */ }
+  // G4: waitlist alerts where an installer now covers the postcode.
+  try { const { notifyWaitlist } = await import("./campaigns"); out.waitlist_alerts = await notifyWaitlist(); } catch { /* reported in messages */ }
   // Formbay status for every linked job.
   try { out.formbay = (await runFormbaySync()) as never; } catch { /* reported on the job pages */ }
   // Agent proposals expire after 24 h.
@@ -89,7 +115,8 @@ export async function runDaily() {
 export async function runCheckoutFollowups() {
   const rows = await db()`select id, token, customer_email, customer_name, amount_payable::float8 amount, lock_until::text lock_until, reminders, site_draft is not null has_home,
       extract(epoch from now() - checkout_at)::int / 3600 hours from quotes
-    where status = 'secured' and customer_email is not null and checkout_at is not null and design_fee_status is null and lock_until >= ${todayAEST()}`;
+    where status = 'secured' and customer_email is not null and checkout_at is not null and design_fee_status is null and lock_until >= ${todayAEST()}
+      and not exists (select 1 from marketing_optout o where o.email = lower(quotes.customer_email))`;
   const { SELLER } = await import("./legal");
   let sent = 0;
   for (const q of rows) {
@@ -167,6 +194,10 @@ export async function runFormbaySync() {
       if (r.http !== 200 || !r.status) { failed++; continue; }
       await db()`update quotes set formbay_status = ${r.status}, formbay_complete = ${r.complete}, formbay_synced_at = now() where id = ${j.id}`;
       synced++;
+      if (["pending_cer_approval", "cer_approved", "sold"].includes(r.status)) {
+        const { pullFormbayRecord } = await import("./record");
+        await pullFormbayRecord(j.id as string).catch(() => null);
+      }
       if (j.status === "installed" && ["pending_cer_approval", "cer_approved", "sold"].includes(r.status)) {
         await setStatus(j.id as string, "installed", "lodged", `Formbay status ${r.status}: submitted to the Clean Energy Regulator`);
         lodged++;

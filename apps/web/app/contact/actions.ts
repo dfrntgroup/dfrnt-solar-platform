@@ -14,6 +14,6 @@ export async function contactUs(f: FormData) {
   const when = [day, v("slot").slice(0, 30)].filter(Boolean).join(", ");
   if (when) f.set("kind", "callback");
   const kinds = ["question", "callback", "fault", "complaint", "waitlist"];
-  await openTicket({ kind: kinds.includes(v("kind")) ? v("kind") : "question", name: v("name"), email: v("email"), phone: v("phone"), subject: `${when ? `Call ${when}: ` : v("kind") === "callback" ? "Call back: " : ""}${v("body").slice(0, 60)}`, body: v("body"), quoteId });
+  await openTicket({ kind: kinds.includes(v("kind")) ? v("kind") : "question", name: v("name"), email: v("email"), phone: v("phone"), subject: `${when ? `Call ${when}: ` : v("kind") === "callback" ? "Call back: " : ""}${v("body").slice(0, 60)}`, body: v("body"), quoteId, postcode: /^\d{4}$/.test(v("postcode")) ? v("postcode") : undefined });
   redirect("/contact?sent=1");
 }

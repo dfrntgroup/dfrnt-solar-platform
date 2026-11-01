@@ -1,7 +1,7 @@
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
 import { getSetting } from "@/lib/settings";
-import { saveDesignCheck, saveScheduling, saveTrust } from "../actions";
+import { saveDesignCheck, saveScheduling, saveServicePlan, saveTrust } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -11,6 +11,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const dc = await getSetting("design_check");
   const t = await getSetting("trust");
   const sc = await getSetting("scheduling");
+  const sv = await getSetting("service_plan");
   const F = ({ name, label, value, hint }: { name: string; label: string; value: string; hint?: string }) => (
     <label style={{ display: "block", margin: "10px 0" }}><span className="small" style={{ fontWeight: 600 }}>{label}</span>{hint && <span className="small muted" style={{ display: "block" }}>{hint}</span>}<input name={name} defaultValue={value} style={input} /></label>);
   return (
@@ -34,9 +35,18 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <F name="accreditations" label="Accreditations" value={t.accreditations} hint="e.g. NETCC Approved Seller (once approved)" />
           <F name="insurance" label="Insurance" value={t.insurance} hint="e.g. $20m public liability" />
           <F name="callback_to" label="Call-back requests go to" value={t.callback_to} />
+          <F name="google_review_url" label="Google review link" value={t.google_review_url ?? ""} hint="From your Google Business Profile: Ask for reviews → copy link. Customers who give 4–5 stars are offered it." />
           <button className="btn">Save</button>
         </form>
       </div>
+      <form action={saveServicePlan} className="card" style={{ marginTop: 16 }}>
+        <strong>Yearly service plan</strong>
+        <span className="small muted">When on, it&apos;s offered before signing and on every installed customer&apos;s record. Members are in Ops → Service plan.</span>
+        <label className="small"><input type="checkbox" name="on" defaultChecked={sv.on} /> Offer the service plan</label>
+        <F name="price" label="Price per year (inc GST)" value={String(sv.price || "")} />
+        <F name="includes" label="What's included (customers see this)" value={sv.includes} />
+        <button className="btn">Save</button>
+      </form>
       <form action={saveScheduling} className="card" style={{ marginTop: 16 }}>
         <strong>Install scheduling</strong>
         <span className="small muted">The booking desk switch is on Ops → Booking desk.</span>

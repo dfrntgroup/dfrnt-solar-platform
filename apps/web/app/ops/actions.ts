@@ -76,6 +76,7 @@ export async function saveInstaller(f: FormData) {
         formbay_installer_id = ${s(f, "formbay_installer_id") || null}, postcode_ranges = ${ranges.map(([a, b]) => `[${a},${(b ?? a ?? 0) + 1})`)}::int4range[] where id = ${id}`;
       return { entity: "installer", entityId: id, event: "installer.updated", result: { ok: true } };
     });
+    if (f.get("active") === "on") { const { notifyWaitlist } = await import("@/lib/campaigns"); await notifyWaitlist().catch(() => 0); }
   });
 }
 export async function addStaffNote(f: FormData) {
@@ -320,7 +321,9 @@ export async function saveTrust(f: FormData) {
     const video = v("founder_video");
     if (video && !/^https:\/\//.test(video)) throw new Error("The video link must start with https://");
     if (v("callback_to") && !/^\S+@\S+\.\S+$/.test(v("callback_to"))) throw new Error("Call-back email isn't valid");
-    await setSetting("trust", { founder_line: v("founder_line"), founder_video: video, licence: v("licence"), insurance: v("insurance"), accreditations: v("accreditations"), callback_to: v("callback_to") }, me.name);
+    const g = v("google_review_url");
+    if (g && !/^https:\/\//.test(g)) throw new Error("The Google review link must start with https://");
+    await setSetting("trust", { founder_line: v("founder_line"), founder_video: video, licence: v("licence"), insurance: v("insurance"), accreditations: v("accreditations"), callback_to: v("callback_to"), google_review_url: g }, me.name);
   });
 }
 export async function opsDesignFeePaid(f: FormData) {
@@ -379,5 +382,152 @@ export async function saveScheduling(f: FormData) {
   await run("/ops/settings", async () => {
     const n = (k: string, lo: number, hi: number, d: number) => { const v = Number(s(f, k)); return Number.isFinite(v) && s(f, k) !== "" ? Math.min(hi, Math.max(lo, v)) : d; };
     await setSetting("scheduling", { gear_lead_days: n("gear_lead_days", 0, 30, 3), decline_hours: n("decline_hours", 1, 72, 24), earlier_offer_hours: n("earlier_offer_hours", 1, 72, 12) }, me.name);
+  });
+}
+
+/* R0/R2: System Record documents, Formbay pack, warranty registration, product datasheets */
+export async function opsAddDocument(f: FormData) {
+  await requireStaff(); const id = s(f, "id");
+  await run(`/ops/job/${id}`, async () => {
+    const file = f.get("file");
+    if (!(file instanceof File) || !file.size) throw new Error("Choose a file");
+    if (file.size > 25_000_000) throw new Error("File over 25 MB");
+    const kind = ["coc", "stc_form", "warranty_card", "service_report", "other"].includes(s(f, "kind")) ? s(f, "kind") : "other";
+    const { putPhoto } = await import("@/lib/storage");
+    const path = `records/${id}/${kind}-${Date.now()}-${file.name.replace(/[^\w.-]/g, "_")}`;
+    await putPhoto(path, await file.arrayBuffer(), file.type || "application/octet-stream");
+    await db()`insert into job_documents (quote_id, kind, title, path, content_type) values (${id}, ${kind}, ${s(f, "title") || file.name}, ${path}, ${file.type || null})`;
+  });
+}
+export async function opsPullFormbay(f: FormData) {
+  await requireStaff(); const id = s(f, "id");
+  await run(`/ops/job/${id}`, async () => {
+    await db()`update quotes set formbay_docs_at = null where id = ${id}`;
+    const { pullFormbayRecord } = await import("@/lib/record");
+    const r = await pullFormbayRecord(id);
+    if (r !== "saved") throw new Error(`Formbay: ${r}. The pack appears once Formbay has the job's documents.`);
+  });
+}
+export async function opsWarranty(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  await run(`/ops/job/${id}`, async () => {
+    const brand = s(f, "brand");
+    await db()`update quotes set warranty = coalesce(warranty, '{}'::jsonb) || ${db().json({ [brand]: { registered_at: new Date().toISOString().slice(0, 10), by: me.name, ref: s(f, "ref") || null } } as never)} where id = ${id}`;
+    if (f.get("tell") === "on") {
+      const q = (await getQuoteById(id))!;
+      const { queueMessage } = await import("@/lib/messages");
+      await queueMessage("M23", q.token, q.customer_email, { name: q.customer_name });
+    }
+  });
+}
+export async function opsProductDoc(f: FormData) {
+  await requireStaff();
+  await run("/ops/products", async () => {
+    const sku = s(f, "sku"), kind = ["datasheet", "manual", "warranty"].includes(s(f, "kind")) ? s(f, "kind") : "datasheet";
+    const url = s(f, "url"), file = f.get("file");
+    let path: string | null = null;
+    if (file instanceof File && file.size) {
+      const { putPhoto } = await import("@/lib/storage");
+      path = `products/${sku}/${kind}-${Date.now()}-${file.name.replace(/[^\w.-]/g, "_")}`;
+      await putPhoto(path, await file.arrayBuffer(), file.type || "application/pdf");
+    } else if (!/^https:\/\//.test(url)) throw new Error("Add a file or an https:// link to the manufacturer's document");
+    await db()`insert into product_docs (sku, kind, title, url, path) values (${sku}, ${kind}, ${s(f, "title") || `${kind[0]!.toUpperCase()}${kind.slice(1)}`}, ${path ? null : url}, ${path})`;
+  });
+}
+export async function opsRemoveProductDoc(f: FormData) {
+  await requireStaff();
+  await run("/ops/products", async () => { await db()`delete from product_docs where id = ${s(f, "id")}`; });
+}
+
+/* G5 campaigns */
+export async function campaignSave(f: FormData) {
+  const me = await requireStaff();
+  const id = s(f, "id");
+  await run("/ops/campaigns", async () => {
+    const { AUDIENCES } = await import("@/lib/campaigns");
+    if (!AUDIENCES[s(f, "audience")]) throw new Error("Pick an audience");
+    if (s(f, "subject").length < 5 || s(f, "body").length < 20) throw new Error("Add a subject and a message");
+    if (id) await db()`update campaigns set name = ${s(f, "name")}, audience = ${s(f, "audience")}, subject = ${s(f, "subject")}, body = ${s(f, "body")} where id = ${id} and status = 'draft'`;
+    else await db()`insert into campaigns (name, audience, subject, body, created_by) values (${s(f, "name") || "Rebate deadline"}, ${s(f, "audience")}, ${s(f, "subject")}, ${s(f, "body")}, ${me.name})`;
+  });
+}
+export async function campaignTest(f: FormData) {
+  await requireStaff();
+  await run("/ops/campaigns", async () => {
+    const { sendCampaign } = await import("@/lib/campaigns");
+    const { getSetting } = await import("@/lib/settings");
+    await sendCampaign(s(f, "id"), { test: true, testTo: (await getSetting("trust")).callback_to || "hello@dfrntsolar.com.au" });
+  });
+}
+export async function campaignSend(f: FormData) {
+  await requireStaff();
+  await run("/ops/campaigns", async () => {
+    if (f.get("confirm") !== "on") throw new Error("Tick the box to confirm you've checked the test email");
+    const { sendCampaign } = await import("@/lib/campaigns");
+    await sendCampaign(s(f, "id"), { batch: 200 });
+  });
+}
+
+/* U1 add-ons catalogue */
+export async function addonSave(f: FormData) {
+  await requireStaff();
+  await run("/ops/addons", async () => {
+    const code = s(f, "code").toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 20);
+    if (!code || s(f, "name").length < 2) throw new Error("Code and name are needed");
+    const n = (k: string) => Math.max(0, Number(s(f, k)) || 0);
+    await db()`insert into addons (code, name, description, supplier_cost_ex, installer_labour_ex, extra_days, active, sort)
+      values (${code}, ${s(f, "name")}, ${s(f, "description")}, ${n("supplier")}, ${n("labour")}, ${Math.round(n("days") * 2) / 2}, ${f.get("active") === "on"}, ${n("sort")})
+      on conflict (code) do update set name = excluded.name, description = excluded.description, supplier_cost_ex = excluded.supplier_cost_ex,
+        installer_labour_ex = excluded.installer_labour_ex, extra_days = excluded.extra_days, active = excluded.active, sort = excluded.sort`;
+  });
+}
+
+/* R1 service plan */
+export async function saveServicePlan(f: FormData) {
+  const me = await requireStaff();
+  const { setSetting } = await import("@/lib/settings");
+  await run("/ops/settings", async () => {
+    const price = Number(s(f, "price") || 0);
+    if (f.get("on") === "on" && !(price > 0)) throw new Error("Set a price before switching the plan on");
+    await setSetting("service_plan", { on: f.get("on") === "on", price, includes: s(f, "includes").slice(0, 300) }, me.name);
+  });
+}
+export async function memberAction(f: FormData) {
+  await requireStaff();
+  await run("/ops/service", async () => {
+    const id = s(f, "id"), what = s(f, "what");
+    if (what === "paid") await db()`update memberships set status = 'active', started_on = coalesce(started_on, current_date),
+      renews_on = greatest(coalesce(renews_on, current_date), current_date) + interval '1 year' where id = ${id}`;
+    else if (what === "visit") await db()`update memberships set last_visit_on = current_date where id = ${id}`;
+    else if (what === "cancel") await db()`update memberships set status = 'cancelled' where id = ${id}`;
+  });
+}
+
+/* B1 Xero */
+export async function xeroCodes(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/xero", async () => {
+    const { getSetting, setSetting } = await import("@/lib/settings");
+    const x = await getSetting("xero");
+    const k = ["sales", "stc", "stc_sale", "installer", "bank", "sales_tax", "stc_tax", "stc_sale_tax", "installer_tax"] as const;
+    const codes = Object.fromEntries(k.map((n) => [n, s(f, n).slice(0, 30)])) as typeof x.codes;
+    await setSetting("xero", { ...x, codes }, me.name);
+  });
+}
+export async function xeroDisconnect() {
+  const me = await requireStaff();
+  await run("/ops/xero", async () => {
+    if (!me.roles.includes("owner")) throw new Error("Owner only");
+    const { getSetting, setSetting } = await import("@/lib/settings");
+    const x = await getSetting("xero");
+    await setSetting("xero", { codes: x.codes }, me.name);
+  });
+}
+export async function xeroSyncNow() {
+  await requireStaff();
+  await run("/ops/xero", async () => {
+    const { syncXero } = await import("@/lib/xero");
+    const r = await syncXero();
+    if ("skipped" in r) throw new Error(`Not sent: ${r.skipped}`);
   });
 }

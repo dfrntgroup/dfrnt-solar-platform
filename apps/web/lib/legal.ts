@@ -97,13 +97,14 @@ export const PRIVACY: Section[] = [
   { h: "What we collect", p: [
     "Your name, email, mobile, address and postcode; details about your home (roof, storeys, power supply, switchboard, where a battery would go); photos you upload of your switchboard, meter, roof and battery location; your electricity bill amount if you give it; your signature; payment references; and messages you send us.",
     "Once your system is installed: serial numbers, compliance certificates, installation photos and STC records.",
-    "When you use the website we record pages viewed and actions such as configuring a system, using our own first-party analytics. We do not use advertising trackers on this website.",
+    "When you use the website we record pages viewed and actions such as configuring a system, using our own first-party analytics. On our public pages (not your system record, our staff areas or installer areas) we also use Microsoft Clarity to see how pages are used (heatmaps and anonymised session recordings, with what you type masked), and the Meta and Google advertising tags so we can measure our ads and show them to people likely to be interested.",
+    "When you give us your details, secure a price, sign or pay, we tell Meta and Google Ads that this happened, with the value, so they can measure which ads work. We send your email and phone only as one-way encrypted codes (hashed), never in plain text, plus the click identifiers those platforms gave your browser. We ask you how you heard about us; answering is optional.",
   ] },
   { h: "Why we collect it", p: [
-    "To price your system, prepare and perform your agreement, book and carry out your installation, apply for grid connection, create and assign STCs, provide warranty support, answer your questions, and meet our legal obligations. We will email you about your quote and installation. We only send other marketing if you ask for it, and you can stop it at any time.",
+    "To price your system, prepare and perform your agreement, book and carry out your installation, apply for grid connection, create and assign STCs, provide warranty support, answer your questions, and meet our legal obligations. We will email you about your quote and installation. If you give us your email for a price, we may also email you about that price, including before rebates change; every such email has an unsubscribe link and we stop straight away when you use it.",
   ] },
   { h: "Who we share it with", p: [
-    "Only what each needs: the installer assigned to your job; your electricity distributor (for connection approval); the Clean Energy Regulator and our STC agent (to create your STCs); equipment suppliers and manufacturers (delivery and warranty); our payment, email, SMS, accounting and hosting providers; and anyone the law requires.",
+    "Only what each needs: the installer assigned to your job; your electricity distributor (for connection approval); the Clean Energy Regulator and our STC agent (to create your STCs); equipment suppliers and manufacturers (delivery and warranty); our payment, email, SMS, accounting (Xero) and hosting providers; Meta and Google as described above; Microsoft (Clarity) for website analytics; and anyone the law requires.",
     "We do not sell your information.",
   ] },
   { h: "Where it is stored", p: [

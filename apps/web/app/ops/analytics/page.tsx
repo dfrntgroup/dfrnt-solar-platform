@@ -18,6 +18,14 @@ export default async function Analytics() {
       count(*) filter (where site is not null and not design_review)::int instant, count(*) filter (where site is not null and not design_review and signed_at is not null)::int instant_signed
     from quotes where created_at > now() - interval '30 days'`;
   const [cb] = await db()`select count(*)::int n, count(*) filter (where status = 'done')::int done from callbacks where created_at > now() - interval '30 days'`;
+  const heard = await db()`select coalesce(heard_from, 'not asked yet') h, count(*)::int n, coalesce(sum(amount_payable), 0)::float8 rev from quotes where paid_at > now() - interval '90 days' group by 1 order by 3 desc`;
+  const tracked = await db()`select case when attribution ? 'gclid' then 'Google Ads click' when attribution ? 'fbclid' or attribution ? 'fbc' then 'Meta ad click' when attribution ? 'utm_source' then 'utm: ' || (attribution->>'utm_source') when coalesce(attribution->>'ref', '') <> '' then 'Referred by ' || split_part(split_part(attribution->>'ref', '//', 2), '/', 1) else 'Direct / unknown' end src,
+      count(*)::int n, count(*) filter (where paid_at is not null)::int paid, coalesce(sum(amount_payable) filter (where paid_at is not null), 0)::float8 rev
+    from quotes where created_at > now() - interval '90 days' and status <> 'saved' group by 1 order by 4 desc, 2 desc limit 12`;
+  const conv = await db()`select e.name, e.platform, e.status, e.http, e.created_at, q.customer_name from conversion_events e join quotes q on q.id = e.quote_id order by e.created_at desc limit 15`;
+  const { googleFeedKey, metaReady } = await import("@/lib/conversions");
+  const { siteUrl } = await import("@/lib/messages");
+  const label: Record<string, string> = { facebook: "Facebook or Instagram", google: "Google", youtube: "YouTube", friend: "A friend or family", saw_install: "Saw an install", other: "Something else" };
   const pct = (a: number, b: number) => b ? `${Math.round((a / b) * 100)}%` : "–";
   const pages = await db()`select path, count(*)::int n from analytics_events where name = 'page_view' and at > now() - interval '30 days' group by 1 order by 2 desc limit 15`;
   const steps: [string, number][] = [["Sessions", v!.sessions as number], ["Quotes created", f!.created as number], ["Secured", f!.secured as number], ["Priced", f!.priced as number], ["Signed", f!.signed as number], ["Paid", f!.paid as number]];
@@ -37,6 +45,17 @@ export default async function Analytics() {
         <tr><td>Installer photo check</td><td className="r"><strong>{c!.reviewed as number}</strong></td><td className="r muted">{pct(c!.reviewed_signed as number, c!.reviewed as number)} signed</td></tr>
       </tbody></table>
       <p className="small muted">If photo-checked jobs rarely sign, switch the fee on in Ops → Settings.</p>
+      <h3 style={{ marginTop: 20 }}>What sold (last 90 days)</h3>
+      <div className="pdp">
+        <div><p className="small muted">Customers said (paid jobs)</p>
+          <table className="lines small"><tbody>{heard.map((h) => <tr key={h.h as string}><td>{label[h.h as string] ?? h.h}</td><td className="r">{h.n as number}</td><td className="r">{aud(h.rev as number)}</td></tr>)}</tbody></table></div>
+        <div><p className="small muted">Tracking said (secured prices → paid)</p>
+          <table className="lines small"><tbody>{tracked.map((t) => <tr key={t.src as string}><td>{t.src as string}</td><td className="r">{t.n as number} → {t.paid as number}</td><td className="r">{aud(t.rev as number)}</td></tr>)}</tbody></table></div>
+      </div>
+      <h3 style={{ marginTop: 20 }}>Ad platforms</h3>
+      <p className="small">Meta Conversions API: {metaReady() ? <strong>on</strong> : "off (add META_PIXEL_ID and META_CAPI_TOKEN in Vercel)"}. Meta pixel: {process.env.NEXT_PUBLIC_META_PIXEL_ID ? "on" : "off"}. Google tag: {process.env.NEXT_PUBLIC_GOOGLE_ADS_ID ? "on" : "off"}. Clarity: {process.env.NEXT_PUBLIC_CLARITY_ID ? "on" : "off"}.</p>
+      <p className="small">Google Ads scheduled upload URL (Goals → Conversions → Uploads → Schedules → HTTPS, every 24 hours; conversion actions named DFRNT Lead, DFRNT Checkout complete, DFRNT Signed, DFRNT Paid): <code style={{ wordBreak: "break-all" }}>{siteUrl()}/api/v1/conversions/google?key={googleFeedKey()}</code></p>
+      <table className="lines small"><tbody>{conv.length ? conv.map((c, i) => <tr key={i}><td>{new Date(c.created_at as string).toLocaleString("en-AU", { timeZone: "Australia/Brisbane" })}</td><td>{c.name as string}</td><td>{c.platform as string}</td><td>{c.status as string}{c.http ? ` (${c.http})` : ""}</td><td>{(c.customer_name as string) ?? ""}</td></tr>) : <tr><td className="muted">No conversion events yet.</td></tr>}</tbody></table>
       <h3 style={{ marginTop: 20 }}>Top pages</h3>
       <table className="lines small"><tbody>{pages.map((p) => <tr key={p.path as string}><td>{p.path as string}</td><td className="r">{p.n as number}</td></tr>)}</tbody></table>
     </AdminShell>

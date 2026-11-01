@@ -31,6 +31,7 @@ export default async function Contact({ searchParams }: { searchParams: Promise<
           <form action={contactUs}>
             <input type="hidden" name="quote" value={sp.quote ?? ""} />
             <p><select name="kind" aria-label="What is this about" style={input} defaultValue={sp.kind ?? "question"}><option value="question">A question</option><option value="callback">Please call me</option><option value="fault">Something isn&apos;t working</option><option value="complaint">A complaint</option><option value="waitlist">Tell me when you cover my area</option></select></p>
+            <p><input name="postcode" defaultValue={postcode} inputMode="numeric" maxLength={4} placeholder="Your postcode" aria-label="Your postcode" style={input} /></p>
             <p><input name="name" placeholder="Name" style={input} required /></p>
             <p><input name="email" type="email" placeholder="Email" style={input} required /></p>
             <p><input name="phone" placeholder="Mobile (for a call back)" style={input} /></p>

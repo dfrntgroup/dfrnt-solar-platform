@@ -20,6 +20,8 @@ export interface QuoteRow {
   discount_code: string | null; referral_discount: number | null; credit_code: string | null; credit_amount: number | null;
   site_draft: (Partial<SiteAnswers> & { address?: SiteAnswers["address"] }) | null; checkout_at: Date | null; design_review: boolean; design_fee_status: string | null;
   revision: Revision | null; chosen_installer_id: string | null;
+  heard_from: string | null; heard_note: string | null; serials: { serial: string; kind?: string; model?: string }[] | null; commissioned_on: string | null;
+  warranty: Record<string, { registered_at?: string; by?: string; ref?: string }> | null; attribution: Record<string, string> | null;
   crew_id: string | null; job_days: number | null; install_part: string | null; booked_via: string | null; booked_at: Date | null;
   decline_until: Date | null; google_event_id: string | null; rebook: boolean; access_notes: string | null; desk_called_at: Date | null; desk_notes: string | null;
 }
@@ -35,7 +37,7 @@ export async function getQuote(token: string): Promise<QuoteRow | null> {
     lock_until::text as lock_until, install_date::text as install_date, signed_at, signed_name, agreement_version, invoice_number, payment_method, payment_reference, paid_at,
     customer_email, customer_name, customer_phone, postcode, created_at, discount_code, credit_code,
     site_draft, checkout_at, design_review, design_fee_status, revision, chosen_installer_id,
-    crew_id, job_days::float8 as job_days, install_part, booked_via, booked_at, decline_until, google_event_id, rebook, access_notes, desk_called_at, desk_notes,
+    heard_from, heard_note, serials, commissioned_on::text as commissioned_on, warranty, attribution, crew_id, job_days::float8 as job_days, install_part, booked_via, booked_at, decline_until, google_event_id, rebook, access_notes, desk_called_at, desk_notes,
     (select amount_inc::float8 from credits c where c.code = quotes.credit_code) as credit_amount,
     (select discount_inc::float8 from codes c where c.code = quotes.discount_code and c.active) as referral_discount from quotes where token = ${token}`;
   return (row as unknown as QuoteRow) ?? null;
@@ -58,7 +60,9 @@ export async function reprice(q: QuoteRow, extra: { site?: SiteAnswers; input?: 
     } : {}),
   };
   const data = await pricingDataFor(q.result.versions);
-  return quote(input, { ...data, asOf: todayAEST(), extraLabour: extra.extraLabour, variations: extra.variations, discounts: { ...(q.referral_discount ? { referral: q.referral_discount } : {}), ...(q.credit_amount ? { reportCredit: q.credit_amount } : {}), ...(extra.bank ? { bankTransferPct: 0.01 } : {}) } });
+  const { contractAddonLines } = await import("./addons");
+  const addons = await contractAddonLines(q.id, data.margins).catch(() => []);
+  return quote(input, { ...data, asOf: todayAEST(), extraLabour: extra.extraLabour, variations: [...(extra.variations ?? []), ...addons], discounts: { ...(q.referral_discount ? { referral: q.referral_discount } : {}), ...(q.credit_amount ? { reportCredit: q.credit_amount } : {}), ...(extra.bank ? { bankTransferPct: 0.01 } : {}) } });
 }
 
 /** The installer for a job: the customer's choice if it covers the postcode and can do this job (C7, scheduling "who"),
@@ -110,6 +114,7 @@ export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name
     site: db().json(site as never), customer_name: contact.name, customer_email: contact.email, customer_phone: contact.phone,
     installer_id: inst?.id ?? null, scope_version: inst?.scope.version ?? null, design_review: reasons.length > 0,
   };
+  { const { trackConversion } = await import("./conversions"); await trackConversion(q.id, "SubmitApplication", priced.stack.amount_payable); }
   if (!reasons.length) {
     await move(q, "pricing_instant", CUSTOMER, "quotes.submit_site", common);
     q = (await getQuote(q.token))!;
@@ -142,6 +147,7 @@ export async function sign(q: QuoteRow, name: string) {
   if (q.status !== "priced") throw new Error("Nothing to sign");
   if (q.lock_until < todayAEST()) { await move(q, "lapsed", SYSTEM, "quotes.lapse", {}, "Lock expired before signing"); throw new Error("This price has expired. Secure it again at today's price."); }
   await move(q, "signed", CUSTOMER, "quotes.sign", { signed_at: new Date(), signed_name: name, agreement_version: AGREEMENT_VERSION });
+  { const { trackConversion } = await import("./conversions"); await trackConversion(q.id, "SignedAgreement", (q.snapshot ?? q.result).stack.amount_payable); }
 }
 
 /* D3/D4b: bank transfer (card switches on with Stripe at go-live) */
@@ -157,6 +163,7 @@ export async function chooseBank(q: QuoteRow) {
   });
 }
 
+export const extraLabourOf = (q: QuoteRow) => extraFromSnapshot(q);
 /** Installation lines the installer added at pricing (anything beyond the configuration's own triggers). */
 function extraFromSnapshot(q: QuoteRow): LabourRequest[] {
   const base = new Set(q.result.stack.lines.filter((l) => l.kind === "installation").map((l) => l.code));
@@ -171,6 +178,7 @@ export async function markPaid(q: QuoteRow, actor: Actor) {
   // Tax invoice number is issued at the moment payment is received.
   await db()`update quotes set invoice_number = 'INV-' || nextval('invoice_seq') where id = ${q.id} and invoice_number is null`;
   await queueMessage("M3", q.token, q.customer_email, { name: q.customer_name });
+  { const { trackConversion } = await import("./conversions"); await trackConversion(q.id, "Purchase", (q.snapshot ?? q.result).stack.amount_payable); }
   const { requestOffer } = await import("./schedule");
   await requestOffer((await getQuote(q.token))!).catch(() => null);   // installer not on a live calendar: ask them for days
 }

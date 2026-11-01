@@ -49,6 +49,7 @@ export async function saveContact(f: FormData) {
     const first = !q.customer_email || !q.checkout_at;
     await db()`update quotes set customer_name = ${name}, customer_email = ${email}, customer_phone = ${phone}, checkout_at = now(), updated_at = now() where id = ${q.id}`;
     if (first) await queueMessage("M12", token, email, { name: name.split(" ")[0], amount: q.result.stack.amount_payable, until: longDate(q.lock_until) });
+    if (first) { const { trackConversion } = await import("@/lib/conversions"); await trackConversion(q.id, "Lead", q.result.stack.amount_payable); }
     return 2;
   });
 }
@@ -249,5 +250,75 @@ export async function leaveReview(f: FormData) {
       values (${q.id}, ${q.installer_id ?? null}, ${rating}, ${body}, ${first}, ${site.suburb ?? null})
       on conflict (quote_id) do update set rating = excluded.rating, body = excluded.body, status = 'pending', published_at = null`;
     await db()`update quotes set showcase_consent = ${f.get("showcase") === "on"} where id = ${q.id}`;
+    if (rating >= 4) {
+      const { getSetting } = await import("@/lib/settings");
+      const url = (await getSetting("trust")).google_review_url;
+      if (url) await queueMessage("M24", token, q.customer_email, { name: (q.customer_name ?? "").split(" ")[0] || null, url });
+    }
+  });
+}
+
+/** G2: "How did you hear about us?" One tap after payment. */
+export async function saveHeard(f: FormData) {
+  const token = s(f, "token");
+  const opts = ["facebook", "google", "youtube", "friend", "saw_install", "other"];
+  await run(token, async () => {
+    const v = s(f, "heard");
+    if (!opts.includes(v)) throw new Error("Pick one");
+    await db()`update quotes set heard_from = ${v}, heard_note = ${s(f, "note").slice(0, 200) || null} where token = ${token} and heard_from is null`;
+  });
+}
+
+/** R0: fault report from the System Record. */
+export async function reportProblem(f: FormData) {
+  const token = s(f, "token");
+  let ok = false;
+  try {
+    if (!(await allow("fault", 5))) throw new Error("Too many reports — please wait a few minutes");
+    const q = (await getQuote(token))!;
+    const { reportFault } = await import("@/lib/record");
+    await reportFault(q, { what: s(f, "what").slice(0, 80), detail: s(f, "detail").slice(0, 3000), photos: f.getAll("photo").filter((x): x is File => x instanceof File) });
+    ok = true;
+  } catch (e) { back(token, (e as Error).message); }
+  if (ok) redirect(`/quote/${token}?sent=fault#help`);
+}
+
+/** R0: pass the record to the buyer of the home. */
+export async function passRecord(f: FormData) {
+  const token = s(f, "token");
+  let done = false;
+  try {
+    if (f.get("confirm") !== "on") throw new Error("Tick the box to confirm");
+    const email = s(f, "email").toLowerCase(), name = s(f, "name");
+    if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter the buyer's name and email");
+    const { transferRecord } = await import("@/lib/record");
+    await transferRecord((await getQuote(token))!, { name, email });
+    done = true;
+  } catch (e) { back(token, (e as Error).message); }
+  if (done) redirect(`/quote/${token}`);
+}
+
+/** U1: add or remove an add-on. */
+export async function addAddonAction(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => { const { addAddon } = await import("@/lib/addons"); await addAddon((await getQuote(token))!, s(f, "code")); });
+}
+export async function removeAddonAction(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => { const { removeAddon } = await import("@/lib/addons"); await removeAddon((await getQuote(token))!, s(f, "addon")); });
+}
+
+/** R1: join the yearly service plan. */
+export async function joinPlan(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => {
+    const { getSetting } = await import("@/lib/settings");
+    const plan = await getSetting("service_plan");
+    if (!plan.on || !(plan.price > 0)) throw new Error("The service plan isn't open yet");
+    const q = (await getQuote(token))!;
+    const ref = `DSP${q.token.slice(0, 5).toUpperCase()}`;
+    const [m] = await db()`insert into memberships (quote_id, price, reference) select ${q.id}, ${plan.price}, ${ref}
+      where not exists (select 1 from memberships where quote_id = ${q.id} and status in ('pending','active')) returning id`;
+    if (m && ["installed", "lodged", "settled", "complete"].includes(q.status)) await queueMessage("M25", token, q.customer_email, { name: q.customer_name, amount: `$${plan.price}`, reference: ref });
   });
 }
