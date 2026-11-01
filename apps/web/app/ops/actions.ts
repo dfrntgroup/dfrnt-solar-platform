@@ -73,7 +73,7 @@ export async function saveInstaller(f: FormData) {
     }
     await write({ actor: me.actor, action: "installers.update" }, { id, capacity, ranges }, async (tx) => {
       await tx`update installers set capacity = ${tx.json(capacity)}, active = ${f.get("active") === "on"},
-        postcode_ranges = ${ranges.map(([a, b]) => `[${a},${(b ?? a ?? 0) + 1})`)}::int4range[] where id = ${id}`;
+        formbay_installer_id = ${s(f, "formbay_installer_id") || null}, postcode_ranges = ${ranges.map(([a, b]) => `[${a},${(b ?? a ?? 0) + 1})`)}::int4range[] where id = ${id}`;
       return { entity: "installer", entityId: id, event: "installer.updated", result: { ok: true } };
     });
   });
@@ -251,4 +251,39 @@ export async function resendMessage(f: FormData) {
   await db()`update messages set status = 'queued' where id = ${String(f.get("id"))} and status in ('failed','held')`;
   await deliver(String(f.get("id")));
   revalidatePath("/ops/messages"); redirect("/ops/messages");
+}
+
+
+/* Formbay: ops sends a booked job, links an existing one, or syncs statuses. Every action is audited. */
+export async function formbaySend(f: FormData) {
+  const me = await requireStaff();
+  const id = String(f.get("id"));
+  if (f.get("confirm") !== "on") redirect(`/ops/job/${id}?error=${encodeURIComponent("Tick the box to confirm the details are right")}`);
+  const { sendFormbayJob } = await import("@/lib/formbay-job");
+  try {
+    const q = (await getQuoteById(id))!;
+    const [inst] = await db()`select formbay_installer_id, business_name from installers where id = ${q.installer_id}`;
+    const r = await sendFormbayJob(q, (inst as never) ?? null);
+    await write({ actor: me.actor, action: "formbay.create" }, { id, formid: r.formid }, async () => ({ entity: "quote", entityId: id, event: "formbay.created", result: r }));
+  } catch (e) { redirect(`/ops/job/${id}?error=${encodeURIComponent((e as Error).message)}`); }
+  revalidatePath(`/ops/job/${id}`); redirect(`/ops/job/${id}`);
+}
+
+export async function formbayLink(f: FormData) {
+  const me = await requireStaff();
+  const id = String(f.get("id")), formid = String(f.get("formid") ?? "").trim(), bstc = String(f.get("bstc") ?? "").trim();
+  if (!/^\d+$/.test(formid || bstc)) redirect(`/ops/job/${id}?error=${encodeURIComponent("Enter the Formbay form or BSTC number")}`);
+  await write({ actor: me.actor, action: "formbay.link" }, { id, formid, bstc }, async (tx) => {
+    await tx`update quotes set formbay_formid = ${formid || null}, formbay_bstc_id = ${bstc || null} where id = ${id}`;
+    return { entity: "quote", entityId: id, event: "formbay.linked", result: { formid, bstc } };
+  });
+  revalidatePath(`/ops/job/${id}`); redirect(`/ops/job/${id}`);
+}
+
+export async function formbaySyncNow(f: FormData) {
+  await requireStaff();
+  const { runFormbaySync } = await import("@/lib/timers");
+  const out = await runFormbaySync();
+  const back = String(f.get("back") ?? "/ops");
+  redirect(`${back}${back.includes("?") ? "&" : "?"}ok=${encodeURIComponent(`Formbay sync: ${JSON.stringify(out)}`)}`);
 }

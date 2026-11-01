@@ -47,11 +47,14 @@ export async function submitHome(f: FormData) {
       switchboard: (s(f, "switchboard") || "unsure") as SiteAnswers["switchboard"],
       cableRunM: Number(s(f, "cableRunM") || 5),
       priorBatteryClaim: s(f, "priorBatteryClaim") === "yes",
+      nmi: s(f, "nmi").replace(/\s/g, "").toUpperCase() || undefined,
+      energyRetailer: s(f, "energyRetailer") || undefined,
       photos,
     };
     if (!/^\d{4}$/.test(site.address.postcode)) throw new Error("Enter a 4-digit postcode");
     if (s(f, "multi") === "yes" && !site.address.unit) throw new Error("Add your unit or lot number — the rebate is rejected without it");
     if (/^\s*\d+\s*[-–]\s*\d+\s/.test(site.address.line1) && !site.address.unit) throw new Error("That street number is a range (like 19–21). Add your unit or lot number");
+    if (site.nmi && !/^[A-Z0-9]{10,11}$/.test(site.nmi)) throw new Error("Your NMI is 10 or 11 letters and numbers, printed on your electricity bill");
     if (!s(f, "name") || !/^\S+@\S+\.\S+$/.test(s(f, "email"))) throw new Error("Enter your name and a valid email");
     await submitSite(q, site, { name: s(f, "name"), email: s(f, "email"), phone: s(f, "phone") });
   });

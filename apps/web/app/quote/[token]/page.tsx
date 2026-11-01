@@ -103,6 +103,8 @@ export default async function Record({ params, searchParams }: { params: Promise
             <Field label="Is that wall shared with a bedroom or living area?"><select name="againstHabitableRoom" style={input}><option value="no">No</option><option value="yes">Yes</option></select></Field>
             <Field label="Could a car hit the battery there?"><select name="vehicleExposure" style={input}><option value="no">No</option><option value="yes">Yes</option></select></Field>
             <Field label="Switchboard"><select name="switchboard" style={input}><option value="ok">Modern, with spare space</option><option value="needs_subboard">Full or old</option><option value="unsure">Not sure</option></select></Field>
+            <Field label="NMI (optional now, 10–11 characters on your electricity bill)"><input name="nmi" style={input} placeholder="e.g. 3120123456" autoComplete="off" /></Field>
+            <Field label="Electricity retailer (optional)"><input name="energyRetailer" style={input} placeholder="e.g. Origin, AGL" /></Field>
             <Field label="Has this home already claimed a battery rebate?"><select name="priorBatteryClaim" style={input}><option value="no">No</option><option value="yes">Yes</option></select></Field>
             <h3 style={{ marginTop: 18 }}>Photos</h3>
             <p className="muted small">Switchboard with the door open · electricity meter · roof from the street · where the battery goes.</p>

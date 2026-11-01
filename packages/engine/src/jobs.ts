@@ -55,6 +55,9 @@ export interface SiteAnswers {
   vehicleExposure?: boolean;
   switchboard: "ok" | "needs_subboard" | "unsure";
   cableRunM?: number;
+  /** National Metering Identifier (on the electricity bill). Needed for the battery rebate and grid connection. */
+  nmi?: string;
+  energyRetailer?: string;
   /** NMI already claimed a battery rebate. */
   priorBatteryClaim?: boolean;
   photos: Record<string, boolean>;

@@ -8,15 +8,17 @@ import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2 } from "@/lib/site";
-import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent, photoPublic } from "../../actions";
+import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent, photoPublic, formbaySend, formbayLink, formbaySyncNow } from "../../actions";
+import { buildFormbayJob } from "@/lib/formbay-job";
+import { formbayConfigured } from "@/lib/formbay";
 import { Step } from "@/components/Step";
 
 export const dynamic = "force-dynamic";
 
-export default async function Job({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string }> }) {
+export default async function Job({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ error?: string; ok?: string }> }) {
   const me = await requireStaff();
   const { id } = await params;
-  const { error } = await searchParams;
+  const { error, ok } = await searchParams;
   const q = await getQuoteById(id);
   if (!q) notFound();
   const p = q.snapshot ?? q.result;
@@ -27,6 +29,10 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
   const audit = await db()`select at, actor_type, actor_id, action, rationale from audit_log where entity = 'quote' and entity_id = ${id} order by id desc limit 50`;
   const msgs = await db()`select template, status, subject, created_at from messages where quote_id = ${id} order by created_at desc`;
   const pays = await db()`select id, kind, method, amount::float8 amount, reference, status from payments where quote_id = ${id}`;
+  const [fb] = await db()`select formbay_formid, formbay_bstc_id, formbay_status, formbay_complete, formbay_synced_at, formbay_sent_payload is not null sent from quotes where id = ${id}`;
+  const [inst] = q.installer_id ? await db()`select formbay_installer_id, business_name from installers where id = ${q.installer_id}` : [];
+  const fbJob = buildFormbayJob(q, (inst as never) ?? null);
+  const fbEligible = ["booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed"].includes(q.status);
   const pos = await db()`select id, number, supplier, total_ex::float8 total, status from purchase_orders where quote_id = ${id} and status <> 'cancelled' order by number`;
   const received = pays.filter((x) => x.kind !== "refund" && x.status === "received").reduce((a, x) => a + (x.amount as number), 0) - pays.filter((x) => x.kind === "refund").reduce((a, x) => a + (x.amount as number), 0);
   const vars = await db()`select description, sell_inc::float8 sell_inc, status from variations where quote_id = ${id}`;
@@ -48,6 +54,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <tr><td>Phases · roof · storeys</td><td className="r">{String(site.phases)} · {site.roofType} · {site.storeys}</td></tr>
             <tr><td>Battery location</td><td className="r">{site.batteryLocation}{site.againstHabitableRoom ? " (habitable wall)" : ""}{site.vehicleExposure ? " · vehicle exposure" : ""}</td></tr>
             <tr><td>Switchboard</td><td className="r">{site.switchboard}</td></tr>
+            <tr><td>NMI · retailer</td><td className="r">{(site as { nmi?: string }).nmi ?? "not given"} · {(site as { energyRetailer?: string }).energyRetailer ?? "–"}</td></tr>
             <tr><td>Prior battery claim on NMI</td><td className="r">{site.priorBatteryClaim ? "yes" : "no"}</td></tr>
           </tbody></table> : <p className="muted">Not submitted yet.</p>}
           {q.pricing_reasons?.length ? <div className="note" style={{ marginTop: 8 }}>Needs pricing: {q.pricing_reasons.join(" · ")}</div> : null}
@@ -68,6 +75,25 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
           <table className="lines small"><tbody>{audit.map((a, i) => <tr key={i}><td>{new Date(a.at as string).toLocaleString("en-AU", { timeZone: "Australia/Brisbane" })}</td><td>{a.action as string}</td><td>{a.actor_type as string}</td><td>{(a.rationale as string) ?? ""}</td></tr>)}</tbody></table>
         </div>
         <aside>
+          {ok && <div className="ok small" style={{ marginBottom: 12 }}>{ok}</div>}
+          <div className="card" style={{ marginBottom: 12 }}>
+            <strong>Formbay</strong>
+            {!formbayConfigured() ? <p className="small muted">Not connected.</p> : fb?.formbay_formid || fb?.formbay_bstc_id ? (<>
+              <p className="small">Form {fb.formbay_formid ?? "–"} · BSTC {fb.formbay_bstc_id ?? "–"}<br />Status: <strong>{(fb.formbay_status as string) ?? "not synced yet"}</strong>{fb.formbay_complete ? " · evidence complete" : ""}{fb.formbay_synced_at ? <span className="muted"> · checked {new Date(fb.formbay_synced_at as string).toLocaleString("en-AU", { timeZone: "Australia/Brisbane" })}</span> : null}</p>
+              <form action={formbaySyncNow}><input type="hidden" name="back" value={`/ops/job/${id}`} /><button className="btn sm ghost">Check Formbay now</button></form>
+            </>) : (<>
+              {fbJob.blockers.length > 0
+                ? <div className="note small">Before this can go to Formbay:<ul style={{ margin: "6px 0 0 18px" }}>{fbJob.blockers.map((b) => <li key={b}>{b}</li>)}</ul></div>
+                : <p className="small ok">Ready to create in Formbay.</p>}
+              {fbJob.warnings.map((w) => <p key={w} className="small muted">{w}</p>)}
+              <details className="small" style={{ margin: "8px 0" }}><summary>What will be sent</summary><pre style={{ whiteSpace: "pre-wrap", fontSize: 11, maxHeight: 280, overflow: "auto" }}>{JSON.stringify(fbJob.payload, null, 2)}</pre></details>
+              {fbEligible && fbJob.blockers.length === 0 && <form action={formbaySend}><input type="hidden" name="id" value={id} />
+                <label className="small" style={{ display: "flex", gap: 6 }}><input type="checkbox" name="confirm" /> Address (with unit), NMI, installer and equipment are right</label>
+                <button className="btn sm" style={{ marginTop: 6 }}>Create job in Formbay</button></form>}
+              <form action={formbayLink} style={{ display: "flex", gap: 6, marginTop: 10 }}><input type="hidden" name="id" value={id} />
+                <input name="bstc" placeholder="Already in Formbay? BSTC number" style={{ ...input, width: "100%" }} /><button className="btn sm ghost">Link</button></form>
+            </>)}
+          </div>
           {(q.status === "payment_pending" || q.status === "payment_review") && <form action={opsMarkPaid} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Bank transfer {q.payment_reference}</strong><span className="small">Expecting {aud2(p.stack.amount_payable)}</span>
             <button className="btn" type="submit">Funds received — mark paid</button></form>}

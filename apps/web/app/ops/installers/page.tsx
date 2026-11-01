@@ -10,7 +10,7 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export default async function Installers({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const me = await requireStaff();
   const { error } = await searchParams;
-  const rows = await db()`select id, business_name, contact_name, email, active, is_test, capacity, scope,
+  const rows = await db()`select id, business_name, contact_name, email, active, is_test, capacity, scope, formbay_installer_id,
     array_to_string(array(select (lower(r)::text || '-' || (upper(r)-1)::text) from unnest(postcode_ranges) r), ', ') ranges from installers order by created_at`;
   const apps = await db()`select id, business_name, contact_name, email, postcodes, licence_no from installer_applications where status = 'new' order by created_at`;
   return (
@@ -24,6 +24,7 @@ export default async function Installers({ searchParams }: { searchParams: Promi
           <input type="hidden" name="id" value={r.id as string} />
           <strong>{r.business_name as string}{r.is_test ? " (test)" : ""}</strong><span className="small muted">{r.contact_name as string} · {r.email as string}</span>
           <label className="small"><input type="checkbox" name="active" defaultChecked={r.active as boolean} /> Active (takes new jobs)</label>
+          <label className="small">Formbay team id (installer / designer / electrician)<input name="formbay_installer_id" defaultValue={(r.formbay_installer_id as string) ?? ""} placeholder="e.g. 23157" style={input} /></label>
           <label className="small">Postcode ranges<input name="ranges" defaultValue={r.ranges as string} style={input} /></label>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <label className="small">Jobs per day<input name="jobsPerDay" defaultValue={c.jobsPerDay} style={input} /></label>

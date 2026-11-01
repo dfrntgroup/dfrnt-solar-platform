@@ -1,4 +1,5 @@
-import { formbayConfigured, formbayGet, formbayToken } from "@/lib/formbay";
+import { formbayConfigured, formbayToken } from "@/lib/formbay";
+import { formbayGetAccept } from "@/lib/formbay-job";
 import { allow } from "@/lib/ratelimit";
 
 export const dynamic = "force-dynamic";
@@ -12,9 +13,9 @@ export async function GET() {
     const t = await formbayToken(true);
     out.login = "ok"; out.token_expires_in_s = t.expiresIn;
   } catch (e) { out.login = "failed"; out.error = (e as Error).message; return Response.json(out); }
-  for (const path of ["/jobs/get_jobs?ftype=bstc", "/get_jobs?ftype=bstc"]) {
+  for (const path of ["/client_api/get_jobs?ftype=bstc"]) {
     try {
-      const r = await formbayGet(path);
+      const r = await formbayGetAccept(path, "application/vnd.fb.jobs+json;v=1");
       const list = Array.isArray(r.json) ? r.json : Array.isArray((r.json as { data?: unknown[] })?.data) ? (r.json as { data: unknown[] }).data : null;
       out[path] = { status: r.status, jobs_visible: list ? list.length : null };
       if (r.status === 200) break;

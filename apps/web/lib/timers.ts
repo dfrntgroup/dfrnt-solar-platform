@@ -74,6 +74,8 @@ export async function runDaily() {
     await db()`update quotes set reminders = reminders || '{"m10":true}' where id = ${q.id}`;
   }
   out.review_requests = ask.length;
+  // Formbay status for every linked job.
+  try { out.formbay = (await runFormbaySync()) as never; } catch { /* reported on the job pages */ }
   // Agent proposals expire after 24 h.
   const exp = await db()`update approvals set status = 'expired', decided_at = now(), decision_note = 'Expired after 24 h'
     where status = 'pending' and created_at < now() - interval '24 hours' returning id`;
@@ -101,4 +103,28 @@ export async function runCutoff() {
     }
   }
   return { reassigned, to_ops: toOps };
+}
+
+/** Formbay has no webhooks: poll every linked job that isn't finished, store its status, and move installed jobs to lodged
+ *  once Formbay has submitted them to the Clean Energy Regulator. */
+export async function runFormbaySync() {
+  const { formbayConfigured } = await import("./formbay");
+  if (!formbayConfigured()) return { skipped: "not configured" };
+  const { formbayJobStatus } = await import("./formbay-job");
+  const jobs = await db()`select id, status, coalesce(formbay_bstc_id, formbay_formid) fid from quotes
+    where coalesce(formbay_bstc_id, formbay_formid) is not null and status not in ('settled','complete','cancelled') limit 50`;
+  let synced = 0, lodged = 0, failed = 0;
+  for (const j of jobs) {
+    try {
+      const r = await formbayJobStatus(j.fid as string);
+      if (r.http !== 200 || !r.status) { failed++; continue; }
+      await db()`update quotes set formbay_status = ${r.status}, formbay_complete = ${r.complete}, formbay_synced_at = now() where id = ${j.id}`;
+      synced++;
+      if (j.status === "installed" && ["pending_cer_approval", "cer_approved", "sold"].includes(r.status)) {
+        await setStatus(j.id as string, "installed", "lodged", `Formbay status ${r.status}: submitted to the Clean Energy Regulator`);
+        lodged++;
+      }
+    } catch { failed++; }
+  }
+  return { jobs: jobs.length, synced, lodged, failed };
 }

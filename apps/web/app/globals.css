@@ -120,6 +120,7 @@ section { padding: 52px 0; }
 
 /* product page */
 .pdp { display: grid; grid-template-columns: 1.15fr 1fr; gap: 40px; align-items: start; }
+.pdp > * { min-width: 0; }   /* stops the long battery-size row from squeezing the left column */
 @media (max-width: 899px) { .pdp { grid-template-columns: 1fr; gap: 24px; } }
 .gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
 .gallery div { aspect-ratio: 3/4; border: 1px solid var(--line); border-radius: var(--r); display: flex; align-items: center; justify-content: center; overflow: hidden; background: #fafcfb; }
@@ -186,3 +187,4 @@ input:focus-visible + .pill-r { outline: 2px solid var(--teal); }
 .hdr.admin nav a { text-decoration: none; }
 .hdr.admin nav a:hover { color: var(--teal); }
 .hdr.admin .who { white-space: nowrap; }
+@media (min-width: 900px) { .buybox .pills { flex-wrap: wrap; overflow: visible; } }
