@@ -5,14 +5,40 @@ import type { SiteAnswers } from "@dfrnt/engine";
 import { formbayToken, FORMBAY_API, formbayGet } from "./formbay";
 import type { QuoteRow } from "./jobs";
 
-/** CEC strings Formbay expects, per our SKU. Entries marked verify must be checked against Formbay's CEC list before first send. */
-export const CEC: Record<string, { brand: string; series: string; model: string; usable_kwh?: number; nominal_kwh?: number; verify?: boolean }> = {
-  "PRT-GW-LX-D-8.3-G20": { brand: "GoodWe Technologies Co Ltd", series: "Lynx D G2", model: "GW8.3-BAT-D-G20", usable_kwh: 8.0, nominal_kwh: 8.32 },
-  "INV-GW-EHA-10K": { brand: "GoodWe Technologies Co Ltd", series: "ESA", model: "GW9.999K-EHA-G20 (AS4777-2 2020)" },
+/** CEC strings exactly as Formbay lists them (checked against Formbay's reference lists and two live jobs, 1 Nov 2026). */
+const SOLAX = "SolaX Power Network Technology (Zhejiang) Co Ltd", SOLAX_X3 = "SolaX Power Network Technology (Zhe jiang) Co Ltd";
+const GOODWE = "GoodWe Technologies Co Ltd", SUNGROW = "Sungrow Power Supply Co Ltd";
+export const CEC_INVERTERS: Record<string, { brand: string; series: string; model: string; verify?: string }> = {
+  "INV-SOLAX-VAST-5K": { brand: SOLAX, series: "X1-VAST", model: "X1-VAST-5K (AS4777-2 2020)" },
+  "INV-SOLAX-VAST-8K": { brand: SOLAX, series: "X1-VAST", model: "X1-VAST-8K (AS4777-2 2020)" },
+  "INV-SOLAX-VAST-10K": { brand: SOLAX, series: "X1-VAST", model: "X1-VAST-10K (AS4777-2 2020)" },
+  "INV-SOLAX-HYB-8K": { brand: SOLAX_X3, series: "X3-Hybrid-D", model: "X3-Hybrid-8.0-D (AS4777-2 2020)", verify: "series name" },
+  "INV-SOLAX-HYB-10K": { brand: SOLAX_X3, series: "X3-Hybrid-D", model: "X3-Hybrid-10.0-D (AS4777-2 2020)", verify: "series name" },
+  "INV-SOLAX-HYB-15K": { brand: SOLAX_X3, series: "X3-Hybrid-D", model: "X3-Hybrid-15.0-D (AS4777-2 2020)", verify: "series name" },
+  "INV-GW-EHA-5K": { brand: GOODWE, series: "ESA", model: "GW5K-EHA-G20 (AS4777-2 2020)" },
+  "INV-GW-EHA-10K": { brand: GOODWE, series: "ESA", model: "GW9.999K-EHA-G20 (AS4777-2 2020)" },
+  "INV-GW-ETA-10K": { brand: GOODWE, series: "ESA", model: "GW9.999K-ETA-G20 (AS4777-2 2020)" },
+  "INV-GW-ETA-15K": { brand: GOODWE, series: "ESA", model: "GW15K-ETA-G20 (AS4777-2 2020)" },
+  "INV-SGR-SH5.0RS": { brand: SUNGROW, series: "SH-RS", model: "SH5.0RS (AS4777-2 2020)", verify: "series name" },
+  "INV-SGR-SH8.0RS": { brand: SUNGROW, series: "SH-RS", model: "SH8.0RS (AS4777-2 2020)", verify: "series name" },
+  "INV-SGR-SH10RS": { brand: SUNGROW, series: "SH-RS", model: "SH10RS (AS4777-2 2020)", verify: "series name" },
 };
+// SolaX and Sungrow register the whole battery system by module count; GoodWe Lynx D registers each module.
+const SOLAX_HS: Record<number, [string, number]> = { 2: ["T-HS10.2", 10.2], 3: ["T-HS15.3", 15.3], 4: ["T-HS20.4", 20.4], 5: ["T-HS25.6", 25.6], 6: ["T-HS30.7", 30.7], 7: ["T-HS35.8", 35.8], 8: ["T-HS40.9", 40.9], 9: ["T-HS46.0", 46.0], 10: ["T-HS51.2", 51.2], 11: ["T-HS56.3", 56.3], 12: ["T-HS61.4", 61.4], 13: ["T-HS66.5", 66.5] };
+const GW_LYNX: Record<string, [string, number]> = { "PRT-GW-LX-D-5.1-G20": ["GW5.1-BAT-D-G20", 5.0], "PRT-GW-LX-D-8.3-G20": ["GW8.3-BAT-D-G20", 8.0], "PRT-GW-LX-D-9.0-G20": ["GW9.0-BAT-D-G20", 8.85] };
+
+export function cecBatteries(bom: { sku: string; qty: number }[]) {
+  const mods = (prefix: string) => bom.filter((b) => b.sku.startsWith(prefix)).reduce((n, b) => n + b.qty, 0);
+  const sx = mods("PRT-SOLAX-TB-HS51"), sg = mods("PRT-SGR-SMR050");
+  if (sx) { const m = SOLAX_HS[sx]; return m ? [{ brand: SOLAX, series: "TSYS-HS51", model: m[0], quantity: 1, usable_kwh: m[1] }] : null; }
+  if (sg) return sg >= 2 && sg <= 8 ? [{ brand: SUNGROW, series: "SBH", model: `SBH${sg * 50}`, quantity: 1, usable_kwh: sg * 5 }] : null;
+  const gw = bom.filter((b) => GW_LYNX[b.sku]);
+  if (gw.length) return gw.map((b) => ({ brand: GOODWE, series: "Lynx D G2", model: GW_LYNX[b.sku]![0], quantity: b.qty, usable_kwh: GW_LYNX[b.sku]![1] }));
+  return [];
+}
 
 const STREET_TYPES: Record<string, string> = {
-  street: "ST", st: "ST", road: "RD", rd: "RD", avenue: "AVE", ave: "AVE", drive: "DR", dr: "DR", court: "CT", ct: "CT", circuit: "CCT", cct: "CCT",
+  street: "ST", st: "ST", road: "RD", rd: "RD", avenue: "AV", ave: "AV", av: "AV", drive: "DR", dr: "DR", court: "CT", ct: "CT", circuit: "CCT", cct: "CCT",
   place: "PL", pl: "PL", crescent: "CRES", cres: "CRES", parade: "PDE", pde: "PDE", lane: "LANE", ln: "LANE", boulevard: "BVD", bvd: "BVD",
   close: "CL", cl: "CL", terrace: "TCE", tce: "TCE", way: "WAY", highway: "HWY", hwy: "HWY", esplanade: "ESP", esp: "ESP", grove: "GR", gr: "GR",
   square: "SQ", sq: "SQ", rise: "RISE", view: "VIEW", vista: "VSTA", walk: "WALK", track: "TRK", trail: "TRL", mews: "MEWS", loop: "LOOP", parkway: "PWY",
@@ -39,12 +65,11 @@ export function buildFormbayJob(q: QuoteRow, installer: Installer) {
   const street = site ? parseStreet(site.address.line1) : null;
   if (site && !street) blockers.push(`Couldn't split the street address "${site.address.line1}" into number, name and type: fix it on the job`);
   const invSku = c.bom.find((b) => b.sku.startsWith("INV-"))?.sku;
-  const inv = invSku ? CEC[invSku] : undefined;
+  const inv = invSku ? CEC_INVERTERS[invSku] : undefined;
   if (!inv) blockers.push(`No CEC model string for inverter ${invSku ?? "?"}`);
-  const modules = c.bom.filter((b) => (b as { serial?: string }).serial === "module");
-  const bats = modules.map((b) => ({ b, cec: CEC[b.sku] }));
-  if (c.usable_kwh > 0 && (!bats.length || bats.some((x) => !x.cec))) blockers.push(`No CEC model string for battery ${bats.map((x) => x.b.sku).join(", ") || "?"}`);
-  [inv, ...bats.map((x) => x.cec)].forEach((x) => x?.verify && warnings.push(`${x.model}: CEC string to be verified`));
+  else if (inv.verify) warnings.push(`${inv.model}: check the ${inv.verify} in Formbay after the first send`);
+  const bats = c.usable_kwh > 0 ? cecBatteries(c.bom) : [];
+  if (c.usable_kwh > 0 && (!bats || !bats.length)) blockers.push("No CEC battery model for this module count");
   const [first, ...rest] = String(q.customer_name ?? "").trim().split(/\s+/);
   const isPv = c.panel_kw > 0;
   const payload = {
@@ -59,7 +84,7 @@ export function buildFormbayJob(q: QuoteRow, installer: Installer) {
     isCommercial: false,
     scheduledInstallDate: q.install_date,
     inverters: inv ? [{ brand: inv.brand, series: inv.series, model: inv.model, quantity: 1, size: c.inverter?.ac_w }] : [],
-    batteries: bats.filter((x) => x.cec).map((x) => ({ brand: x.cec!.brand, series: x.cec!.series, model: x.cec!.model, quantity: x.b.qty, size: Math.round((x.cec!.usable_kwh ?? 0) * 1000) })),
+    batteries: (bats ?? []).map((b) => ({ brand: b.brand, series: b.series, model: b.model, quantity: b.quantity, size: Math.round(b.usable_kwh * 1000) })),
     installerId: installer?.formbay_installer_id, designerId: installer?.formbay_installer_id, electricianId: installer?.formbay_installer_id,
     nmiNumber: site?.nmi, gridConnection: { nmi: site?.nmi }, energyRetailer: site?.energyRetailer,
     is_bstc: c.usable_kwh > 0 ? 1 : 0, activity_type: 4, pv_installed_90_days: false,
