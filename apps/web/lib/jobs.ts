@@ -137,9 +137,10 @@ async function freezePrice(q: QuoteRow, p: Quote, actor: Actor, rationale: strin
 /* I2: installer confirms price, optionally adding named lines from the menu */
 export async function installerPrice(q: QuoteRow, actor: Actor, extraCodes: string[], note?: string) {
   if (q.status !== "pricing_installer" && q.status !== "tech_review") throw new Error("Not waiting for a price");
-  const extraLabour = extraCodes.filter(Boolean).map((code) => ({ code }));
+  // "CODE" or "CODE:qty" (per-metre / per-km items carry a quantity)
+  const extraLabour = extraCodes.filter(Boolean).map((c) => { const [code, q] = c.split(":"); return { code: code!, qty: Math.min(500, Math.max(1, Math.round(Number(q) || 1))) }; });
   const p = await reprice(q, { extraLabour });
-  await freezePrice(q, p, actor, note || (extraCodes.length ? `Installer added ${extraCodes.join(", ")}` : "Installer confirmed standard price"));
+  await freezePrice(q, p, actor, note || (extraCodes.length ? `Installer added ${extraCodes.map((c) => c.replace(":", " × ")).join(", ")}` : "Installer confirmed standard price"));
 }
 
 /* D2: sign the agreement */

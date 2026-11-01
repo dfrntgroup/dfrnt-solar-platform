@@ -7,6 +7,8 @@ import { requireStaff } from "@/lib/auth";
 import { advance, cancel, getQuoteById, installerPrice, markPaid, raiseVariation } from "@/lib/jobs";
 
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
+/** Ticked extras, with a quantity for per-metre / per-km items ("CODE:qty"). */
+const extraCodes = (f: FormData) => f.getAll("codes").map(String).map((c) => { const q = s(f, `qty_${c}`); return q ? `${c}:${q}` : c; });
 async function run(path: string, fn: () => Promise<unknown>) {
   try { await fn(); } catch (e) { if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e; redirect(`${path}?error=${encodeURIComponent((e as Error).message)}`); }
   revalidatePath(path); redirect(path);
@@ -25,7 +27,7 @@ export async function opsAdvance(f: FormData) {
 }
 export async function opsPrice(f: FormData) {
   const me = await requireStaff(); const id = s(f, "id");
-  await run(`/ops/job/${id}`, async () => installerPrice((await getQuoteById(id))!, me.actor, f.getAll("codes").map(String), s(f, "note")));
+  await run(`/ops/job/${id}`, async () => installerPrice((await getQuoteById(id))!, me.actor, extraCodes(f), s(f, "note")));
 }
 export async function opsVariation(f: FormData) {
   const me = await requireStaff(); const id = s(f, "id");
@@ -147,7 +149,7 @@ export async function techReview(f: FormData) {
     const d = s(f, "decision");
     if (d === "installer") await advance(q, "pricing_installer", me.actor, s(f, "note") || "Tech review: back to the installer");
     else if (d === "decline") await advance(q, "declined", me.actor, s(f, "note") || "Tech review: declined");
-    else await installerPrice(q, me.actor, f.getAll("codes").map(String), s(f, "note") || "Tech review: priced by ops");
+    else await installerPrice(q, me.actor, extraCodes(f), s(f, "note") || "Tech review: priced by ops");
   });
 }
 export async function draftPO(f: FormData) {

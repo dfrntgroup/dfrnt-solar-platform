@@ -15,7 +15,8 @@ import { formbayConfigured } from "@/lib/formbay";
 import { Step } from "@/components/Step";
 import { ReviseForm } from "@/components/ReviseForm";
 import { JobThread } from "@/components/JobThread";
-import { REVISABLE } from "@/lib/jobs";
+import { REVISABLE, reprice } from "@/lib/jobs";
+import { PriceExtras, type Extra } from "@/components/PriceExtras";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +43,24 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
   const vars = await db()`select description, sell_inc::float8 sell_inc, status from variations where quote_id = ${id}`;
   const ledger = await db()`select description, amount_ex::float8 amount_ex, status from pay_ledger where quote_id = ${id}`;
   const next = TRANSITIONS[q.status].filter((t) => t !== "cancelled");
+  // Price this job / tech review: what each extra adds for the customer, and the installer's pay for it.
+  let extras: Extra[] = [], basePay = 0;
+  if (q.status === "pricing_installer" || q.status === "tech_review") {
+    const three = (q.site?.phases ?? q.input.phases) === 3;
+    const codes = ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-BARRIER", "SVC-BOLLARDS", "SVC-TERRACOTTA", "SVC-INST-2STY", "SVC-EXTRA-STRING", three ? "SVC-CABLE-3P" : "SVC-CABLE-1P", "SVC-TRAVEL"];
+    try {
+      basePay = (await reprice(q)).stack.amount_payable;
+      for (const code of codes) {
+        const item = menu.items.find((i) => i.code === code);
+        if (!item || !(item.menu_rate > 0)) continue;                     // no rate set yet: not offered
+        const per = item.per === "m_after_5" ? { unit: "metre", free: 5 } : item.per === "km_after_50" ? { unit: "km", free: 50 } : null;
+        const r = await reprice(q, { extraLabour: [{ code, qty: per ? per.free + 1 : 1 }] });
+        const line = r.stack.lines.find((l) => l.code === code);
+        extras.push({ code, description: item.description.replace(/, per (metre after 5 m|km)$/, ""), customer: Math.round((r.stack.amount_payable - basePay) * 100) / 100,
+          installer: line?.cost_ex_gst ?? null, unit: per?.unit, free: per?.free });
+      }
+    } catch { extras = []; }
+  }
   const site = q.site;
   const { recordDocuments, brandOf } = await import("@/lib/record");
   const recDocs = await recordDocuments(id);
@@ -127,12 +146,12 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
           {q.status === "pricing_installer" && <form action={opsPrice} className="card now" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Price this job (for the installer)</strong>
             <span className="small muted">Add named lines from the menu if the photos need them.</span>
-            {menu.items.filter((i) => ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-CABLE-1P", "SVC-CABLE-3P", "SVC-TRAVEL"].includes(i.code)).map((i) => <label key={i.code} className="small"><input type="checkbox" name="codes" value={i.code} /> {i.description}</label>)}
+            <PriceExtras id={id} base={basePay} extras={extras} />
             <input name="note" placeholder="Note to customer (optional)" style={input} />
             <button className="btn" type="submit">Confirm price</button></form>}
           {q.status === "tech_review" && <form action={techReview} className="card now" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Tech review (O5)</strong><span className="small muted">{q.pricing_reasons?.join(" · ")}</span>
-            {menu.items.filter((i) => ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-CABLE-1P", "SVC-TRAVEL"].includes(i.code)).map((i) => <label key={i.code} className="small"><input type="checkbox" name="codes" value={i.code} /> {i.description}</label>)}
+            <PriceExtras id={id} base={basePay} extras={extras} />
             <select name="decision" style={input}><option value="price">Proceed — price it (with any surcharge ticked)</option><option value="installer">Send back to an installer</option><option value="decline">Decline the job</option></select>
             <input name="note" placeholder="Note" style={input} /><button className="btn" type="submit">Decide</button></form>}
           {(q.status === "awaiting_date" || q.status === "booked") && pos.length === 0 && <div className="card" style={{ marginBottom: 12 }}><strong>Purchase orders</strong><Step action={draftPO} fields={{ id }} label="Draft POs from the parts list" /></div>}
