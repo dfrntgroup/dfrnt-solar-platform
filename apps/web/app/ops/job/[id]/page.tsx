@@ -52,7 +52,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
       <h1 style={{ fontSize: 26 }}>{q.customer_name ?? "No name yet"} · {q.status}</h1>
       <p className="muted">{q.title} · {p.config.summary}</p>
       {error && <div className="note">{error}</div>}
-      <div className="pdp">
+      <div className="pdp ops-job">
         <div>
           <h3>Site</h3>
           {site ? <table className="lines"><tbody>
@@ -72,12 +72,13 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
           {(q.heard_from || q.attribution) && <p className="small muted">Heard from: {q.heard_from ?? "not answered"}{q.heard_note ? ` (${q.heard_note})` : ""} · Tracking: {q.attribution?.gclid ? "Google Ads click" : q.attribution?.fbclid || q.attribution?.fbc ? "Meta ad click" : q.attribution?.utm_source ? `utm ${q.attribution.utm_source}/${q.attribution.utm_campaign ?? ""}` : q.attribution?.ref ? `from ${q.attribution.ref}` : "direct"}{q.attribution?.landing ? `, landed on ${q.attribution.landing}` : ""}</p>}
           {(q.install_date || q.rebook) && <p className="small">Install: {q.rebook ? "customer picking a new day" : `${q.install_date}${q.install_part === "am" ? " (morning)" : ""}`} · {q.job_days ?? "?"} crew-day(s) · booked via {q.booked_via ?? "–"}{q.google_event_id ? " · in installer's Google Calendar" : ""}{q.access_notes ? ` · access: ${q.access_notes}` : ""}</p>}
           {q.pricing_reasons?.length ? <div className="note" style={{ marginTop: 8 }}>Needs pricing: {q.pricing_reasons.join(" · ")}</div> : null}
-          <UsageJobCard quoteId={q.id} ops />
-          <h3 style={{ marginTop: 18 }}>Photos</h3>
+          <details className="msec" open><summary>Usage from the meter</summary><UsageJobCard quoteId={q.id} ops /></details>
+          <details className="msec" open><summary>Photos ({urls.length})</summary>
           <div className="filters">{urls.length ? urls.map((u, i) => u.url ? <a key={i} className="chip" href={u.url} target="_blank">{u.kind}</a> : <span key={i} className="chip">{u.kind} (local)</span>) : <span className="muted small">None</span>}</div>
           {consent?.showcase_consent && urls.length > 0 && <div className="small" style={{ marginTop: 8 }}><span className="muted">Customer agreed to share photos. Show on real installs:</span>
             <div className="filters">{urls.map((u) => <form key={u.id} action={photoPublic} style={{ display: "inline" }}><input type="hidden" name="photo" value={u.id} /><input type="hidden" name="job" value={id} /><input type="hidden" name="on" value={u.pub ? "0" : "1"} /><button className={`chip${u.pub ? " on" : ""}`}>{u.pub ? "✓ " : ""}{u.kind}</button></form>)}</div></div>}
-          <h3 style={{ marginTop: 18 }}>Price (frozen snapshot)</h3>
+          </details>
+          <details className="msec" open><summary>Price (frozen snapshot)</summary>
           <table className="lines"><tbody>
             {p.stack.lines.map((l) => <tr key={l.code}><td>{l.description} × {l.qty}</td><td className="r">{l.cost_ex_gst != null ? aud2(l.cost_ex_gst) : "–"} cost</td><td className="r">{l.sell_ex_gst != null ? aud2(l.sell_ex_gst) : "pending"}</td></tr>)}
             <tr><td>GST</td><td /><td className="r">{aud2(p.stack.gst)}</td></tr>
@@ -86,12 +87,14 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <tr><td>Gross margin</td><td /><td className="r">{aud2(p.stack.gross_margin)} ({p.stack.gross_margin_pct}%)</td></tr>
             <tr><td>Installer pay</td><td /><td className="r">{aud2(p.stack.installer_pay_ex_gst)}</td></tr>
           </tbody></table>
-          <h3 style={{ marginTop: 18 }}>Audit trail</h3>
+          </details>
+          <details className="msec" open><summary>Audit trail</summary>
           <table className="lines small"><tbody>{audit.map((a, i) => <tr key={i}><td>{new Date(a.at as string).toLocaleString("en-AU", { timeZone: "Australia/Brisbane" })}</td><td>{a.action as string}</td><td>{a.actor_type as string}</td><td>{(a.rationale as string) ?? ""}</td></tr>)}</tbody></table>
+          </details>
         </div>
         <aside>
           {ok && <div className="ok small" style={{ marginBottom: 12 }}>{ok}</div>}
-          <div className="card" style={{ marginBottom: 12 }}>
+          <div className="card fb-card" style={{ marginBottom: 12 }}>
             <strong>Formbay</strong>
             {!formbayConfigured() ? <p className="small muted">Not connected.</p> : fb?.formbay_formid || fb?.formbay_bstc_id ? (<>
               <p className="small">Form {fb.formbay_formid ?? "–"} · BSTC {fb.formbay_bstc_id ?? "–"}<br />Status: <strong>{(fb.formbay_status as string) ?? "not synced yet"}</strong>{fb.formbay_complete ? " · evidence complete" : ""}{fb.formbay_synced_at ? <span className="muted"> · checked {new Date(fb.formbay_synced_at as string).toLocaleString("en-AU", { timeZone: "Australia/Brisbane" })}</span> : null}</p>
@@ -109,7 +112,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
                 <input name="bstc" placeholder="Already in Formbay? BSTC number" style={{ ...input, width: "100%" }} /><button className="btn sm ghost">Link</button></form>
             </>)}
           </div>
-          {q.design_fee_status === "due" && <form action={opsDesignFeePaid} className="card" style={{ marginBottom: 12 }}>
+          {q.design_fee_status === "due" && <form action={opsDesignFeePaid} className="card now" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Design check fee due</strong><span className="small">{pays.filter((x) => x.kind === "report" && x.status === "pending").map((x) => `${aud2(x.amount as number)} · ref ${x.reference}`).join(", ")}</span>
             <span className="small muted">Marking it received issues a credit for the same amount on this job and sends it to the installer to check.</span>
             <button className="btn" type="submit">Fee received — send to installer</button></form>}
@@ -118,16 +121,16 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <input type="hidden" name="id" value={id} /><strong>Move the install day</strong><span className="small muted">Releases the day; the customer picks a new one and the freed day is offered to customers booked later.</span>
             <select name="reason" style={input} defaultValue="ops"><option value="ops">Our call</option><option value="customer">Customer asked</option><option value="rain">Rain</option><option value="sick">Installer sick</option><option value="parts">Parts</option><option value="declined">Installer can&apos;t do it</option></select>
             <button className="btn ghost sm">Release day</button></form>}
-          {(q.status === "payment_pending" || q.status === "payment_review") && <form action={opsMarkPaid} className="card" style={{ marginBottom: 12 }}>
+          {(q.status === "payment_pending" || q.status === "payment_review") && <form action={opsMarkPaid} className="card now" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Bank transfer {q.payment_reference}</strong><span className="small">Expecting {aud2(p.stack.amount_payable)}</span>
             <button className="btn" type="submit">Funds received — mark paid</button></form>}
-          {q.status === "pricing_installer" && <form action={opsPrice} className="card" style={{ marginBottom: 12 }}>
+          {q.status === "pricing_installer" && <form action={opsPrice} className="card now" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Price this job (for the installer)</strong>
             <span className="small muted">Add named lines from the menu if the photos need them.</span>
             {menu.items.filter((i) => ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-CABLE-1P", "SVC-CABLE-3P", "SVC-TRAVEL"].includes(i.code)).map((i) => <label key={i.code} className="small"><input type="checkbox" name="codes" value={i.code} /> {i.description}</label>)}
             <input name="note" placeholder="Note to customer (optional)" style={input} />
             <button className="btn" type="submit">Confirm price</button></form>}
-          {q.status === "tech_review" && <form action={techReview} className="card" style={{ marginBottom: 12 }}>
+          {q.status === "tech_review" && <form action={techReview} className="card now" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Tech review (O5)</strong><span className="small muted">{q.pricing_reasons?.join(" · ")}</span>
             {menu.items.filter((i) => ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-CABLE-1P", "SVC-TRAVEL"].includes(i.code)).map((i) => <label key={i.code} className="small"><input type="checkbox" name="codes" value={i.code} /> {i.description}</label>)}
             <select name="decision" style={input}><option value="price">Proceed — price it (with any surcharge ticked)</option><option value="installer">Send back to an installer</option><option value="decline">Decline the job</option></select>

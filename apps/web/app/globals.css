@@ -217,3 +217,49 @@ input:focus-visible + .pill-r { outline: 2px solid var(--teal); }
 .days { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
 .day { border: 2px solid var(--line); padding: 10px; display: flex; gap: 8px; align-items: center; cursor: pointer; font-weight: 600; font-size: 14px; }
 .day:has(input:checked) { border-color: var(--ink); background: var(--ink); color: #fff; }
+
+/* ── Ops and installer areas on phones (approved mockup, 1 Nov) ───────────────────────── */
+.omenu, .obar { display: none; }
+@media (max-width: 899px) {
+  .hdr.admin .adesk { display: none; }
+  .hdr.admin .wrap { flex-wrap: nowrap; justify-content: space-between; min-height: 52px; padding-top: 8px; padding-bottom: 8px; }
+  .omenu { display: block; }
+  .omenu > summary { list-style: none; cursor: pointer; border: 1px solid var(--line); border-radius: 7px; padding: 6px 12px; font-weight: 700; font-size: 14px; background: #fff; }
+  .omenu > summary::-webkit-details-marker { display: none; }
+  .omenu[open] > summary { position: relative; z-index: 61; }
+  .omenu-panel { position: fixed; inset: 52px 0 0 0; background: #fff; z-index: 60; overflow-y: auto; padding: 8px 16px 90px; border-top: 1px solid var(--line); }
+  .omenu-panel h4 { margin: 16px 0 2px; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+  .omenu-panel a { display: block; padding: 11px 0; border-bottom: 1px solid var(--line); color: var(--ink); text-decoration: none; font-size: 16px; }
+  .ofind input { width: 100%; padding: 11px 12px; border: 1px solid var(--line); border-radius: 8px; font: inherit; font-size: 16px; margin-top: 6px; }
+  .obar { display: grid; grid-template-columns: repeat(4, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 50; background: #fff; border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+  .obar a { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; height: 58px; font-size: 11px; color: var(--muted); text-decoration: none; }
+  .obar i { font-style: normal; font-size: 18px; line-height: 1; }
+  .obadge { position: absolute; top: 6px; left: calc(50% + 8px); min-width: 18px; padding: 0 5px; border-radius: 9px; background: #d93a1f; color: #fff; font-size: 10px; font-weight: 700; line-height: 17px; text-align: center; }
+  .abody { padding-bottom: 80px; }
+  .abody h1 { font-size: 22px !important; line-height: 1.15; }
+  /* Tables: each row becomes two lines (what it is, then the amounts) */
+  .abody table.lines tr { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px; border-top: 1px solid var(--line); padding: 8px 0; }
+  .abody table.lines td { border: 0; padding: 0; }
+  .abody table.lines td:first-child { flex: 1 1 100%; }
+  .abody table.lines td.r { margin-left: auto; }
+  .abody table.lines td:empty { display: none; }
+  .abody table.lines tr.total { border-top: 2px solid var(--ink); }
+  /* Forms: one field per line, full width; buttons easy to hit */
+  .abody input:not([type=checkbox]):not([type=radio]):not([type=hidden]), .abody select, .abody textarea { width: 100% !important; font-size: 16px; }
+  .abody form.card .btn, .abody .card > form .btn { width: 100%; padding-top: 12px; padding-bottom: 12px; }
+  .abody .card { gap: 8px; }
+  /* Job page: the action box comes first; Formbay after it */
+  .pdp.ops-job > aside { order: -1; display: flex; flex-direction: column; }
+  .pdp.ops-job > aside .fb-card { order: 9; }
+  .pdp.ops-job > aside .now { order: -1; border: 2px solid var(--teal); background: var(--mint); }
+  .desk-only { display: none !important; }
+  details.msec > summary { cursor: pointer; border: 1px solid var(--line); border-radius: 9px; padding: 11px 12px; font-weight: 700; list-style: none; margin-top: 8px; }
+  details.msec > summary::-webkit-details-marker { display: none; }
+  details.msec > summary::after { content: "›"; float: right; color: var(--muted); }
+  details.msec[open] > summary::after { content: "⌄"; }
+}
+@media (min-width: 900px) {
+  .mob-only { display: none !important; }
+  details.msec > summary { list-style: none; pointer-events: none; font-weight: 700; margin-top: 18px; font-size: 1.05em; }
+  details.msec > summary::-webkit-details-marker { display: none; }
+}

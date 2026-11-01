@@ -13,7 +13,8 @@ export const metadata = { title: "Ops board", robots: { index: false } };
 
 const COLUMNS = ["Pricing", "Tech review", "Quoted", "Pending payment", "Payment review", "Awaiting date", "Booked", "Gear ordered", "Delivered", "On site", "On hold", "Installed", "Lodged", "Settled", "Complete"];
 
-export default async function Board() {
+export default async function Board({ searchParams }: { searchParams: Promise<{ stage?: string }> }) {
+  const stage = (await searchParams).stage;
   const me = await requireStaff();
   const rows = await db()`select id, token, status, title, customer_name, postcode, amount_payable::float8 as amount, install_date::text as install_date, updated_at
     from quotes where status not in ('saved','expired','lapsed','declined','cancelled') order by updated_at desc limit 300`;
@@ -34,7 +35,26 @@ export default async function Board() {
       <p className="small">Earliest install: {earliest.map((e) => `${e.name} ${e.d ? longDate(e.d) : "none"}`).join(" · ")}</p>
       {throttle && <div className="note" style={{ margin: "12px 0" }}><strong>Throttle:</strong> every installer&apos;s earliest date is more than 21 days out. Pause creator and paid spend until capacity frees up (O18).</div>}
       {alerts.length > 0 && <div className="note" style={{ margin: "12px 0" }}><strong>Needs attention:</strong> {alerts.map((a, i) => <span key={a.id as string}>{i ? " · " : " "}<Link href={`/ops/job/${a.id}`}>{(a.customer_name as string) ?? a.title} ({a.status as string})</Link></span>)}</div>}
-      <div style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 12 }}>
+      <div className="mob-only">
+        {stage && COLUMNS.includes(stage) ? <>
+          <p className="small"><Link href="/ops">← All stages</Link></p>
+          <h3>{stage} <span className="muted">{by(stage).length}</span></h3>
+          {by(stage).length ? by(stage).map((r: (typeof rows)[number]) => (
+              <Link key={r.id as string} href={`/ops/job/${r.id}`} className="card" style={{ textDecoration: "none", marginBottom: 8, padding: 12, gap: 4 }}>
+                <strong className="small">{(r.customer_name as string) ?? "No name yet"} · {r.postcode as string}</strong>
+                <span className="small muted">{r.title as string}</span>
+                <span className="small">{aud(r.amount as number)}{r.install_date ? ` · ${r.install_date}` : ""}</span>
+              </Link>)) : <p className="small muted">Nothing here.</p>}
+        </> : <>
+          <h3 style={{ fontSize: 13, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>Stages</h3>
+          <div className="card" style={{ padding: "2px 12px" }}>
+            {COLUMNS.filter((c) => by(c).length > 0).map((c) => <Link key={c} href={`/ops?stage=${encodeURIComponent(c)}`} style={{ display: "flex", justifyContent: "space-between", padding: "11px 0", borderBottom: "1px solid var(--line)", textDecoration: "none", color: "var(--ink)" }}><span>{c}</span><span className="badge">{by(c).length}</span></Link>)}
+            {COLUMNS.every((c) => by(c).length === 0) && <p className="small muted">No active jobs.</p>}
+          </div>
+          <details className="small" style={{ marginTop: 8 }}><summary>Empty stages</summary>{COLUMNS.filter((c) => by(c).length === 0).join(" · ")}</details>
+        </>}
+      </div>
+      <div className="desk-only" style={{ display: "flex", gap: 12, overflowX: "auto", paddingBottom: 12 }}>
         {COLUMNS.map((c) => (
           <div key={c} style={{ minWidth: 220, flex: "0 0 220px" }}>
             <h3 style={{ fontSize: 14 }}>{c} <span className="muted">{by(c).length}</span></h3>
