@@ -184,13 +184,19 @@ export async function createInstallerFromApplication(f: FormData) {
     const [a] = await db()`select * from installer_applications where id = ${s(f, "id")} and status = 'new'`;
     if (!a) throw new Error("Application not found");
     const ranges = String(a.postcodes ?? "").split(/[\s,]+/).filter(Boolean).map((r) => r.split("-").map(Number)).filter(([x]) => x! > 0);
+    type Details = { team?: { name: string; saa: string | null; formbay_id: string | null }[]; capacity?: object; scope?: object };
+    const d = (a.details ?? {}) as Details;
+    const scope = d.scope ?? { version: 1, maxStoreys: 1, roofTypes: ["tin"], batteryLocations: ["garage", "outdoor_wall"], switchboardOk: true, maxCableRunM: 10, phases: [1] };
+    const capacity = d.capacity ?? { jobsPerDay: 1, leadDays: 5, workingDays: [1, 2, 3, 4, 5], blackouts: [] };
+    const team = d.team ?? [];
     await write({ actor: me.actor, action: "installers.create" }, { application: a.id }, async (tx) => {
-      const [i] = await tx`insert into installers (business_name, abn, contact_name, email, phone, licence_no, postcode_ranges, active, scope, capacity)
-        values (${a.business_name}, ${a.abn}, ${a.contact_name}, ${a.email}, ${a.phone}, ${a.licence_no}, ${ranges.map(([x, y]) => `[${x},${(y ?? x ?? 0) + 1})`)}::int4range[], false,
-        ${tx.json({ version: 1, maxStoreys: 1, roofTypes: ["tin"], batteryLocations: ["garage", "outdoor_wall"], switchboardOk: true, maxCableRunM: 10, phases: [1] })},
-        ${tx.json({ jobsPerDay: 1, leadDays: 5, workingDays: [1, 2, 3, 4, 5], blackouts: [] })}) returning id`;
+      const [i] = await tx`insert into installers (business_name, abn, contact_name, email, phone, licence_no, saa_accreditation, insurance, insurance_expiry, formbay_installer_id, postcode_ranges, active, scope, capacity)
+        values (${a.business_name}, ${a.abn}, ${a.contact_name}, ${a.email}, ${a.phone}, ${a.licence_no}, ${a.saa_accreditation ?? null}, ${a.insurance ?? null}, ${a.insurance_expiry ?? null},
+          ${team.find((t) => t.formbay_id)?.formbay_id ?? null}, ${ranges.map(([x, y]) => `[${x},${(y ?? x ?? 0) + 1})`)}::int4range[], false, ${tx.json(scope as never)}, ${tx.json(capacity as never)}) returning id`;
+      for (const [n, t] of team.entries()) await tx`insert into technicians (installer_id, name, saa_number, formbay_id, is_default) values (${i!.id}, ${t.name}, ${t.saa}, ${t.formbay_id}, ${n === 0})`;
+      if (a.insurance_doc) await tx`insert into installer_documents (installer_id, kind, path, expires_on) values (${i!.id}, 'insurance', ${a.insurance_doc}, ${a.insurance_expiry ?? null})`;
       await tx`update installer_applications set status = 'accepted' where id = ${a.id}`;
-      return { entity: "installer", entityId: i!.id as string, event: "installer.created", result: { id: i!.id } };
+      return { entity: "installer", entityId: i!.id as string, event: "installer.created", result: { id: i!.id, technicians: team.length } };
     });
   });
 }

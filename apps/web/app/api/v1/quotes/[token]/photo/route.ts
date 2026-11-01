@@ -1,0 +1,27 @@
+import { db } from "@dfrnt/db";
+import { putPhoto } from "@/lib/storage";
+import { allow } from "@/lib/ratelimit";
+
+export const dynamic = "force-dynamic";
+const KINDS = ["switchboard", "meter", "roof", "battery_location"];
+
+/** Checkout step 3: one photo per request, uploaded the moment it's taken (no all-or-nothing form post on a weak connection). */
+export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
+  const { token } = await params;
+  if (!/^[0-9a-f]{36}$/.test(token)) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!(await allow("photo", 40))) return Response.json({ error: "Too many uploads — wait a few minutes" }, { status: 429 });
+  const [q] = await db()`select id, status from quotes where token = ${token}`;
+  if (!q) return Response.json({ error: "Not found" }, { status: 404 });
+  if (!["saved", "secured", "lapsed"].includes(q.status as string)) return Response.json({ error: "Photos are already with your installer" }, { status: 409 });
+  const form = await req.formData().catch(() => null);
+  const kind = String(form?.get("kind") ?? ""), file = form?.get("file");
+  if (!KINDS.includes(kind) || !(file instanceof File) || !file.size) return Response.json({ error: "No photo" }, { status: 400 });
+  if (!file.type.startsWith("image/")) return Response.json({ error: "That isn't a photo" }, { status: 400 });
+  if (file.size > 4_000_000) return Response.json({ error: "Photo too large" }, { status: 413 });
+  const path = `${q.id}/${kind}-${Date.now()}.${file.type.split("/")[1] ?? "jpg"}`;
+  try { await putPhoto(path, await file.arrayBuffer(), file.type); }
+  catch { return Response.json({ error: "Upload failed — try again" }, { status: 502 }); }
+  await db()`insert into quote_photos (quote_id, kind, path, content_type, bytes) values (${q.id}, ${kind}, ${path}, ${file.type}, ${file.size})`;
+  await db()`update quotes set checkout_at = now() where id = ${q.id}`;
+  return Response.json({ ok: true, kind });
+}

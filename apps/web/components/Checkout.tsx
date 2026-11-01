@@ -5,6 +5,7 @@ import type { QuoteRow } from "@/lib/jobs";
 import type { InstallerOption } from "@/lib/installers";
 import { AddressInput } from "./AddressInput";
 import { PhotoInput } from "./PhotoInput";
+import { PhotoCount } from "./PhotoCount";
 import { CallBack } from "./CallBack";
 import { Trust } from "./Trust";
 import { aud, longDate } from "@/lib/site";
@@ -40,7 +41,6 @@ export async function Checkout({ q, step, sp, have, installers, recordUrl }: {
   const back = `/quote/${token}?step=${step}`;
   const names = ["You", "Your home", "Photos"];
   const qr = step === 3 ? await QRCode.toString(recordUrl + "?step=3", { type: "svg", margin: 1, width: 132 }) : "";
-  const done = PHOTOS.filter(([k]) => have.has(k)).length;
   return (
     <div id="checkout" style={{ marginTop: 22 }}>
       <h2 style={{ marginBottom: 4 }}>Get your confirmed price</h2>
@@ -90,12 +90,12 @@ export async function Checkout({ q, step, sp, have, installers, recordUrl }: {
       {step === 3 && (<>
         <form action={submitHome}>
           <input type="hidden" name="token" value={token} />
-          <p className="small" style={{ marginTop: 6 }}>Four photos from your phone. Your installer uses them instead of a site visit. <strong>{done} of 4 done.</strong></p>
+          <p className="small" style={{ marginTop: 6 }}>Four photos from your phone. Your installer uses them instead of a site visit. <PhotoCount initial={[...have]} /></p>
           {PHOTOS.map(([k, t, hint]) => (
             <div key={k} className="card" style={{ marginBottom: 10, padding: 12, borderColor: have.has(k) ? "var(--teal)" : undefined }}>
               <strong>{have.has(k) ? "✓ " : ""}{t}</strong><span className="small muted">{hint}</span>
               {have.has(k) ? <span className="small">Got it. Add another to replace it:</span> : null}
-              <PhotoInput name={`photo_${k}`} />
+              <PhotoInput name={`photo_${k}`} token={token} kind={k} />
             </div>))}
           {installers.length > 1 && (<>
             <h3 style={{ marginTop: 18 }}>Choose your installer</h3>
