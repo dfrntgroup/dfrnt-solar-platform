@@ -4,7 +4,7 @@
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
-const PRIVATE = /^\/(ops|installer|quote|login|auth|account|api|logout)/;
+const PRIVATE = /^\/(ops|installer|quote|usage|login|auth|account|api|logout)/;
 
 function rememberFirstTouch() {
   try {
