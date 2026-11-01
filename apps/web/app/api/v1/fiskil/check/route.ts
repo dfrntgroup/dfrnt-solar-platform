@@ -27,5 +27,13 @@ export async function GET(req: Request) {
   };
   const der = await fiskilList<Record<string, any>>("/energy/der", { end_user_id: id }, "der", 3);
   out.der = { status: der.status, error: der.error, count: der.items.length, sample_keys: der.items[0] ? Object.keys(der.items[0]) : [] };
+  if (new URL(req.url).searchParams.get("sample") === "1") {
+    const strip = (o: any) => JSON.parse(JSON.stringify(o ?? null, (k, v) => (Array.isArray(v) && v.length > 6 ? [...v.slice(0, 6), `…${v.length}`] : v)));
+    out.sample = { account: strip(accounts.items[0]), usage: usage.items.slice(0, 1).map(strip), usage_b1: strip(usage.items.find((u) => u.register_suffix === "B1")),
+      plans_by_account: accounts.items.map((a: any) => a.plans?.map((p: any) => p.plan_detail?.electricity_contract?.pricing_model)),
+      sp_by_suffix: Object.entries(usage.items.reduce((m: any, u) => { const k = `${String(u.service_point_id).slice(0, 6)}:${u.register_suffix}:${u.interval_read?.interval_reads?.length}`; m[k] = (m[k] ?? 0) + 1; return m; }, {})) };
+    const sp = await fiskilList("/energy/service-points", { end_user_id: id }, "service_points", 2);
+    out.service_points = { status: sp.status, error: sp.error, sample: strip(sp.items[0]) };
+  }
   return Response.json(out, { headers: { "cache-control": "no-store" } });
 }
