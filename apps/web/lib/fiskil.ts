@@ -1,5 +1,5 @@
 /** Fiskil (CDR energy data). Server only. Keys live in Vercel: FISKIL_CLIENT_ID, FISKIL_CLIENT_SECRET. */
-const BASE = "https://api.fiskil.com/v1";
+const BASE = process.env.FISKIL_BASE ?? "https://api.fiskil.com/v1";
 let cached: { token: string; until: number } | null = null;
 
 export const fiskilReady = () => !!(process.env.FISKIL_CLIENT_ID && process.env.FISKIL_CLIENT_SECRET);
@@ -34,4 +34,18 @@ export async function fiskilList<T = Record<string, unknown>>(path: string, para
     url = next && next !== url ? (next.startsWith("http") ? next : `${BASE}${next}`) : null;
   }
   return { items, status };
+}
+
+/** POST/DELETE to Fiskil. Returns status and parsed body (never throws on HTTP errors). */
+export async function fiskilSend(method: "POST" | "DELETE", path: string, body?: unknown): Promise<{ status: number; ok: boolean; data: Record<string, any> | null; text: string }> {
+  const token = await fiskilToken();
+  const r = await fetch(`${BASE}${path}`, {
+    method, cache: "no-store",
+    headers: { authorization: `Bearer ${token}`, accept: "application/json", ...(body ? { "content-type": "application/json" } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await r.text();
+  let data: Record<string, any> | null = null;
+  try { data = text ? JSON.parse(text) : null; } catch { /* not JSON */ }
+  return { status: r.status, ok: r.ok, data, text: text.slice(0, 400) };
 }

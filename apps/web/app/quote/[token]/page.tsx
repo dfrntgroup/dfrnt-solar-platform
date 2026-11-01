@@ -14,6 +14,7 @@ import { daysFor, needsOf } from "@/lib/schedule";
 import { DayPicker, dayLabel } from "@/components/DayPicker";
 import { JobThread } from "@/components/JobThread";
 import { SystemRecord } from "@/components/SystemRecord";
+import { RecordUsage } from "@/components/RecordUsage";
 import { AddOns } from "@/components/AddOns";
 import { ServicePlan } from "@/components/ServicePlan";
 import { Checkout, stepFor } from "@/components/Checkout";
@@ -124,6 +125,7 @@ export default async function Record({ params, searchParams }: { params: Promise
             </div>
           </div>)}
 
+        <RecordUsage q={q} sp={sp} />
         {(state === "saved" || state === "secured" || state === "lapsed") && (<>
           <div className="pay" style={{ margin: "16px 0 6px" }}><small>You pay, installed</small>{aud(q.result.stack.amount_payable)}</div>
           <div className="ok">Price and rebate locked until <strong>{longDate(q.lock_until)}</strong>. Keep this link: it&apos;s your record.</div>

@@ -5,18 +5,23 @@ import { SystemCard } from "@/components/SystemCard";
 import { CallBack } from "@/components/CallBack";
 import { earliestFor, outcome } from "@/lib/capacity";
 import { aud, priced, sitePostcode } from "@/lib/site";
+import { yieldFor } from "@dfrnt/engine";
+import { UsageConnect } from "@/components/UsageConnect";
+import { connectFromEstimate } from "../usage/actions";
+import { energySettings, energyVisible } from "@/lib/energy";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Find my system", description: "Three questions, one recommended system for your home, priced installed after rebates." };
 
 type P = { s: CatalogueSystem; q: Quote };
-const SUN = 4.2;   // SEQ average kWh a day per kW of panels (rough, for plain-English sizing only)
 
 /** C3: three answers → one recommended system, then the option to go bigger. Rough sizing from the bill until meter data (Fiskil) is in. */
 export default async function FindMySystem({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
   const postcode = await sitePostcode(sp);
   const earliest = await earliestFor(postcode);
+  const SUN = yieldFor(postcode, (await energySettings()).yields).kwh_per_kw;   // Clean Energy Council average for the area
+  const showUsage = await energyVisible(sp);
   const bill = Number(sp.bill || 0), home = sp.home ?? "evenings", phase = sp.phase === "3" ? 3 : 1, hasSolar = sp.solar === "yes";
   const box = { padding: 10, border: "1px solid var(--line)", borderRadius: 6, font: "inherit", width: "100%" } as const;
   let best: P | undefined, bigger: P[] = [], daily = 0;
@@ -55,6 +60,8 @@ export default async function FindMySystem({ searchParams }: { searchParams: Pro
             <select name="phase" defaultValue={String(phase)} style={{ ...box, marginTop: 6, maxWidth: 260 }}><option value="1">Single phase, or not sure</option><option value="3">Three phase</option></select></details>
           <button className="btn" type="submit" style={{ gridColumn: "1 / -1" }}>Show my system →</button>
         </form>
+        {showUsage && <UsageConnect action={connectFromEstimate} askEmail error={sp.usage_error}
+          hidden={{ postcode, solar: hasSolar ? "yes" : "no", phase: String(phase), back: `/estimate?${new URLSearchParams({ ...sp, usage_error: "" }).toString().replace(/&?usage_error=/, "")}` }} />}
 
         {bill > 0 && !best && <div className="note" style={{ marginTop: 18 }}>Nothing in our range fits those answers yet. <Link href="/systems">See every system</Link>, or ask us to call you.</div>}
         {best && <>

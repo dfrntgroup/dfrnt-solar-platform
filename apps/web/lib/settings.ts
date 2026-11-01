@@ -1,11 +1,14 @@
 // Small ops-controlled settings (stored in the settings table, edited in Ops → Settings).
 import { db } from "@dfrnt/db";
+import { DEFAULT_STANDARD_TARIFF, DEFAULT_YIELDS, type StandardTariff, type YieldCity } from "@dfrnt/engine";
 
 export interface DesignCheck { fee_on: boolean; amount: number }
 export interface BookingDesk { mode: "off" | "all" | "help" }
 export interface Scheduling { gear_lead_days: number; decline_hours: number; earlier_offer_hours: number }
 export interface ServicePlan { on: boolean; price: number; includes: string }
 export interface XeroSettings { tenant_id?: string; tenant_name?: string; refresh_token_enc?: string; connected_at?: string; codes: { sales: string; stc: string; installer: string; bank: string; stc_sale?: string; sales_tax?: string; stc_tax?: string; stc_sale_tax?: string; installer_tax?: string } }
+/** Real-usage sizing. mode: off · preview (only with ?usage=1, for testing) · all. */
+export interface EnergySettings { mode: "off" | "preview" | "all"; yields: Record<string, YieldCity>; standard: StandardTariff; raw_days: number }
 export interface Trust { founder_line: string; founder_video: string; licence: string; insurance: string; accreditations: string; callback_to: string; google_review_url?: string }
 
 const DEFAULTS = {
@@ -14,6 +17,7 @@ const DEFAULTS = {
   scheduling: { gear_lead_days: 3, decline_hours: 24, earlier_offer_hours: 12 } as Scheduling,
   service_plan: { on: false, price: 0, includes: "Yearly health check, panel clean, firmware and settings check, written report on your record." } as ServicePlan,
   xero: { codes: { sales: "", stc: "", installer: "", bank: "" } } as XeroSettings,
+  energy: { mode: "preview", yields: DEFAULT_YIELDS, standard: DEFAULT_STANDARD_TARIFF, raw_days: 30 } as EnergySettings,
   trust: { founder_line: "Built by the team that grew InStyle Solar to 29,000+ installs.", founder_video: "", licence: "", insurance: "", accreditations: "", callback_to: "hello@dfrntsolar.com.au" } as Trust,
 };
 type Key = keyof typeof DEFAULTS;

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
 import { requireInstaller } from "@/lib/auth";
+import { UsageJobCard } from "@/components/UsageJobCard";
 import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
@@ -50,6 +51,7 @@ export default async function InstallerJob({ params, searchParams }: { params: P
           <h3>System</h3><p>{p.config.summary}</p>
           <table className="lines"><tbody>{parts.map((b) => <tr key={b.sku}><td>{b.description}</td><td className="r">× {b.qty}</td></tr>)}</tbody></table>
           {site && <><h3 style={{ marginTop: 16 }}>Site answers</h3><p className="small">{String(site.phases)}-phase · {site.roofType} roof · {site.storeys} storey · battery {site.batteryLocation.replace("_", " ")} · switchboard {site.switchboard}</p></>}
+          <UsageJobCard quoteId={q.id} />
           <h3 style={{ marginTop: 16 }}>Photos</h3>
           <div className="filters">{urls.map((u, i) => u.url ? <a key={i} className="chip" href={u.url} target="_blank">{u.kind}</a> : <span key={i} className="chip">{u.kind}</span>)}</div>
           <h3 style={{ marginTop: 16 }}>Your pay</h3>

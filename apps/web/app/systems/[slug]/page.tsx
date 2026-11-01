@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { configured } from "@/lib/configure";
 import { configOptions, findSystem, priceSystem, type ConfigInput } from "@dfrnt/engine";
 import { Share } from "@/components/Share";
 import { Configurator } from "@/components/Configurator";
@@ -34,9 +35,15 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const s = findSystem(slug, data.catalogue);
   if (!s) notFound();
   const postcode = await sitePostcode(sp);
-  const q = priceSystem(s, { postcode, asOf: todayAEST() }, data);
+  const q0 = priceSystem(s, { postcode, asOf: todayAEST() }, data);
+  const opts = configOptions({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode, installDate: q0.window.lock_until, ...s.config } as ConfigInput, data.rules);
+  // Arriving from a usage-based recommendation: start the configurator at the recommended counts.
+  const wantP = Number(sp.panels), wantM = Number(sp.modules);
+  const usePanels = Number.isInteger(wantP) && (s.config.panelCount === 0 ? wantP === 0 : opts.panels.includes(wantP)) ? wantP : s.config.panelCount;
+  const useModules = Number.isInteger(wantM) && opts.modules.includes(wantM) ? wantM : s.config.batteryModules;
+  const custom = usePanels !== s.config.panelCount || useModules !== s.config.batteryModules;
+  const q = custom ? priceSystem(configured(s, { panels: usePanels, modules: useModules, backup: "none" }, postcode, data), { postcode, asOf: todayAEST() }, data) : q0;
   const st = q.stack, c = q.config, r = q.rebate;
-  const opts = configOptions({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode, installDate: q.window.lock_until, ...s.config } as ConfigInput, data.rules);
   const { activeAddons } = await import("@/lib/addons");
   const addons = await activeAddons().catch(() => []);
   const jobNeeds = { brand: s.brand, kind: s.kind === "battery_only" ? "battery_only" as const : "solar_battery" as const, panelKw: c.panel_kw };
@@ -56,7 +63,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
             <Media s={s} q={q} className="gallery" />
             <div className="gallery-note">Manufacturer product imagery. Final configuration is confirmed from your photos before you pay.</div>
             <p className="eyebrow" style={{ marginTop: 26 }}>{s.brand} · {s.kind === "battery_only" ? "Battery only" : "Supply + installation"}</p>
-            <h1 id="sys-title" style={{ fontSize: "clamp(30px, 6vw, 44px)" }}>{s.title}</h1>
+            <h1 id="sys-title" style={{ fontSize: "clamp(30px, 6vw, 44px)" }}>{custom ? (c.usable_kwh ? `${c.panel_kw ? `${Math.round(c.panel_kw * 10) / 10} kW solar + ` : ""}${Math.round(c.usable_kwh * 10) / 10} kWh battery` : `${Math.round(c.panel_kw * 10) / 10} kW solar`) : s.title}</h1>
             <p id="sys-outcome" style={{ color: "var(--teal-dark)", fontWeight: 700, marginTop: -6 }}>{outcome(c.usable_kwh, c.panel_kw)}</p>
             <h3 style={{ marginTop: 18 }}>What it does for you</h3>
             <ul className="plain">
@@ -89,7 +96,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
             <h3>Panels and battery, your way.</h3>
             <p className="small muted" style={{ marginTop: 0 }}>Change the counts. The inverter, parts, rebates and installation follow, and every change shows on the price.</p>
             <Configurator slug={s.slug} postcode={postcode} panels={opts.panels} modules={opts.modules} backupAvailable={opts.backup} moduleKwh={opts.moduleKwh} panelW={opts.panelW}
-              start={{ panels: s.config.panelCount, modules: s.config.batteryModules }} lockUntil={longDate(q.window.lock_until)} secure={secureSystem}
+              start={{ panels: usePanels, modules: useModules }} lockUntil={longDate(q.window.lock_until)} secure={secureSystem}
               initial={{ ok: q.config.ok, summary: c.summary, solar_kw: c.panel_kw, usable_kwh: c.usable_kwh, inverter: c.inverter?.model, towers: c.stacks?.physical_towers ?? 0,
                 you_pay: st.amount_payable, before_rebates: st.price_inc_gst, rebates: st.less_stcs, gst: st.gst, equipment: st.hardware_ex_gst, installation: st.installation_ex_gst,
                 solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message) }} />

@@ -531,3 +531,26 @@ export async function xeroSyncNow() {
     if ("skipped" in r) throw new Error(`Not sent: ${r.skipped}`);
   });
 }
+
+/** Real-usage sizing settings: who sees the button, the yield table, the standard tariff. */
+export async function energySave(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/energy", async () => {
+    const { getSetting, setSetting } = await import("@/lib/settings");
+    const e = await getSetting("energy");
+    const mode = (["off", "preview", "all"] as const).find((m) => m === s(f, "mode")) ?? e.mode;
+    const yields = { ...e.yields };
+    for (const k of Object.keys(yields)) { const v = Number(s(f, `y_${k}`)); if (v >= 2 && v <= 7) yields[k] = { ...yields[k]!, kwh_per_kw: Math.round(v * 100) / 100 }; }
+    const n = (k: string, d: number) => { const v = Number(s(f, k)); return Number.isFinite(v) && v >= 0 && v < 500 ? v : d; };
+    const standard = { usage_c: n("usage_c", e.standard.usage_c), supply_c_day: n("supply_c_day", e.standard.supply_c_day), fit_c: n("fit_c", e.standard.fit_c), controlled_c: n("controlled_c", e.standard.controlled_c) };
+    await setSetting("energy", { ...e, mode, yields, standard }, me.name);
+  });
+}
+export async function energyRepull(f: FormData) {
+  await requireStaff();
+  await run("/ops/energy", async () => { const { pullLink } = await import("@/lib/energy"); await pullLink(s(f, "id"), { force: true }); });
+}
+export async function energyRevoked(f: FormData) {
+  await requireStaff();
+  await run("/ops/energy", async () => { await db()`update energy_links set revoke_status = 'revoked' where id = ${s(f, "id")}`; });
+}

@@ -104,6 +104,7 @@ export async function runDaily() {
   try { const { notifyWaitlist } = await import("./campaigns"); out.waitlist_alerts = await notifyWaitlist(); } catch { /* reported in messages */ }
   // Formbay status for every linked job.
   try { out.formbay = (await runFormbaySync()) as never; } catch { /* reported on the job pages */ }
+  try { const { runEnergy } = await import("./energy"); out.energy = (await runEnergy()) as never; } catch { /* shown in Ops → Real usage */ }
   // Agent proposals expire after 24 h.
   const exp = await db()`update approvals set status = 'expired', decided_at = now(), decision_note = 'Expired after 24 h'
     where status = 'pending' and created_at < now() - interval '24 hours' returning id`;

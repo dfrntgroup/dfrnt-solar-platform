@@ -4,6 +4,7 @@ import { db } from "@dfrnt/db";
 import { TRANSITIONS } from "@dfrnt/engine";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
+import { UsageJobCard } from "@/components/UsageJobCard";
 import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
@@ -71,6 +72,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
           {(q.heard_from || q.attribution) && <p className="small muted">Heard from: {q.heard_from ?? "not answered"}{q.heard_note ? ` (${q.heard_note})` : ""} · Tracking: {q.attribution?.gclid ? "Google Ads click" : q.attribution?.fbclid || q.attribution?.fbc ? "Meta ad click" : q.attribution?.utm_source ? `utm ${q.attribution.utm_source}/${q.attribution.utm_campaign ?? ""}` : q.attribution?.ref ? `from ${q.attribution.ref}` : "direct"}{q.attribution?.landing ? `, landed on ${q.attribution.landing}` : ""}</p>}
           {(q.install_date || q.rebook) && <p className="small">Install: {q.rebook ? "customer picking a new day" : `${q.install_date}${q.install_part === "am" ? " (morning)" : ""}`} · {q.job_days ?? "?"} crew-day(s) · booked via {q.booked_via ?? "–"}{q.google_event_id ? " · in installer's Google Calendar" : ""}{q.access_notes ? ` · access: ${q.access_notes}` : ""}</p>}
           {q.pricing_reasons?.length ? <div className="note" style={{ marginTop: 8 }}>Needs pricing: {q.pricing_reasons.join(" · ")}</div> : null}
+          <UsageJobCard quoteId={q.id} ops />
           <h3 style={{ marginTop: 18 }}>Photos</h3>
           <div className="filters">{urls.length ? urls.map((u, i) => u.url ? <a key={i} className="chip" href={u.url} target="_blank">{u.kind}</a> : <span key={i} className="chip">{u.kind} (local)</span>) : <span className="muted small">None</span>}</div>
           {consent?.showcase_consent && urls.length > 0 && <div className="small" style={{ marginTop: 8 }}><span className="muted">Customer agreed to share photos. Show on real installs:</span>
