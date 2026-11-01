@@ -177,3 +177,12 @@ input:focus-visible + .pill-r { outline: 2px solid var(--teal); }
 .legal p { margin: 0 0 10px; line-height: 1.55; }
 .legal.compact { max-height: 340px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; background: #fff; font-size: 14px; }
 .legal.compact h3 { font-size: 15px; margin-top: 14px; }
+
+/* Back office header: simple wrapping bar, not the public site's centred grid */
+.hdr.admin .wrap { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 22px; height: auto; min-height: 58px; padding-top: 10px; padding-bottom: 10px; grid-template-columns: none; }
+.hdr.admin .logo { font-weight: 800; text-decoration: none; letter-spacing: -.01em; white-space: nowrap; }
+.hdr.admin .logo span { color: var(--teal); font-weight: 600; }
+.hdr.admin nav { display: flex; flex-wrap: wrap; gap: 6px 14px; flex: 1; font-size: 14px; }
+.hdr.admin nav a { text-decoration: none; }
+.hdr.admin nav a:hover { color: var(--teal); }
+.hdr.admin .who { white-space: nowrap; }

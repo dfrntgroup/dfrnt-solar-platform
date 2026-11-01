@@ -11,7 +11,7 @@ export async function earliestFor(postcode: string): Promise<string | null | und
   try {
     const rows = await db()`select i.capacity, (select json_object_agg(d, n) from (select install_date::text d, count(*)::int n from quotes q where q.installer_id = i.id and install_date is not null
         and status in ('booked','gear_ordered','delivered','on_site','variation_pending') group by 1) x) booked
-      from installers i where active and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int)`;
+      from installers i where active and (not is_test or ${process.env.VERCEL_ENV !== "production"}) and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int)`;
     if (!rows.length) { cache = { at: Date.now(), key: postcode, v: null }; return null; }   // no installer covers it
     const dates = rows.map((r) => earliestDate(todayAEST(), { ...(r.capacity as Omit<Capacity, "booked">), booked: (r.booked ?? {}) as Record<string, number> })).filter(Boolean).sort() as string[];
     const v = dates[0] ?? null;

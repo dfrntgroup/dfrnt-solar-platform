@@ -7,10 +7,10 @@ export function AdminShell({ who, area, children }: { who: string; area: "ops" |
     : [["/installer", "My jobs"], ["/installer/profile", "Profile"]];
   return (
     <>
-      <header className="hdr"><div className="wrap" style={{ height: "auto", minHeight: 62, padding: "8px 20px" }}>
+      <header className="hdr admin"><div className="wrap">
         <Link href={area === "ops" ? "/ops" : "/installer"} className="logo">DFRNT <span>{area === "ops" ? "Ops" : "Installer"}</span></Link>
-        <nav style={{ display: "flex", flexWrap: "wrap", gap: "6px 14px", flex: 1, fontSize: 14 }}>{links.map(([h, t]) => <Link key={h} href={h!}>{t}</Link>)}</nav>
-        <span className="small muted">{who} · {area === "ops" && <><a href="/account/security">Security</a> · </>}<a href="/logout">Sign out</a></span>
+        <nav>{links.map(([h, t]) => <Link key={h} href={h!}>{t}</Link>)}</nav>
+        <span className="small muted who">{who} · {area === "ops" && <><a href="/account/security">Security</a> · </>}<a href="/logout">Sign out</a></span>
       </div></header>
       <section><div className="wrap">{children}</div></section>
     </>
