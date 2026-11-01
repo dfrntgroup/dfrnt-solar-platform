@@ -1,8 +1,9 @@
 // Messages M1–M14 are written to the outbox. They stay "held" until email/SMS are switched on at go-live;
 // ops can read every one in the admin, so nothing is lost and the wording can be reviewed first.
 import { db } from "@dfrnt/db";
+import { deliver, sendEmail } from "./email";
 
-const site = () => process.env.SITE_URL ?? (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+const site = () => process.env.SITE_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 const aud = (n: unknown) => Number(n).toLocaleString("en-AU", { style: "currency", currency: "AUD" });
 
 type Vars = Record<string, unknown> & { name?: string | null };
@@ -27,6 +28,19 @@ export async function queueMessage(template: string, token: string, to: string |
   const t = TEMPLATES[template];
   if (!t) return;
   const { subject, body } = t(vars, `${site()}/quote/${token}`);
-  await db()`insert into messages (quote_id, template, channel, recipient, subject, body)
-    select id, ${template}, 'email', ${to}, ${subject}, ${body} from quotes where token = ${token}`;
+  const [row] = await db()`insert into messages (quote_id, template, channel, recipient, subject, body)
+    select id, ${template}, 'email', ${to}, ${subject}, ${body} from quotes where token = ${token} returning id`;
+  if (row) await deliver(row.id as string).catch(() => "failed");
+}
+
+/** Ops: render every template with sample values and send them to one address (ignores the mode). */
+export async function sendAllTemplatesTo(to: string, token: string) {
+  const sample: Vars = { name: "Karl", amount: 12345.76, reference: "DS4A020F", date: "Tue, 3 Nov", drop: "Thu, 31 Dec" };
+  const results: string[] = [];
+  for (const [key, t] of Object.entries(TEMPLATES)) {
+    const { subject, body } = t(sample, `${site()}/quote/${token}`);
+    const r = await sendEmail(to, `[TEST ${key}] ${subject}`, body);
+    results.push(`${key}: ${r.ok ? "sent" : r.error}`);
+  }
+  return results;
 }

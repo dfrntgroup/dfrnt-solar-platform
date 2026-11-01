@@ -7,7 +7,7 @@ export const SELLER = {
   trading: "DFRNT Solar",
   abn: "21 679 198 317",
   phone: "1300 133 768",
-  email: "support@dfrntgroup.com",
+  email: "hello@dfrntsolar.com.au",
   state: "Queensland",
 };
 

@@ -220,3 +220,35 @@ export async function photoPublic(f: FormData) {
   });
   revalidatePath("/installs"); redirect(`/ops/job/${job}`);
 }
+
+/** Email mode: held (nothing leaves), test (everything goes to the test address), live (customers get their messages). */
+export async function setEmailMode(f: FormData) {
+  const me = await requireStaff();
+  const mode = String(f.get("mode") ?? "held"), test_to = String(f.get("test_to") ?? "").trim();
+  if (!["held", "test", "live"].includes(mode)) redirect("/ops/messages");
+  if (test_to && !/^\S+@\S+\.\S+$/.test(test_to)) redirect("/ops/messages?error=Test%20address%20looks%20wrong");
+  await write({ actor: me.actor, action: "settings.email" }, { mode, test_to }, async (tx) => {
+    await tx`insert into settings (key, value, updated_by) values ('email', ${tx.json({ mode, test_to })}, ${me.name})
+      on conflict (key) do update set value = excluded.value, updated_at = now(), updated_by = excluded.updated_by`;
+    return { entity: "settings", entityId: "email", event: `email.${mode}`, result: { mode } };
+  });
+  revalidatePath("/ops/messages"); redirect("/ops/messages");
+}
+
+export async function sendTemplateTests(f: FormData) {
+  await requireStaff();
+  const to = String(f.get("to") ?? "").trim();
+  if (!/^\S+@\S+\.\S+$/.test(to)) redirect("/ops/messages?error=Enter%20an%20email%20address");
+  const [q] = await db()`select token from quotes order by created_at desc limit 1`;
+  const { sendAllTemplatesTo } = await import("@/lib/messages");
+  const results = await sendAllTemplatesTo(to, (q?.token as string) ?? "00000000000000000000000000000000000");
+  redirect(`/ops/messages?sent=${encodeURIComponent(results.join(" · "))}`);
+}
+
+export async function resendMessage(f: FormData) {
+  await requireStaff();
+  const { deliver } = await import("@/lib/email");
+  await db()`update messages set status = 'queued' where id = ${String(f.get("id"))} and status in ('failed','held')`;
+  await deliver(String(f.get("id")));
+  revalidatePath("/ops/messages"); redirect("/ops/messages");
+}
