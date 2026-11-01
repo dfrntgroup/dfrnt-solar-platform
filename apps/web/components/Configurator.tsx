@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { track } from "./Analytics";
 import { outcome } from "@/lib/outcome";
 import { friendlySummary, friendlyWarning } from "@/lib/images";
@@ -18,6 +19,7 @@ export function Configurator(props: {
   const [p, setP] = useState<Price>(props.initial);
   const [busy, setBusy] = useState(false);
   const first = useRef(true);
+  const router = useRouter();
 
   useEffect(() => {
     if (first.current) { first.current = false; return; }
@@ -25,7 +27,13 @@ export function Configurator(props: {
     track("configure", { slug: props.slug, panels, modules, backup });
     const t = setTimeout(async () => {
       const r = await fetch("/api/v1/price", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug: props.slug, panels, modules, backup, postcode: props.postcode }) });
-      if (r.ok) setP(await r.json());
+      if (r.ok) {
+        setP(await r.json());
+        // Re-render the rest of the page (what it does, the kit, how the price is made) for these counts.
+        const q = new URLSearchParams(window.location.search);
+        q.set("panels", String(panels)); q.set("modules", String(modules));
+        router.replace(`${window.location.pathname}?${q}`, { scroll: false });
+      }
       setBusy(false);
     }, 250);
     return () => clearTimeout(t);

@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { configured } from "@/lib/configure";
+import { yieldFor } from "@dfrnt/engine";
+import { energySettings } from "@/lib/energy";
 import { configOptions, findSystem, priceSystem, type ConfigInput } from "@dfrnt/engine";
 import { Share } from "@/components/Share";
 import { Configurator } from "@/components/Configurator";
@@ -67,13 +69,13 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
             <p id="sys-outcome" style={{ color: "var(--teal-dark)", fontWeight: 700, marginTop: -6 }}>{outcome(c.usable_kwh, c.panel_kw)}</p>
             <h3 style={{ marginTop: 18 }}>What it does for you</h3>
             <ul className="plain">
-              {c.panel_kw > 0 && <li><strong>Makes about {Math.round(c.panel_kw * 4.2)} kWh of power on an average day</strong><span className="small muted">Enough to run most homes through the day, with the extra charging your battery.</span></li>}
+              {c.panel_kw > 0 && <li><strong>Makes about {Math.round(c.panel_kw * yieldFor(postcode, (await energySettings()).yields).kwh_per_kw)} kWh of power on an average day</strong><span className="small muted">Enough to run most homes through the day, with the extra charging your battery.</span></li>}
               {c.usable_kwh > 0 && <li><strong>Stores {c.usable_kwh} kWh for when the sun&apos;s down</strong><span className="small muted">{outcome(c.usable_kwh, c.panel_kw)}. Many homes use 8–12 kWh between dinner and breakfast.</span></li>}
               <li><strong>One price, installed, rebate already off</strong><span className="small muted">Nothing extra unless your photos show work outside a standard install, and you see that before you pay.</span></li>
             </ul>
             <details className="techbox"><summary>The kit, in detail</summary>
             <table className="incl"><tbody>
-              {c.panel_kw > 0 && <tr><td className="k">Panels</td><td>{s.config.panelCount} × {friendlyPanel(rulesPanel)} ({c.panel_kw} kW)</td></tr>}
+              {c.panel_kw > 0 && <tr><td className="k">Panels</td><td>{usePanels} × {friendlyPanel(rulesPanel)} ({c.panel_kw} kW)</td></tr>}
               <tr><td className="k">Inverter</td><td>{friendlyInverter(c.inverter?.model, c.inverter?.ac_w)}{s.config.panelCount > 0 ? "" : ", runs the battery"}</td></tr>
               {c.usable_kwh > 0 && <tr><td className="k">Battery</td><td>{parts.filter((b) => b.serial === "module").map((b) => `${b.qty} × ${b.description}`).join(", ")} · {c.usable_kwh} kWh usable</td></tr>}
               <tr><td className="k">Materials</td><td>{c.panel_kw > 0 ? "Racking, " : ""}isolators, cabling, breakers and standard materials</td></tr>
