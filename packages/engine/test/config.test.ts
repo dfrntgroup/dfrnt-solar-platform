@@ -170,7 +170,7 @@ describe("config engine", () => {
     expect(serialCounts(run({ familyKey: "sungrow_shrs", batteryModules: 8, stacks: 2 }).bom)).toMatchObject({ panel: 20, inverter: 1, module: 8, bms: 2 });
   });
 
-  it("phase mismatch with the family is blocked", () => expect(msgs(run({ phases: 3 }))).toMatch(/1-phase system/));
+  it("phase mismatch with the family is blocked", () => expect(msgs(run({ phases: 3 }))).toMatch(/three-phase power and this .* system is single-phase/));
 
   it("GoodWe ESA 1P, 21 panels, 2 modules, whole-home: 10K, kit included", () => {
     const o = run({ familyKey: "goodwe_esa_1p", panelCount: 21, batteryModules: 2, backup: "whole_home" });
