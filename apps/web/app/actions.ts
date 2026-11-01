@@ -57,3 +57,23 @@ export async function saveForLater(form: FormData) {
   await queueMessage("M9", out.result.token, email, { amount: out.result.amount_payable });
   redirect(`/systems/${base.slug}?saved=1`);
 }
+
+/** C5: "Call me back" from any product page or checkout step. Name and mobile only; ops is alerted straight away. */
+export async function requestCallback(form: FormData) {
+  const back = String(form.get("back") ?? "/");
+  const safe = back.startsWith("/") && !back.startsWith("//") ? back.split("#")[0]! : "/";
+  const go = (k: string) => redirect(`${safe}${safe.includes("?") ? "&" : "?"}callback=${k}#callback`);
+  if (!(await allow("callback", 5))) go("busy");
+  const name = String(form.get("name") ?? "").trim().slice(0, 80), phone = String(form.get("phone") ?? "").replace(/[^\d+]/g, "");
+  if (name.length < 2 || !/^(\+?61|0)[2-478]\d{8}$/.test(phone)) go("bad");
+  const token = String(form.get("token") ?? "");
+  const { db } = await import("@dfrnt/db");
+  const [q] = /^[0-9a-f]{36}$/.test(token) ? await db()`select id, title, status, amount_payable::float8 amount from quotes where token = ${token}` : [];
+  await db()`insert into callbacks (quote_id, name, phone, page, note) values (${(q?.id as string) ?? null}, ${name}, ${phone}, ${safe}, ${String(form.get("note") ?? "").slice(0, 300) || null})`;
+  const { getSetting } = await import("@/lib/settings");
+  const { sendEmail } = await import("@/lib/email");
+  const to = (await getSetting("trust")).callback_to;
+  const where = q ? `${q.title} (${q.status}, ${Number(q.amount).toLocaleString("en-AU", { style: "currency", currency: "AUD" })})` : safe;
+  if (to) await sendEmail(to, `Call back: ${name} ${phone}`, `${name} asked for a call back on ${phone}.\n\nFrom: ${where}\n\nMark it done in Ops → Call-backs.`).catch(() => null);
+  go("1");
+}

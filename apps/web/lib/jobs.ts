@@ -1,7 +1,7 @@
 // Job operations. Every state change goes through `write` (audited, evented, idempotent) and the engine's state machine.
 import { db, write, type Actor } from "@dfrnt/db";
 import {
-  assertTransition, bookableDates, instantPriceBlockers, quote, rebateWindow, variationAmount, variationLine,
+  assertTransition, autoStacks, bookableDates, instantPriceBlockers, quote, rebateWindow, variationAmount, variationLine,
   labourLines, type Capacity, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest,
 } from "@dfrnt/engine";
 import { todayAEST } from "./api";
@@ -18,12 +18,21 @@ export interface QuoteRow {
   signed_at: Date | null; signed_name: string | null; agreement_version: string | null; invoice_number: string | null; payment_method: string | null; payment_reference: string | null; paid_at: Date | null;
   customer_email: string | null; customer_name: string | null; customer_phone: string | null; postcode: string; created_at: Date;
   discount_code: string | null; referral_discount: number | null; credit_code: string | null; credit_amount: number | null;
+  site_draft: (Partial<SiteAnswers> & { address?: SiteAnswers["address"] }) | null; checkout_at: Date | null; design_review: boolean; design_fee_status: string | null;
+  revision: Revision | null; chosen_installer_id: string | null;
+}
+
+/** C6: a design change proposed by ops or the installer, priced on the same locked versions, waiting for the customer. */
+export interface Revision {
+  input: ConfigInput; base: Quote; priced: Quote; extraCodes: string[]; reason: string; by: string; at: string;
+  from: { summary: string; amount: number; title: string | null }; title: string;
 }
 
 export async function getQuote(token: string): Promise<QuoteRow | null> {
   const [row] = await db()`select id, token, status, title, input, result, snapshot, site, installer_id, pricing_reasons,
     lock_until::text as lock_until, install_date::text as install_date, signed_at, signed_name, agreement_version, invoice_number, payment_method, payment_reference, paid_at,
     customer_email, customer_name, customer_phone, postcode, created_at, discount_code, credit_code,
+    site_draft, checkout_at, design_review, design_fee_status, revision, chosen_installer_id,
     (select amount_inc::float8 from credits c where c.code = quotes.credit_code) as credit_amount,
     (select discount_inc::float8 from codes c where c.code = quotes.discount_code and c.active) as referral_discount from quotes where token = ${token}`;
   return (row as unknown as QuoteRow) ?? null;
@@ -35,10 +44,10 @@ export async function getQuoteById(id: string) {
 }
 
 /** Re-price with the customer's real site answers, any confirmed extra labour and discounts. */
-export async function reprice(q: QuoteRow, extra: { site?: SiteAnswers; extraLabour?: LabourRequest[]; bank?: boolean; variations?: ReturnType<typeof variationLine>[] } = {}) {
+export async function reprice(q: QuoteRow, extra: { site?: SiteAnswers; input?: ConfigInput; extraLabour?: LabourRequest[]; bank?: boolean; variations?: ReturnType<typeof variationLine>[] } = {}) {
   const site = extra.site ?? q.site;
   const input: ConfigInput = {
-    ...q.input,
+    ...(extra.input ?? q.input),
     ...(site ? {
       phases: site.phases, roofType: site.roofType, storeys: site.storeys, batteryLocation: site.batteryLocation,
       againstHabitableRoom: site.againstHabitableRoom, vehicleExposure: site.vehicleExposure ?? false, priorBatteryClaim: site.priorBatteryClaim,
@@ -49,9 +58,11 @@ export async function reprice(q: QuoteRow, extra: { site?: SiteAnswers; extraLab
   return quote(input, { ...data, asOf: todayAEST(), extraLabour: extra.extraLabour, variations: extra.variations, discounts: { ...(q.referral_discount ? { referral: q.referral_discount } : {}), ...(q.credit_amount ? { reportCredit: q.credit_amount } : {}), ...(extra.bank ? { bankTransferPct: 0.01 } : {}) } });
 }
 
-async function installerFor(postcode: string) {
+/** The installer for a job: the customer's choice if it covers the postcode (C7), otherwise the first real installer, then a test one. */
+async function installerFor(postcode: string, chosen?: string | null) {
   const pc = parseInt(postcode, 10);
-  const [row] = await db()`select id, scope, capacity from installers where active and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int) order by is_test desc, created_at limit 1`;
+  const [row] = await db()`select id, scope, capacity from installers where active and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int)
+    order by (id::text = ${chosen ?? ""}) desc, is_test, created_at limit 1`;
   return row as { id: string; scope: StandardScope; capacity: Omit<Capacity, "booked"> } | undefined;
 }
 
@@ -66,16 +77,30 @@ async function move(q: QuoteRow, to: JobState, actor: Actor, action: string, set
 }
 
 /* C1–C3: home + photos → instant price or installer pricing */
-export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name: string; email: string; phone: string }) {
+export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name: string; email: string; phone: string }, opts: { feePaid?: boolean } = {}) {
   if (!["saved", "secured", "lapsed"].includes(q.status)) throw new Error("This quote has already been priced");
   if (q.status === "saved" || q.status === "lapsed") { await move(q, "secured", CUSTOMER, "quotes.secure"); q = (await getQuote(q.token))!; }
-  const inst = await installerFor(site.address.postcode);
+  const inst = await installerFor(site.address.postcode, q.chosen_installer_id);
   const priced = await reprice(q, { site });
   const reasons = inst ? instantPriceBlockers(site, inst.scope) : ["No installer covers this postcode yet"];
   if (!priced.config.ok) reasons.push(...priced.config.blockers.map((b) => b.message));
+  // C8: standard homes are priced instantly and free. A home that needs an installer's photo check can carry a design-check fee,
+  // but only when ops switches it on; the fee comes back as a credit on purchase.
+  if (reasons.length && inst && q.design_fee_status !== "paid" && !opts.feePaid) {
+    const { getSetting } = await import("./settings");
+    const dc = await getSetting("design_check");
+    if (dc.fee_on) {
+      const reference = `DSD${q.token.slice(0, 5).toUpperCase()}`;
+      await db()`update quotes set site_draft = ${db().json(site as never)}, design_fee_status = 'due', pricing_reasons = ${reasons}, updated_at = now() where id = ${q.id}`;
+      await db()`insert into payments (quote_id, kind, method, amount, reference) select ${q.id}, 'report', 'bank', ${dc.amount}, ${reference}
+        where not exists (select 1 from payments where quote_id = ${q.id} and kind = 'report' and status = 'pending')`;
+      await queueMessage("M15", q.token, contact.email, { name: contact.name, amount: dc.amount, reference });
+      return;
+    }
+  }
   const common = {
     site: db().json(site as never), customer_name: contact.name, customer_email: contact.email, customer_phone: contact.phone,
-    installer_id: inst?.id ?? null, scope_version: inst?.scope.version ?? null,
+    installer_id: inst?.id ?? null, scope_version: inst?.scope.version ?? null, design_review: reasons.length > 0,
   };
   if (!reasons.length) {
     await move(q, "pricing_instant", CUSTOMER, "quotes.submit_site", common);
@@ -241,4 +266,74 @@ async function repriceFrozen(q: QuoteRow) {
   const fresh = (await getQuote(q.token))!;
   const p = await reprice(fresh, { extraLabour: extraFromSnapshot(fresh) });
   await db()`update quotes set snapshot = ${db().json(p as never)}, amount_payable = ${p.stack.amount_payable}, price_inc_gst = ${p.stack.price_inc_gst} where id = ${q.id}`;
+}
+
+/* C8: design-check fee received (only when the $99 switch is on) → credit for the same amount, then on to the installer. */
+export async function designFeePaid(q: QuoteRow, actor: Actor) {
+  if (q.design_fee_status !== "due" || !q.site_draft) throw new Error("No design-check fee is due on this job");
+  const [pay] = await db()`update payments set status = 'received', received_at = now() where quote_id = ${q.id} and kind = 'report' and status = 'pending' returning amount::float8 amount`;
+  const amount = (pay?.amount as number) ?? 99;
+  const code = `DESIGN${q.token.slice(0, 5).toUpperCase()}`;
+  await write({ actor, action: "payments.design_fee", rationale: "Design-check fee received; credited back on purchase" }, { token: q.token, amount }, async (tx) => {
+    await tx`insert into credits (code, amount_inc, reason, email, status, applied_quote_id, expires_on)
+      values (${code}, ${amount}, 'Design check fee, credited on purchase', ${q.customer_email}, 'applied', ${q.id}, current_date + 180) on conflict (code) do nothing`;
+    await tx`update quotes set design_fee_status = 'paid', credit_code = ${code}, updated_at = now() where id = ${q.id}`;
+    return { entity: "quote", entityId: q.id, event: "quote.design_fee_paid", result: { code, amount } };
+  });
+  const fresh = (await getQuote(q.token))!;
+  await submitSite(fresh, fresh.site_draft as SiteAnswers, { name: fresh.customer_name ?? "", email: fresh.customer_email ?? "", phone: fresh.customer_phone ?? "" }, { feePaid: true });
+}
+
+/* C6: revised design. Ops or the installer changes panels, battery modules, backup or adds named work; the change is priced on the
+   job's own locked versions and rebate date, and the customer accepts or keeps the original. */
+export const REVISABLE: JobState[] = ["pricing_installer", "tech_review", "priced"];
+
+export async function proposeRevision(q: QuoteRow, actor: Actor, change: { panels: number; modules: number; backup: "none" | "whole_home"; extraCodes: string[]; reason: string }) {
+  if (!REVISABLE.includes(q.status)) throw new Error("A design can be changed while pricing, or once priced before signing");
+  if (change.reason.trim().length < 5) throw new Error("Say why the design changes (the customer sees this)");
+  const data = await pricingDataFor(q.result.versions);
+  const panelsChanged = change.panels !== q.input.panelCount;
+  const next = { ...q.input, panelCount: q.input.panelCount > 0 ? change.panels : 0, batteryModules: change.modules, backup: change.backup,
+    ...(panelsChanged ? { inverterSku: undefined, preferInverterSku: (q.input as { preferInverterSku?: string }).preferInverterSku } : {}) } as ConfigInput;
+  const stacks = autoStacks(next, data.rules);
+  const input = { ...next, stacks: stacks ?? next.stacks } as ConfigInput;
+  const base = quote(input, { ...data, asOf: todayAEST() });
+  if (!base.config.ok) throw new Error(`That design doesn't work: ${base.config.blockers.map((b) => b.message).join("; ")}`);
+  const keep = extraFromSnapshot(q).filter((l) => !change.extraCodes.includes(l.code));
+  const priced = await reprice(q, { input, extraLabour: [...keep, ...change.extraCodes.filter(Boolean).map((code) => ({ code }))] });
+  const from = q.snapshot ?? q.result;
+  const brand = (q.title ?? "").split(" · ")[0] || "System";
+  const rev: Revision = {
+    input, base, priced, extraCodes: change.extraCodes, reason: change.reason.trim().slice(0, 500), by: `${actor.type}:${actor.id}`, at: new Date().toISOString(),
+    from: { summary: from.config.summary, amount: from.stack.amount_payable, title: q.title },
+    title: `${brand} · ${base.config.panel_kw ? `${base.config.panel_kw} kW solar + ` : ""}${base.config.usable_kwh} kWh battery${change.backup === "whole_home" ? " + whole-home backup" : ""}`,
+  };
+  await write({ actor, action: "quotes.propose_revision", rationale: rev.reason }, { token: q.token, change }, async (tx) => {
+    await tx`update quotes set revision = ${tx.json(rev as never)}, updated_at = now() where id = ${q.id}`;
+    return { entity: "quote", entityId: q.id, event: "quote.revision_proposed", result: { from: rev.from.amount, to: priced.stack.amount_payable } };
+  });
+  await queueMessage("M14", q.token, q.customer_email, { name: q.customer_name, amount: priced.stack.amount_payable, was: rev.from.amount });
+}
+
+export async function answerRevision(q: QuoteRow, accept: boolean) {
+  const rev = q.revision;
+  if (!rev) throw new Error("There's no change waiting");
+  if (!REVISABLE.includes(q.status)) throw new Error("This job has moved on; call us to change the design");
+  if (!accept) {
+    await write({ actor: CUSTOMER, action: "quotes.decline_revision" }, { token: q.token }, async (tx) => {
+      await tx`update quotes set revision = null, updated_at = now() where id = ${q.id}`;
+      return { entity: "quote", entityId: q.id, event: "quote.revision_declined", result: {} };
+    });
+    return;
+  }
+  await write({ actor: CUSTOMER, action: "quotes.accept_revision" }, { token: q.token }, async (tx) => {
+    await tx`update quotes set input = ${tx.json(rev.input as never)}, result = ${tx.json(rev.base as never)}, title = ${rev.title}, revision = null, updated_at = now() where id = ${q.id}`;
+    return { entity: "quote", entityId: q.id, event: "quote.revision_accepted", result: { amount: rev.priced.stack.amount_payable } };
+  });
+  const fresh = (await getQuote(q.token))!;
+  if (fresh.status === "priced") {
+    await db()`update quotes set snapshot = ${db().json(rev.priced as never)}, amount_payable = ${rev.priced.stack.amount_payable}, price_inc_gst = ${rev.priced.stack.price_inc_gst}, stcs = ${rev.priced.stack.stcs} where id = ${q.id}`;
+  } else {
+    await freezePrice(fresh, rev.priced, CUSTOMER, `Customer accepted the revised design: ${rev.reason}`);
+  }
 }

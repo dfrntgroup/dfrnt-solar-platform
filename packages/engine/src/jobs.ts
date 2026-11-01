@@ -46,7 +46,7 @@ export function assertTransition(from: JobState, to: JobState) {
 
 /* ---------- site answers + instant price ---------- */
 export interface SiteAnswers {
-  address: { line1: string; unit?: string; suburb: string; state: string; postcode: string };
+  address: { line1: string; unit?: string; suburb: string; state: string; postcode: string; gnafPid?: string };
   phases: 1 | 3 | "unknown";
   roofType: "tin" | "tile" | "kliplok";
   storeys: number;

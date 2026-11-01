@@ -8,10 +8,12 @@ import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2 } from "@/lib/site";
-import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent, photoPublic, formbaySend, formbayLink, formbaySyncNow } from "../../actions";
+import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent, photoPublic, formbaySend, formbayLink, formbaySyncNow, opsDesignFeePaid, opsRevise } from "../../actions";
 import { buildFormbayJob } from "@/lib/formbay-job";
 import { formbayConfigured } from "@/lib/formbay";
 import { Step } from "@/components/Step";
+import { ReviseForm } from "@/components/ReviseForm";
+import { REVISABLE } from "@/lib/jobs";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +58,12 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <tr><td>Switchboard</td><td className="r">{site.switchboard}</td></tr>
             <tr><td>NMI · retailer</td><td className="r">{(site as { nmi?: string }).nmi ?? "not given"} · {(site as { energyRetailer?: string }).energyRetailer ?? "–"}</td></tr>
             <tr><td>Prior battery claim on NMI</td><td className="r">{site.priorBatteryClaim ? "yes" : "no"}</td></tr>
-          </tbody></table> : <p className="muted">Not submitted yet.</p>}
+          </tbody></table> : <div>
+            <p className="muted">Not submitted yet. Checkout: {q.design_fee_status === "due" ? "design fee due" : q.site_draft?.address ? `step 3, photos (${urls.length} uploaded)` : q.checkout_at ? "step 2, home details" : "step 1, contact details"}.</p>
+            {q.customer_email && <p className="small">{q.customer_name} · {q.customer_email} · {q.customer_phone ? <a href={`tel:${q.customer_phone}`}>{q.customer_phone}</a> : "no phone"}</p>}
+            {q.site_draft?.address && <p className="small">{q.site_draft.address.unit ? `${q.site_draft.address.unit}/` : ""}{q.site_draft.address.line1}, {q.site_draft.address.suburb} {q.site_draft.address.postcode}{q.site_draft.address.gnafPid ? ` · G-NAF ${q.site_draft.address.gnafPid}` : " · typed, not matched"}</p>}
+          </div>}
+          {q.design_review && <p className="small muted">Went to an installer photo check.</p>}
           {q.pricing_reasons?.length ? <div className="note" style={{ marginTop: 8 }}>Needs pricing: {q.pricing_reasons.join(" · ")}</div> : null}
           <h3 style={{ marginTop: 18 }}>Photos</h3>
           <div className="filters">{urls.length ? urls.map((u, i) => u.url ? <a key={i} className="chip" href={u.url} target="_blank">{u.kind}</a> : <span key={i} className="chip">{u.kind} (local)</span>) : <span className="muted small">None</span>}</div>
@@ -94,6 +101,11 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
                 <input name="bstc" placeholder="Already in Formbay? BSTC number" style={{ ...input, width: "100%" }} /><button className="btn sm ghost">Link</button></form>
             </>)}
           </div>
+          {q.design_fee_status === "due" && <form action={opsDesignFeePaid} className="card" style={{ marginBottom: 12 }}>
+            <input type="hidden" name="id" value={id} /><strong>Design check fee due</strong><span className="small">{pays.filter((x) => x.kind === "report" && x.status === "pending").map((x) => `${aud2(x.amount as number)} · ref ${x.reference}`).join(", ")}</span>
+            <span className="small muted">Marking it received issues a credit for the same amount on this job and sends it to the installer to check.</span>
+            <button className="btn" type="submit">Fee received — send to installer</button></form>}
+          {REVISABLE.includes(q.status) && <ReviseForm q={q} action={opsRevise} hidden={<input type="hidden" name="id" value={id} />} />}
           {(q.status === "payment_pending" || q.status === "payment_review") && <form action={opsMarkPaid} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Bank transfer {q.payment_reference}</strong><span className="small">Expecting {aud2(p.stack.amount_payable)}</span>
             <button className="btn" type="submit">Funds received — mark paid</button></form>}

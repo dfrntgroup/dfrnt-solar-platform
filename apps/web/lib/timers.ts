@@ -74,6 +74,8 @@ export async function runDaily() {
     await db()`update quotes set reminders = reminders || '{"m10":true}' where id = ${q.id}`;
   }
   out.review_requests = ask.length;
+  // C5: checkout follow-ups for anyone who stopped partway.
+  out.checkout_followups = await runCheckoutFollowups();
   // Formbay status for every linked job.
   try { out.formbay = (await runFormbaySync()) as never; } catch { /* reported on the job pages */ }
   // Agent proposals expire after 24 h.
@@ -83,8 +85,31 @@ export async function runDaily() {
   return out;
 }
 
+/** C5: someone gave their details but stopped before the photos: a nudge the same day (after 2 hours) and two days later. */
+export async function runCheckoutFollowups() {
+  const rows = await db()`select id, token, customer_email, customer_name, amount_payable::float8 amount, lock_until::text lock_until, reminders, site_draft is not null has_home,
+      extract(epoch from now() - checkout_at)::int / 3600 hours from quotes
+    where status = 'secured' and customer_email is not null and checkout_at is not null and design_fee_status is null and lock_until >= ${todayAEST()}`;
+  const { SELLER } = await import("./legal");
+  let sent = 0;
+  for (const q of rows) {
+    const r = (q.reminders ?? {}) as Record<string, unknown>;
+    const h = q.hours as number;
+    const due = h >= 48 && h < 240 && !r.co_2 ? "co_2" : h >= 2 && h < 30 && !r.co_0 ? "co_0" : null;
+    if (!due) continue;
+    await queueMessage("M13", q.token as string, q.customer_email as string, { name: String(q.customer_name ?? "").split(" ")[0] || null, amount: q.amount,
+      until: longDate(q.lock_until as string), left: q.has_home ? "four photos" : "two short steps", phone: SELLER.phone, second: due === "co_2" });
+    await db()`update quotes set reminders = reminders || ${db().json({ [due]: todayAEST(), ...(due === "co_2" ? { co_0: String(r.co_0 ?? "skipped") } : {}) } as never)} where id = ${q.id}`;
+    sent++;
+  }
+  return sent;
+}
+
 /** 5 pm: jobs still waiting for an installer's price go to the next installer for the postcode; none → ops tech review. */
 export async function runCutoff() {
+  const followups = await runCheckoutFollowups();
+  const dow = new Date(Date.now() + 10 * 3600_000).getUTCDay();
+  if (dow === 0 || dow === 6) return { followups, reassigned: 0, to_ops: 0, weekend: true };
   const waiting = await db()`select id, installer_id, postcode, pricing_reasons from quotes
     where status = 'pricing_installer' and updated_at < now() - interval '1 hour'`;
   let reassigned = 0, toOps = 0;
@@ -102,7 +127,7 @@ export async function runCutoff() {
       toOps++;
     }
   }
-  return { reassigned, to_ops: toOps };
+  return { followups, reassigned, to_ops: toOps };
 }
 
 /** Formbay has no webhooks: poll every linked job that isn't finished, store its status, and move installed jobs to lodged

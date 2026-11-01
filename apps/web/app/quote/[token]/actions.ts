@@ -3,7 +3,9 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@dfrnt/db";
 import type { SiteAnswers } from "@dfrnt/engine";
-import { applyCode, book, chooseBank, CUSTOMER, cancel, decideVariation, getQuote, sign, submitSite } from "@/lib/jobs";
+import { answerRevision, applyCode, book, chooseBank, CUSTOMER, cancel, decideVariation, getQuote, sign, submitSite } from "@/lib/jobs";
+import { queueMessage } from "@/lib/messages";
+import { longDate } from "@/lib/site";
 import { putPhoto } from "@/lib/storage";
 import { allow } from "@/lib/ratelimit";
 
@@ -16,48 +18,139 @@ async function run(token: string, fn: () => Promise<unknown>) {
   back(token);
 }
 
-export async function submitHome(f: FormData) {
+const PHOTO_KINDS = ["switchboard", "meter", "roof", "battery_location"] as const;
+const goto = (token: string, step?: number, err?: string) =>
+  redirect(`/quote/${token}?${new URLSearchParams({ ...(step ? { step: String(step) } : {}), ...(err ? { error: err } : {}) })}#checkout`);
+
+async function stepRun(token: string, step: number, fn: () => Promise<number | void>) {
+  let next: number | void = undefined;
+  try { next = await fn(); } catch (e) { if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e; goto(token, step, (e as Error).message); }
+  revalidatePath(`/quote/${token}`);
+  goto(token, next || undefined);
+}
+
+async function openQuote(token: string) {
+  const q = await getQuote(token);
+  if (!q) throw new Error("Quote not found");
+  if (!["saved", "secured", "lapsed"].includes(q.status)) throw new Error("This quote has already been priced");
+  return q;
+}
+
+/* C1 step 1: name, mobile, email. Saved straight away so the lead is never lost, and the record link is emailed. */
+export async function saveContact(f: FormData) {
   const token = s(f, "token");
-  await run(token, async () => {
-    if (!(await allow("site", 15))) throw new Error("Too many attempts — please wait a few minutes");
-    const q = await getQuote(token);
-    if (!q) throw new Error("Quote not found");
-    const photos: Record<string, boolean> = {};
-    for (const kind of ["switchboard", "meter", "roof", "battery_location"]) {
-      const file = f.get(`photo_${kind}`);
-      if (file instanceof File && file.size > 0) {
-        if (!file.type.startsWith("image/")) throw new Error(`The ${kind.replace("_", " ")} photo must be an image`);
-        if (file.size > 15_000_000) throw new Error(`The ${kind.replace("_", " ")} photo is over 15 MB`);
-        const path = `${q.id}/${kind}-${Date.now()}.${file.type.split("/")[1] ?? "jpg"}`;
-        await putPhoto(path, await file.arrayBuffer(), file.type);
-        await db()`insert into quote_photos (quote_id, kind, path, content_type, bytes) values (${q.id}, ${kind}, ${path}, ${file.type}, ${file.size})`;
-      }
-    }
-    const have = await db()`select distinct kind from quote_photos where quote_id = ${q.id}`;
-    for (const r of have) photos[r.kind as string] = true;
-    const phases = s(f, "phases");
-    const site: SiteAnswers = {
-      address: { line1: s(f, "line1"), unit: s(f, "unit"), suburb: s(f, "suburb"), state: "QLD", postcode: s(f, "postcode") || q.postcode },
-      phases: phases === "3" ? 3 : phases === "1" ? 1 : "unknown",
-      roofType: (s(f, "roofType") || "tin") as SiteAnswers["roofType"],
-      storeys: Number(s(f, "storeys") || 1),
-      batteryLocation: (s(f, "batteryLocation") || "other") as SiteAnswers["batteryLocation"],
-      againstHabitableRoom: s(f, "againstHabitableRoom") === "yes",
-      vehicleExposure: s(f, "vehicleExposure") === "yes",
-      switchboard: (s(f, "switchboard") || "unsure") as SiteAnswers["switchboard"],
-      cableRunM: Number(s(f, "cableRunM") || 5),
-      priorBatteryClaim: s(f, "priorBatteryClaim") === "yes",
-      nmi: s(f, "nmi").replace(/\s/g, "").toUpperCase() || undefined,
-      energyRetailer: s(f, "energyRetailer") || undefined,
-      photos,
-    };
-    if (!/^\d{4}$/.test(site.address.postcode)) throw new Error("Enter a 4-digit postcode");
-    if (s(f, "multi") === "yes" && !site.address.unit) throw new Error("Add your unit or lot number — the rebate is rejected without it");
-    if (/^\s*\d+\s*[-–]\s*\d+\s/.test(site.address.line1) && !site.address.unit) throw new Error("That street number is a range (like 19–21). Add your unit or lot number");
-    if (site.nmi && !/^[A-Z0-9]{10,11}$/.test(site.nmi)) throw new Error("Your NMI is 10 or 11 letters and numbers, printed on your electricity bill");
-    if (!s(f, "name") || !/^\S+@\S+\.\S+$/.test(s(f, "email"))) throw new Error("Enter your name and a valid email");
-    await submitSite(q, site, { name: s(f, "name"), email: s(f, "email"), phone: s(f, "phone") });
+  await stepRun(token, 1, async () => {
+    if (!(await allow("contact", 20))) throw new Error("Too many attempts — please wait a few minutes");
+    const q = await openQuote(token);
+    const name = s(f, "name"), email = s(f, "email").toLowerCase(), phone = s(f, "phone").replace(/[^\d+]/g, "");
+    if (name.length < 2) throw new Error("Enter your name");
+    if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter a valid email");
+    if (!/^(\+?61|0)4\d{8}$/.test(phone)) throw new Error("Enter an Australian mobile, like 0412 345 678");
+    const first = !q.customer_email || !q.checkout_at;
+    await db()`update quotes set customer_name = ${name}, customer_email = ${email}, customer_phone = ${phone}, checkout_at = now(), updated_at = now() where id = ${q.id}`;
+    if (first) await queueMessage("M12", token, email, { name: name.split(" ")[0], amount: q.result.stack.amount_payable, until: longDate(q.lock_until) });
+    return 2;
   });
+}
+
+function draftFrom(f: FormData, postcode: string): Omit<SiteAnswers, "photos"> {
+  const phases = s(f, "phases");
+  let unit = s(f, "unit"), line1 = s(f, "line1").replace(/\s+/g, " ");
+  const slash = /^(\d+[A-Za-z]?)\s*\/\s*(\d.+)$/.exec(line1);       // "3/12 Smith St" → unit 3, 12 Smith St
+  if (slash && !unit) { unit = slash[1]!; line1 = slash[2]!; }
+  return {
+    address: { line1, unit: unit || undefined, suburb: s(f, "suburb"), state: "QLD", postcode: s(f, "postcode") || postcode, gnafPid: s(f, "gnafPid") || undefined },
+    phases: phases === "3" ? 3 : phases === "1" ? 1 : "unknown",
+    roofType: (s(f, "roofType") || "tin") as SiteAnswers["roofType"],
+    storeys: Number(s(f, "storeys") || 1),
+    batteryLocation: (s(f, "batteryLocation") || "other") as SiteAnswers["batteryLocation"],
+    againstHabitableRoom: s(f, "againstHabitableRoom") === "yes",
+    vehicleExposure: s(f, "vehicleExposure") === "yes",
+    switchboard: (s(f, "switchboard") || "unsure") as SiteAnswers["switchboard"],
+    cableRunM: Number(s(f, "cableRunM") || 5),
+    priorBatteryClaim: s(f, "priorBatteryClaim") === "yes",
+    nmi: s(f, "nmi").replace(/\s/g, "").toUpperCase() || undefined,
+    energyRetailer: s(f, "energyRetailer") || undefined,
+  };
+}
+
+/* C1 step 2: home details (address from G-NAF when the lookup is on). */
+export async function saveHome(f: FormData) {
+  const token = s(f, "token");
+  await stepRun(token, 2, async () => {
+    if (!(await allow("site", 30))) throw new Error("Too many attempts — please wait a few minutes");
+    const q = await openQuote(token);
+    const d = draftFrom(f, q.postcode);
+    if (!/^\d{4}$/.test(d.address.postcode)) throw new Error("Enter a 4-digit postcode");
+    if (!d.address.line1 || !d.address.suburb) throw new Error("Enter your street address and suburb");
+    if (s(f, "multi") === "yes" && !d.address.unit) throw new Error("Add your unit or lot number — the rebate is rejected without it");
+    if (/^\s*\d+\s*[-–]\s*\d+\s/.test(d.address.line1) && !d.address.unit) throw new Error("That street number is a range (like 19–21). Add your unit or lot number");
+    if (d.nmi && !/^[A-Z0-9]{10,11}$/.test(d.nmi)) throw new Error("Your NMI is 10 or 11 letters and numbers, printed on your electricity bill");
+    if (!/^\d+[A-Za-z]?([-–]\d+[A-Za-z]?)?\s+\S+/.test(d.address.line1.replace(/^(lot)\s*/i, ""))) throw new Error("Start the street address with the house number, like 12 Smith Street");
+    await db()`update quotes set site_draft = ${db().json(d as never)}, checkout_at = now(), updated_at = now() where id = ${q.id}`;
+    return 3;
+  });
+}
+
+async function storePhotos(q: { id: string }, f: FormData) {
+  let n = 0;
+  for (const kind of PHOTO_KINDS) {
+    const file = f.get(`photo_${kind}`);
+    if (file instanceof File && file.size > 0) {
+      if (!file.type.startsWith("image/")) throw new Error(`The ${kind.replace("_", " ")} photo must be an image`);
+      if (file.size > 15_000_000) throw new Error(`The ${kind.replace("_", " ")} photo is over 15 MB`);
+      const path = `${q.id}/${kind}-${Date.now()}.${file.type.split("/")[1] ?? "jpg"}`;
+      await putPhoto(path, await file.arrayBuffer(), file.type);
+      await db()`insert into quote_photos (quote_id, kind, path, content_type, bytes) values (${q.id}, ${kind}, ${path}, ${file.type}, ${file.size})`;
+      n++;
+    }
+  }
+  return n;
+}
+
+/* C1 step 3: photos, then the confirmed price (instant for standard homes, otherwise the installer's photo check). */
+export async function submitHome(f: FormData) { await photoStep(f, true); }
+export async function savePhotos(f: FormData) { await photoStep(f, false); }
+async function photoStep(f: FormData, finish: boolean) {
+  const token = s(f, "token");
+  await stepRun(token, 3, async () => {
+    if (!(await allow("site", 30))) throw new Error("Too many attempts — please wait a few minutes");
+    const q = await openQuote(token);
+    if (!q.site_draft?.address) return 2;
+    await storePhotos(q, f);
+    const chosen = s(f, "installer");
+    if (chosen && /^[0-9a-f-]{36}$/.test(chosen)) await db()`update quotes set chosen_installer_id = ${chosen} where id = ${q.id}`;
+    await db()`update quotes set checkout_at = now() where id = ${q.id}`;
+    const have = await db()`select distinct kind from quote_photos where quote_id = ${q.id}`;
+    const photos: Record<string, boolean> = Object.fromEntries(have.map((r) => [r.kind as string, true]));
+    const missing = PHOTO_KINDS.filter((k) => !photos[k]);
+    if (!finish || missing.length) {
+      if (finish) throw new Error(`Still needed: ${missing.map((k) => k.replace("_", " ")).join(", ")}. Or tap "Call me back" and we'll help.`);
+      return 3;
+    }
+    const fresh = (await getQuote(token))!;
+    await submitSite(fresh, { ...(fresh.site_draft as Omit<SiteAnswers, "photos">), photos } as SiteAnswers,
+      { name: fresh.customer_name ?? "", email: fresh.customer_email ?? "", phone: fresh.customer_phone ?? "" });
+  });
+}
+
+/** C1: send the record link so the photos can be taken on a phone. */
+export async function emailMeLink(f: FormData) {
+  const token = s(f, "token");
+  await stepRun(token, 3, async () => {
+    if (!(await allow("emaillink", 5))) throw new Error("We've sent it already — check your inbox");
+    const q = await openQuote(token);
+    await queueMessage("M12", token, q.customer_email, { name: (q.customer_name ?? "").split(" ")[0] || null, amount: q.result.stack.amount_payable, until: longDate(q.lock_until) });
+    redirect(`/quote/${token}?step=3&sent=1#checkout`);
+  });
+}
+
+/** C6: customer accepts or keeps the original after a design change. */
+export async function acceptRevision(f: FormData) { await revisionAnswer(f, true); }
+export async function keepOriginal(f: FormData) { await revisionAnswer(f, false); }
+async function revisionAnswer(f: FormData, accept: boolean) {
+  const token = s(f, "token");
+  await run(token, async () => answerRevision((await getQuote(token))!, accept));
 }
 
 export async function signAgreement(f: FormData) {

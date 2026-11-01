@@ -22,6 +22,14 @@ const back = (f: FormData) => `/installer/job/${s(f, "id")}${s(f, "as") ? `?as=$
 export async function confirmPrice(f: FormData) {
   await run(back(f), async () => { const { me, q } = await own(f); await installerPrice(q, me.actor, f.getAll("codes").map(String), s(f, "note")); });
 }
+/** C6: the installer suggests a different design from the photos (more panels, a different battery size, a sub-board). */
+export async function installerRevise(f: FormData) {
+  await run(back(f), async () => {
+    const { me, q } = await own(f);
+    const { proposeRevision } = await import("@/lib/jobs");
+    await proposeRevision(q, me.actor, { panels: Number(s(f, "panels")), modules: Number(s(f, "modules")), backup: s(f, "backup") === "whole_home" ? "whole_home" : "none", extraCodes: f.getAll("codes").map(String), reason: s(f, "reason") });
+  });
+}
 export async function installerStage(f: FormData) {
   await run(back(f), async () => {
     const { me, q } = await own(f);

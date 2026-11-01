@@ -7,7 +7,8 @@ import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2, longDate } from "@/lib/site";
-import { confirmPrice, installerStage, installerVariation, setTechnician } from "../../actions";
+import { confirmPrice, installerRevise, installerStage, installerVariation, setTechnician } from "../../actions";
+import { ReviseForm } from "@/components/ReviseForm";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,7 @@ export default async function InstallerJob({ params, searchParams }: { params: P
             {menu.items.filter((i) => ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-TERRACOTTA", "SVC-INST-2STY"].includes(i.code)).map((i) => <label key={i.code} className="small"><input type="checkbox" name="codes" value={i.code} /> {i.description} ({aud2(i.installer_cost ?? i.menu_rate / 1.1)})</label>)}
             <input name="note" placeholder="Note for the customer" style={input} />
             <button className="btn">Confirm price</button></form>}
+          {q.status === "pricing_installer" && <ReviseForm q={q} action={installerRevise} hidden={hid} />}
           {["booked", "gear_ordered", "delivered"].includes(q.status) && techs.length > 0 && <form action={setTechnician} className="card" style={{ marginBottom: 12 }}>{hid}
             <strong>Technician on this job</strong><select name="technician" defaultValue={(curTech?.technician_id as string) ?? (techs.find((t) => t.is_default)?.id as string)} style={input}>{techs.map((t) => <option key={t.id as string} value={t.id as string}>{t.name as string}</option>)}</select>
             <button className="btn ghost sm">Set technician</button></form>}

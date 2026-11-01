@@ -188,3 +188,27 @@ input:focus-visible + .pill-r { outline: 2px solid var(--teal); }
 .hdr.admin nav a:hover { color: var(--teal); }
 .hdr.admin .who { white-space: nowrap; }
 @media (min-width: 900px) { .buybox .pills { flex-wrap: wrap; overflow: visible; } }
+
+/* C1 checkout progress */
+.progress { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; list-style: none; padding: 0; margin: 14px 0 6px; border: 2px solid var(--ink); }
+.progress li { border-right: 2px solid var(--ink); }
+.progress li:last-child { border-right: 0; }
+.progress li > * { display: flex; align-items: center; gap: 8px; padding: 10px 12px; font-weight: 600; font-size: 14px; color: var(--ink); text-decoration: none; }
+.progress li b { display: inline-grid; place-items: center; width: 24px; height: 24px; border: 2px solid var(--ink); font-size: 12px; flex: none; }
+.progress li.on > * { background: var(--ink); color: #fff; }
+.progress li.on b { border-color: #fff; }
+.progress li.done b { background: var(--teal); border-color: var(--teal); color: #fff; }
+.progress li:not(.on):not(.done) > * { opacity: .55; }
+@media (max-width: 420px) { .progress li > * { padding: 9px 8px; font-size: 13px; gap: 6px; } }
+
+/* C3/C4: plain-English first, kit behind a tap; phone in the header */
+.plain { list-style: none; padding: 0; margin: 6px 0 14px; }
+.plain li { border-top: 1px solid var(--line); padding: 10px 0; display: grid; gap: 2px; }
+.plain li:first-child { border-top: 0; }
+.techbox { border: 2px solid var(--ink); padding: 0 12px; margin: 8px 0 4px; }
+.techbox > summary { cursor: pointer; font-weight: 700; padding: 10px 0; }
+.techbox[open] { padding-bottom: 10px; }
+.hdr .right { display: flex; align-items: center; gap: 10px; }
+.hdr .tel { font-weight: 700; text-decoration: none; color: var(--ink); white-space: nowrap; font-size: 14px; }
+.show-sm { display: none; }
+@media (max-width: 600px) { .show-sm { display: inline; font-size: 18px; } }

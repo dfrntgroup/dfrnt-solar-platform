@@ -11,6 +11,8 @@ import { aud, aud2, longDate, sitePostcode } from "@/lib/site";
 import { Media } from "@/components/SystemCard";
 import { friendlyInverter, friendlyPanel, imageFor } from "@/lib/images";
 import { earliestFor, outcome } from "@/lib/capacity";
+import { Trust } from "@/components/Trust";
+import { CallBack } from "@/components/CallBack";
 
 export const dynamic = "force-dynamic";
 
@@ -52,14 +54,20 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
             <p className="eyebrow" style={{ marginTop: 26 }}>{s.brand} · {s.kind === "battery_only" ? "Battery only" : "Supply + installation"}</p>
             <h1 id="sys-title" style={{ fontSize: "clamp(30px, 6vw, 44px)" }}>{s.title}</h1>
             <p id="sys-outcome" style={{ color: "var(--teal-dark)", fontWeight: 700, marginTop: -6 }}>{outcome(c.usable_kwh, c.panel_kw)}</p>
-            <h3 style={{ marginTop: 18 }}>What is included</h3>
+            <h3 style={{ marginTop: 18 }}>What it does for you</h3>
+            <ul className="plain">
+              {c.panel_kw > 0 && <li><strong>Makes about {Math.round(c.panel_kw * 4.2)} kWh of power on an average day</strong><span className="small muted">Enough to run most homes through the day, with the extra charging your battery.</span></li>}
+              {c.usable_kwh > 0 && <li><strong>Stores {c.usable_kwh} kWh for when the sun&apos;s down</strong><span className="small muted">{outcome(c.usable_kwh, c.panel_kw)}. Many homes use 8–12 kWh between dinner and breakfast.</span></li>}
+              <li><strong>One price, installed, rebate already off</strong><span className="small muted">Nothing extra unless your photos show work outside a standard install, and you see that before you pay.</span></li>
+            </ul>
+            <details className="techbox"><summary>The kit, in detail</summary>
             <table className="incl"><tbody>
               {c.panel_kw > 0 && <tr><td className="k">Panels</td><td>{s.config.panelCount} × {friendlyPanel(rulesPanel)} ({c.panel_kw} kW)</td></tr>}
               <tr><td className="k">Inverter</td><td>{friendlyInverter(c.inverter?.model, c.inverter?.ac_w)}{s.config.panelCount > 0 ? "" : ", runs the battery"}</td></tr>
               {c.usable_kwh > 0 && <tr><td className="k">Battery</td><td>{parts.filter((b) => b.serial === "module").map((b) => `${b.qty} × ${b.description}`).join(", ")} · {c.usable_kwh} kWh usable</td></tr>}
               <tr><td className="k">Materials</td><td>{c.panel_kw > 0 ? "Racking, " : ""}isolators, cabling, breakers and standard materials</td></tr>
               <tr><td className="k">Installation</td><td>Licensed local electrician, grid connection and rebate paperwork. Anything non-standard is priced from your photos for your approval before you pay.</td></tr>
-            </tbody></table>
+            </tbody></table></details>
             <h2 style={{ marginTop: 28 }}>How the price is made <span className="small muted">(as listed)</span></h2>
             <table className="lines"><tbody>
               <tr><td>Equipment</td><td className="r">{aud2(st.hardware_ex_gst)}</td></tr>
@@ -87,11 +95,8 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
               <tr><td className="k">Installed by</td><td>A licensed, SAA-accredited local electrician, named before you pay.</td></tr>
               <tr><td className="k">Warranty</td><td>Panels 25 yr · inverter 10 yr · battery 10 yr · our workmanship 10 yr</td></tr>
             </tbody></table>
-            <div className="card mint" style={{ marginTop: 14, padding: 14 }}>
-              <strong>Questions? Talk to a real person.</strong>
-              <span className="small muted">The founders behind 29,000+ solar installs. No salespeople, no pressure.</span>
-              <Link className="link" href={`/contact?kind=callback&quote=`}>Book a call</Link>
-            </div>
+            <Trust />
+            <CallBack back={`/systems/${slug}`} state={sp.callback} />
           <p style={{ marginTop: 12 }}><Share title={s.title} text={`${s.brand} ${s.title}: ${aud(q.stack.amount_payable)} installed after rebates.`} /></p>
             {sp.saved === "1" ? <p className="small ok" style={{ marginTop: 10 }}>Saved — we&apos;ve sent the link to your email.</p> : (
               <form action={saveForLater} style={{ display: "flex", gap: 6, marginTop: 10 }}>

@@ -29,7 +29,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
               <label>Postcode<input name="postcode" defaultValue={postcode} inputMode="numeric" pattern="\d{4}" maxLength={4} className="field" /></label>
               <label>Last quarterly bill ($)<input name="bill" inputMode="numeric" placeholder="e.g. 750" className="field" required /></label>
             </div>
-            <button className="btn block" style={{ marginTop: 12 }} type="submit">Show my prices →</button>
+            <label className="small" style={{ display: "block", marginTop: 10 }}>Already have solar panels?<select name="solar" className="field" defaultValue="no"><option value="no">No, I need panels and a battery</option><option value="yes">Yes, I just want a battery</option></select></label>
+            <button className="btn block" style={{ marginTop: 12 }} type="submit">Find my system →</button>
             <p className="small muted" style={{ margin: "8px 0 0" }}>Systems from {aud(from)} installed, after rebates.</p>
           </form>
         </div>

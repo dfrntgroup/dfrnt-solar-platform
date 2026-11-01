@@ -19,6 +19,7 @@ export function Header({ postcode, back = "/" }: { postcode: string; back?: stri
         <div className="center"><Wordmark /></div>
         <nav className="desk">{links.slice(0, 5).map(([h, t]) => <Link key={h} href={h!}>{t}</Link>)}</nav>
         <div className="right">
+          <a className="tel" href="tel:1300133768" aria-label="Call us on 1300 133 768"><span className="hide-sm">1300 133 768</span><span className="show-sm" aria-hidden>☎</span></a>
           <details style={{ position: "relative" }}>
             <summary className="pcchip" style={{ listStyle: "none", cursor: "pointer" }}>📍 {postcode}</summary>
             <form action={setPostcode} style={{ position: "absolute", right: 0, top: 40, background: "#fff", border: "2px solid var(--ink)", borderRadius: 7, padding: 12, display: "flex", gap: 6, zIndex: 40, width: 220 }}>

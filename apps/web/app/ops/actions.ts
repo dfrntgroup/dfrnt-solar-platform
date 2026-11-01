@@ -287,3 +287,42 @@ export async function formbaySyncNow(f: FormData) {
   const back = String(f.get("back") ?? "/ops");
   redirect(`${back}${back.includes("?") ? "&" : "?"}ok=${encodeURIComponent(`Formbay sync: ${JSON.stringify(out)}`)}`);
 }
+
+/* C5 / C8 / C4: call-backs and settings */
+export async function callbackDone(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/callbacks", async () => { await db()`update callbacks set status = 'done', done_at = now(), done_by = ${me.name} where id = ${s(f, "id")}`; });
+}
+export async function saveDesignCheck(f: FormData) {
+  const me = await requireStaff();
+  const { setSetting } = await import("@/lib/settings");
+  const amount = Number(s(f, "amount") || 99);
+  await run("/ops/settings", async () => {
+    if (!(amount >= 0 && amount <= 500)) throw new Error("Amount between $0 and $500");
+    await setSetting("design_check", { fee_on: f.get("fee_on") === "on", amount }, me.name);
+  });
+}
+export async function saveTrust(f: FormData) {
+  const me = await requireStaff();
+  const { setSetting } = await import("@/lib/settings");
+  const v = (k: string) => s(f, k).slice(0, 200);
+  await run("/ops/settings", async () => {
+    const video = v("founder_video");
+    if (video && !/^https:\/\//.test(video)) throw new Error("The video link must start with https://");
+    if (v("callback_to") && !/^\S+@\S+\.\S+$/.test(v("callback_to"))) throw new Error("Call-back email isn't valid");
+    await setSetting("trust", { founder_line: v("founder_line"), founder_video: video, licence: v("licence"), insurance: v("insurance"), accreditations: v("accreditations"), callback_to: v("callback_to") }, me.name);
+  });
+}
+export async function opsDesignFeePaid(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  const { designFeePaid } = await import("@/lib/jobs");
+  await run(`/ops/job/${id}`, async () => designFeePaid((await getQuoteById(id))!, me.actor));
+}
+export async function opsRevise(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  const { proposeRevision } = await import("@/lib/jobs");
+  await run(`/ops/job/${id}`, async () => proposeRevision((await getQuoteById(id))!, me.actor, {
+    panels: Number(s(f, "panels")), modules: Number(s(f, "modules")), backup: s(f, "backup") === "whole_home" ? "whole_home" : "none",
+    extraCodes: f.getAll("codes").map(String), reason: s(f, "reason"),
+  }));
+}
