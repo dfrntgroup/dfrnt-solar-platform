@@ -12,7 +12,7 @@ export async function applyInstaller(f: FormData) {
   const team = v("team").split(/\n+/).map((l) => l.split(",").map((x) => x.trim())).filter(([n]) => n)
     .map(([name, saa, formbay]) => ({ name: name!, saa: saa || null, formbay_id: formbay?.replace(/\D/g, "") || null }));
   const details = {
-    team,
+    team, brands: all("brands"), crews: Math.min(10, Math.max(1, Number(v("crews")) || 1)),
     capacity: { jobsPerDay: Math.max(1, Number(v("jobsPerDay")) || 1), leadDays: Math.max(0, Number(v("leadDays")) || 5), workingDays: all("workingDays").map(Number), blackouts: [] },
     scope: { version: 1, roofTypes: all("roofTypes").length ? all("roofTypes") : ["tin"], phases: (all("phases").length ? all("phases") : ["1"]).map(Number),
       batteryLocations: all("batteryLocations").length ? all("batteryLocations") : ["garage"], maxStoreys: Number(v("maxStoreys")) || 1, switchboardOk: true, maxCableRunM: 10 },

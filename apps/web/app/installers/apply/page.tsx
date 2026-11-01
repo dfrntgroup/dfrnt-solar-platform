@@ -56,6 +56,8 @@ export default async function Apply({ searchParams }: { searchParams: Promise<Re
               <F name="leadDays" label="Business days' notice you need" req value="5" />
             </div>
             <div className="small" style={{ margin: "6px 0" }}><strong>Days you install</strong><br />{DAYS.map(([v, d]) => <C key={v} name="workingDays" value={String(v)} label={d} on={v <= 5} />)}</div>
+            <div className="small" style={{ margin: "10px 0" }}><strong>Brands you&apos;re accredited to install</strong><br />{["SolaX", "Sungrow", "GoodWe", "Sigenergy"].map((b) => <C key={b} name="brands" value={b} label={b} on />)}</div>
+            <F name="crews" label="How many crews could do DFRNT jobs" req value="1" hint="Each crew connects its own Google Calendar after you're set up" />
             <h3 style={{ marginTop: 20 }}>Jobs you&apos;ll price instantly</h3>
             <p className="small muted" style={{ marginTop: 0 }}>Homes inside these get their price straight away from our menu. Anything else comes to you with the photos to check first.</p>
             <div className="small" style={{ margin: "6px 0" }}><strong>Roofs</strong><br /><C name="roofTypes" value="tin" label="Metal" on /><C name="roofTypes" value="tile" label="Tile" /><C name="roofTypes" value="kliplok" label="Klip-Lok" /></div>

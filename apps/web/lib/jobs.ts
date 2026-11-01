@@ -1,8 +1,8 @@
 // Job operations. Every state change goes through `write` (audited, evented, idempotent) and the engine's state machine.
 import { db, write, type Actor } from "@dfrnt/db";
 import {
-  assertTransition, autoStacks, bookableDates, instantPriceBlockers, quote, rebateWindow, variationAmount, variationLine,
-  labourLines, type Capacity, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest,
+  assertTransition, autoStacks, instantPriceBlockers, quote, rebateWindow, variationAmount, variationLine,
+  labourLines, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest,
 } from "@dfrnt/engine";
 import { todayAEST } from "./api";
 import { queueMessage } from "./messages";
@@ -20,6 +20,8 @@ export interface QuoteRow {
   discount_code: string | null; referral_discount: number | null; credit_code: string | null; credit_amount: number | null;
   site_draft: (Partial<SiteAnswers> & { address?: SiteAnswers["address"] }) | null; checkout_at: Date | null; design_review: boolean; design_fee_status: string | null;
   revision: Revision | null; chosen_installer_id: string | null;
+  crew_id: string | null; job_days: number | null; install_part: string | null; booked_via: string | null; booked_at: Date | null;
+  decline_until: Date | null; google_event_id: string | null; rebook: boolean; access_notes: string | null; desk_called_at: Date | null; desk_notes: string | null;
 }
 
 /** C6: a design change proposed by ops or the installer, priced on the same locked versions, waiting for the customer. */
@@ -33,6 +35,7 @@ export async function getQuote(token: string): Promise<QuoteRow | null> {
     lock_until::text as lock_until, install_date::text as install_date, signed_at, signed_name, agreement_version, invoice_number, payment_method, payment_reference, paid_at,
     customer_email, customer_name, customer_phone, postcode, created_at, discount_code, credit_code,
     site_draft, checkout_at, design_review, design_fee_status, revision, chosen_installer_id,
+    crew_id, job_days::float8 as job_days, install_part, booked_via, booked_at, decline_until, google_event_id, rebook, access_notes, desk_called_at, desk_notes,
     (select amount_inc::float8 from credits c where c.code = quotes.credit_code) as credit_amount,
     (select discount_inc::float8 from codes c where c.code = quotes.discount_code and c.active) as referral_discount from quotes where token = ${token}`;
   return (row as unknown as QuoteRow) ?? null;
@@ -58,12 +61,17 @@ export async function reprice(q: QuoteRow, extra: { site?: SiteAnswers; input?: 
   return quote(input, { ...data, asOf: todayAEST(), extraLabour: extra.extraLabour, variations: extra.variations, discounts: { ...(q.referral_discount ? { referral: q.referral_discount } : {}), ...(q.credit_amount ? { reportCredit: q.credit_amount } : {}), ...(extra.bank ? { bankTransferPct: 0.01 } : {}) } });
 }
 
-/** The installer for a job: the customer's choice if it covers the postcode (C7), otherwise the first real installer, then a test one. */
-async function installerFor(postcode: string, chosen?: string | null) {
-  const pc = parseInt(postcode, 10);
-  const [row] = await db()`select id, scope, capacity from installers where active and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int)
-    order by (id::text = ${chosen ?? ""}) desc, is_test, created_at limit 1`;
-  return row as { id: string; scope: StandardScope; capacity: Omit<Capacity, "booked"> } | undefined;
+/** The installer for a job: the customer's choice if it covers the postcode and can do this job (C7, scheduling "who"),
+ *  otherwise the first real installer who can, then a test one. */
+async function installerFor(q: QuoteRow, site: SiteAnswers) {
+  const pc = parseInt(site.address.postcode, 10);
+  const rows = await db()`select id, scope, capacity, profile from installers where active and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int)
+    order by (id::text = ${q.chosen_installer_id ?? ""}) desc, is_test, created_at`;
+  const { profileOf, needsOf } = await import("./schedule");
+  const { cannotDo } = await import("@dfrnt/engine");
+  const needs = needsOf({ ...q, site });
+  const row = rows.find((r) => !cannotDo(profileOf(r as never), needs).length);
+  return row as { id: string; scope: StandardScope } | undefined;
 }
 
 async function move(q: QuoteRow, to: JobState, actor: Actor, action: string, set: Record<string, unknown> = {}, rationale?: string, payload?: Record<string, unknown>) {
@@ -80,7 +88,7 @@ async function move(q: QuoteRow, to: JobState, actor: Actor, action: string, set
 export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name: string; email: string; phone: string }, opts: { feePaid?: boolean } = {}) {
   if (!["saved", "secured", "lapsed"].includes(q.status)) throw new Error("This quote has already been priced");
   if (q.status === "saved" || q.status === "lapsed") { await move(q, "secured", CUSTOMER, "quotes.secure"); q = (await getQuote(q.token))!; }
-  const inst = await installerFor(site.address.postcode, q.chosen_installer_id);
+  const inst = await installerFor(q, site);
   const priced = await reprice(q, { site });
   const reasons = inst ? instantPriceBlockers(site, inst.scope) : ["No installer covers this postcode yet"];
   if (!priced.config.ok) reasons.push(...priced.config.blockers.map((b) => b.message));
@@ -163,26 +171,8 @@ export async function markPaid(q: QuoteRow, actor: Actor) {
   // Tax invoice number is issued at the moment payment is received.
   await db()`update quotes set invoice_number = 'INV-' || nextval('invoice_seq') where id = ${q.id} and invoice_number is null`;
   await queueMessage("M3", q.token, q.customer_email, { name: q.customer_name });
-}
-
-/* E1: dates offered from installer capacity, inside the rebate window */
-export async function availableDates(q: QuoteRow) {
-  if (!q.installer_id) return [];
-  const [inst] = await db()`select capacity from installers where id = ${q.installer_id}`;
-  const booked = await db()`select install_date::text as d, count(*)::int as n from quotes
-    where installer_id = ${q.installer_id} and install_date is not null and status in ('booked','gear_ordered','delivered','on_site','variation_pending') group by 1`;
-  const cap = { ...(inst!.capacity as Omit<Capacity, "booked">), booked: Object.fromEntries(booked.map((r) => [r.d, r.n])) };
-  const created = q.created_at.toISOString().slice(0, 10);
-  return bookableDates(todayAEST(), cap, rebateWindow(created, (await pricingDataFor(q.result.versions)).rebates).window_end, 0, 15);
-}
-
-export async function book(q: QuoteRow, date: string) {
-  if (q.status !== "awaiting_date") throw new Error("Not ready to book");
-  if (!(await availableDates(q)).includes(date)) throw new Error("That date is no longer available");
-  await move(q, "booked", CUSTOMER, "jobs.book", { install_date: date, slot_hold_until: null });
-  if (q.installer_id) await db()`insert into pay_ledger (installer_id, quote_id, description, amount_ex)
-    values (${q.installer_id}, ${q.id}, 'Installation (frozen at pricing)', ${(q.snapshot ?? q.result).stack.installer_pay_ex_gst})`;
-  await queueMessage("M4", q.token, q.customer_email, { name: q.customer_name, date });
+  const { requestOffer } = await import("./schedule");
+  await requestOffer((await getQuote(q.token))!).catch(() => null);   // installer not on a live calendar: ask them for days
 }
 
 /* Stage moves by ops / installer (O2, I4) */
@@ -234,6 +224,15 @@ export async function decideVariation(q: QuoteRow, variationId: string, approve:
 /* D7: cancellation (refund handled by ops; Stripe refunds switch on at go-live) */
 export async function cancel(q: QuoteRow, actor: Actor, reason: string) {
   await move(q, "cancelled", actor, "jobs.cancel", { cancelled_at: new Date(), cancel_reason: reason, install_date: null }, reason);
+  if (q.install_date) {
+    const { offerEarlier } = await import("./schedule");
+    const { removeEvent } = await import("./google");
+    if (q.crew_id && q.google_event_id) {
+      const [c] = await db()`select dfrnt_calendar_id from installer_crews where id = ${q.crew_id}`;
+      if (c?.dfrnt_calendar_id) for (const id of q.google_event_id.split(",")) await removeEvent(q.crew_id, c.dfrnt_calendar_id as string, id);
+    }
+    await offerEarlier(q.installer_id, q.crew_id, q.install_date, q.id).catch(() => 0);
+  }
   await db()`update pay_ledger set status = 'accrued', amount_ex = 0 where quote_id = ${q.id} and status in ('accrued','eligible')`;
   await queueMessage("M7", q.token, q.customer_email, { name: q.customer_name });
 }

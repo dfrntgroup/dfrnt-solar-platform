@@ -1,23 +1,14 @@
-// Earliest install date for a postcode from real installer capacity (paid, booked jobs only hold slots).
-import { db } from "@dfrnt/db";
-import { earliestDate, type Capacity } from "@dfrnt/engine";
-import { todayAEST } from "./api";
+// Earliest install day for a postcode: live from installers' calendars where connected (scheduling S3).
+import { nextDaysFor } from "./schedule";
+import type { JobNeeds } from "@dfrnt/engine";
 
-let cache: { at: number; key: string; v: string | null } | null = null;
+/** null = nobody installs there yet; undefined = unknown (database unavailable). */
+export async function earliestFor(postcode: string, needs?: Partial<JobNeeds>): Promise<string | null | undefined> {
+  try { const d = await nextDaysFor(postcode, needs, 1); return d === null ? null : d[0] ?? undefined; } catch { return undefined; }
+}
 
-export async function earliestFor(postcode: string): Promise<string | null | undefined> {
-  if (cache && cache.key === postcode && Date.now() - cache.at < 60_000) return cache.v;
-  const pc = parseInt(postcode, 10);
-  try {
-    const rows = await db()`select i.capacity, (select json_object_agg(d, n) from (select install_date::text d, count(*)::int n from quotes q where q.installer_id = i.id and install_date is not null
-        and status in ('booked','gear_ordered','delivered','on_site','variation_pending') group by 1) x) booked
-      from installers i where active and (not is_test or ${process.env.VERCEL_ENV !== "production"}) and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int)`;
-    if (!rows.length) { cache = { at: Date.now(), key: postcode, v: null }; return null; }   // no installer covers it
-    const dates = rows.map((r) => earliestDate(todayAEST(), { ...(r.capacity as Omit<Capacity, "booked">), booked: (r.booked ?? {}) as Record<string, number> })).filter(Boolean).sort() as string[];
-    const v = dates[0] ?? null;
-    cache = { at: Date.now(), key: postcode, v };
-    return v;
-  } catch { return undefined; }   // unknown (database unavailable)
+export async function nextDays(postcode: string, needs?: Partial<JobNeeds>, n = 3): Promise<string[] | null | undefined> {
+  try { return await nextDaysFor(postcode, needs, n); } catch { return undefined; }
 }
 
 /** What the battery size does for a typical home — plain words, not a promise. */

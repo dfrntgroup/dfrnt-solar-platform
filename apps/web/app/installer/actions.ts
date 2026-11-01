@@ -118,3 +118,109 @@ export async function setTechnician(f: FormData) {
     });
   });
 }
+
+/* ---------- Scheduling S1: profile, crews, calendars ---------- */
+const cal = (f: FormData, extra = "") => `/installer/calendar${s(f, "as") ? `?as=${s(f, "as")}${extra ? `&${extra}` : ""}` : extra ? `?${extra}` : ""}`;
+
+export async function saveJobProfile(f: FormData) {
+  const me = await requireInstaller(s(f, "as") || undefined);
+  await run(cal(f), async () => {
+    const num = (k: string, d: number, lo: number, hi: number) => { const n = Number(s(f, k)); return Number.isFinite(n) && s(f, k) !== "" ? Math.min(hi, Math.max(lo, n)) : d; };
+    const profile = {
+      brands: f.getAll("brands").map(String), roofTypes: f.getAll("roofTypes").map(String), maxStoreys: num("maxStoreys", 2, 1, 3), phases: f.getAll("phases").map(Number),
+      durations: { battery_only: num("d_battery", 0.5, 0.5, 3), solar_battery: num("d_solar", 1, 0.5, 4) },
+      largeKw: num("largeKw", 13, 5, 40), twoStoreyExtra: num("twoStoreyExtra", 0.5, 0, 2), noticeDays: num("noticeDays", 3, 0, 20),
+      workingDays: f.getAll("workingDays").map(Number),
+    };
+    if (!profile.workingDays.length) throw new Error("Tick at least one install day");
+    await write({ actor: me.actor, action: "installers.job_profile" }, profile, async (tx) => {
+      await tx`update installers set profile = ${tx.json(profile as never)} where id = ${me.id}`;
+      return { entity: "installer", entityId: me.id, event: "installer.job_profile", result: { ok: true } };
+    });
+  });
+}
+export async function addCrew(f: FormData) {
+  const me = await requireInstaller(s(f, "as") || undefined);
+  await run(cal(f), async () => {
+    const [i] = await db()`select is_test from installers where id = ${me.id}`;
+    await db()`insert into installer_crews (installer_id, name, source) values (${me.id}, ${s(f, "name").slice(0, 60) || "Crew"}, ${i?.is_test ? "test" : "none"})`;
+  });
+}
+export async function removeCrew(f: FormData) {
+  const me = await requireInstaller(s(f, "as") || undefined);
+  await run(cal(f), async () => {
+    const [busy] = await db()`select 1 from quotes where crew_id = ${s(f, "crew")} and install_date >= current_date and status in ('booked','gear_ordered','delivered')`;
+    if (busy) throw new Error("This crew has booked jobs. Move them first, or keep the crew.");
+    await db()`update installer_crews set active = false where id = ${s(f, "crew")} and installer_id = ${me.id}`;
+  });
+}
+export async function saveCrewCalendars(f: FormData) {
+  const me = await requireInstaller(s(f, "as") || undefined);
+  await run(cal(f), async () => {
+    const ids = f.getAll("cal").map(String).filter(Boolean);
+    if (!ids.length) throw new Error("Tick at least one calendar that shows when this crew is busy");
+    await db()`update installer_crews set busy_calendar_ids = ${ids} where id = ${s(f, "crew")} and installer_id = ${me.id}`;
+    await db()`delete from crew_busy_cache where crew_id = ${s(f, "crew")}`;
+  });
+}
+export async function disconnectCrew(f: FormData) {
+  const me = await requireInstaller(s(f, "as") || undefined);
+  await run(cal(f), async () => {
+    await db()`update installer_crews set source = 'none', status = 'not_connected', refresh_token_enc = null, google_email = null where id = ${s(f, "crew")} and installer_id = ${me.id}`;
+    await db()`delete from crew_busy_cache where crew_id = ${s(f, "crew")}`;
+  });
+}
+/** Test installers only: mark a crew busy on a day (stands in for Google so the whole flow can be tested). */
+export async function testBusy(f: FormData) {
+  const me = await requireInstaller(s(f, "as") || undefined);
+  await run(cal(f), async () => {
+    const [c] = await db()`select c.id from installer_crews c join installers i on i.id = c.installer_id where c.id = ${s(f, "crew")} and i.id = ${me.id} and i.is_test and c.source = 'test'`;
+    if (!c) throw new Error("Test crews only");
+    const d = s(f, "date");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) throw new Error("Pick a date");
+    if (f.get("clear") === "1") await db()`delete from crew_busy_test where crew_id = ${c.id} and starts_at::date = ${d}::date`;
+    else await db()`insert into crew_busy_test (crew_id, starts_at, ends_at, label) values (${c.id}, ${`${d}T00:00:00+10:00`}, ${`${d}T23:59:59+10:00`}, 'Busy (test)')`;
+  });
+}
+
+/* ---------- Scheduling S2/S4/S5 on the job ---------- */
+export async function cantDoDay(f: FormData) {
+  await run(back(f), async () => {
+    const { me, q } = await own(f);
+    if (!q.decline_until || new Date(q.decline_until) < new Date()) throw new Error("The 24 hours to decline have passed. Use Move instead, with a reason.");
+    const { releaseDay } = await import("@/lib/schedule");
+    await releaseDay(q, "declined", me.actor);
+  });
+}
+export async function moveDay(f: FormData) {
+  await run(back(f), async () => {
+    const { me, q } = await own(f);
+    const reason = s(f, "reason");
+    if (!["rain", "sick", "parts"].includes(reason)) throw new Error("Pick a reason");
+    const { releaseDay } = await import("@/lib/schedule");
+    await releaseDay(q, reason, me.actor);
+  });
+}
+export async function offerDays(f: FormData) {
+  await run(back(f), async () => {
+    const { me, q } = await own(f);
+    if (q.status !== "awaiting_date" && !q.rebook) throw new Error("This job already has a day");
+    const { installerOffers } = await import("@/lib/schedule");
+    await installerOffers(q, f.getAll("date").map(String).filter(Boolean), me.actor);
+  });
+}
+export async function setJobDays(f: FormData) {
+  await run(back(f), async () => {
+    const { q } = await own(f);
+    const d = Number(s(f, "days"));
+    if (!(d >= 0.5 && d <= 5)) throw new Error("Between half a day and 5 days");
+    await db()`update quotes set job_days = ${Math.round(d * 2) / 2} where id = ${q.id}`;
+  });
+}
+export async function installerMessage(f: FormData) {
+  await run(back(f), async () => {
+    const { me, q } = await own(f);
+    const { postMessage } = await import("@/lib/thread");
+    await postMessage(q.token, "installer", me.business_name, s(f, "body"));
+  });
+}

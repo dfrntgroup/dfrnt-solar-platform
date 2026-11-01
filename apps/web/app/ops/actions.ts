@@ -184,7 +184,7 @@ export async function createInstallerFromApplication(f: FormData) {
     const [a] = await db()`select * from installer_applications where id = ${s(f, "id")} and status = 'new'`;
     if (!a) throw new Error("Application not found");
     const ranges = String(a.postcodes ?? "").split(/[\s,]+/).filter(Boolean).map((r) => r.split("-").map(Number)).filter(([x]) => x! > 0);
-    type Details = { team?: { name: string; saa: string | null; formbay_id: string | null }[]; capacity?: object; scope?: object };
+    type Details = { team?: { name: string; saa: string | null; formbay_id: string | null }[]; capacity?: { workingDays?: number[]; leadDays?: number }; scope?: { roofTypes?: string[]; phases?: number[]; maxStoreys?: number }; brands?: string[]; crews?: number };
     const d = (a.details ?? {}) as Details;
     const scope = d.scope ?? { version: 1, maxStoreys: 1, roofTypes: ["tin"], batteryLocations: ["garage", "outdoor_wall"], switchboardOk: true, maxCableRunM: 10, phases: [1] };
     const capacity = d.capacity ?? { jobsPerDay: 1, leadDays: 5, workingDays: [1, 2, 3, 4, 5], blackouts: [] };
@@ -193,6 +193,10 @@ export async function createInstallerFromApplication(f: FormData) {
       const [i] = await tx`insert into installers (business_name, abn, contact_name, email, phone, licence_no, saa_accreditation, insurance, insurance_expiry, formbay_installer_id, postcode_ranges, active, scope, capacity)
         values (${a.business_name}, ${a.abn}, ${a.contact_name}, ${a.email}, ${a.phone}, ${a.licence_no}, ${a.saa_accreditation ?? null}, ${a.insurance ?? null}, ${a.insurance_expiry ?? null},
           ${team.find((t) => t.formbay_id)?.formbay_id ?? null}, ${ranges.map(([x, y]) => `[${x},${(y ?? x ?? 0) + 1})`)}::int4range[], false, ${tx.json(scope as never)}, ${tx.json(capacity as never)}) returning id`;
+      const profile = { brands: d.brands ?? [], roofTypes: [], maxStoreys: 2, phases: [], durations: { battery_only: 0.5, solar_battery: 1 }, largeKw: 13, twoStoreyExtra: 0.5,
+        noticeDays: d.capacity?.leadDays ?? 3, workingDays: d.capacity?.workingDays?.length ? d.capacity.workingDays : [1, 2, 3, 4, 5] };
+      await tx`update installers set profile = ${tx.json(profile as never)} where id = ${i!.id}`;
+      for (let n = 1; n <= (d.crews ?? 1); n++) await tx`insert into installer_crews (installer_id, name) values (${i!.id}, ${(d.crews ?? 1) === 1 ? "Crew" : `Crew ${n}`})`;
       for (const [n, t] of team.entries()) await tx`insert into technicians (installer_id, name, saa_number, formbay_id, is_default) values (${i!.id}, ${t.name}, ${t.saa}, ${t.formbay_id}, ${n === 0})`;
       if (a.insurance_doc) await tx`insert into installer_documents (installer_id, kind, path, expires_on) values (${i!.id}, 'insurance', ${a.insurance_doc}, ${a.insurance_expiry ?? null})`;
       await tx`update installer_applications set status = 'accepted' where id = ${a.id}`;
@@ -331,4 +335,49 @@ export async function opsRevise(f: FormData) {
     panels: Number(s(f, "panels")), modules: Number(s(f, "modules")), backup: s(f, "backup") === "whole_home" ? "whole_home" : "none",
     extraCodes: f.getAll("codes").map(String), reason: s(f, "reason"),
   }));
+}
+
+/* Scheduling S6/S7 */
+export async function setDeskMode(f: FormData) {
+  const me = await requireStaff();
+  const mode = s(f, "mode");
+  const { setSetting } = await import("@/lib/settings");
+  await run("/ops/desk", async () => { if (!["off", "all", "help"].includes(mode)) throw new Error("Pick a mode"); await setSetting("booking_desk", { mode: mode as "off" | "all" | "help" }, me.name); });
+}
+export async function deskCalled(f: FormData) {
+  await requireStaff();
+  await run("/ops/desk", async () => { await db()`update quotes set desk_called_at = coalesce(desk_called_at, now()), desk_notes = ${s(f, "notes").slice(0, 1000) || null} where id = ${s(f, "id")}`; });
+}
+export async function deskBook(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/desk", async () => {
+    const { bookDay } = await import("@/lib/schedule");
+    await bookDay((await getQuoteById(s(f, "id")))!, s(f, "date"), me.actor, "desk");
+    await db()`update quotes set desk_called_at = coalesce(desk_called_at, now()) where id = ${s(f, "id")}`;
+  });
+}
+export async function opsReleaseDay(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  await run(`/ops/job/${id}`, async () => {
+    const reason = s(f, "reason");
+    if (!["rain", "sick", "parts", "customer", "ops", "declined"].includes(reason)) throw new Error("Pick a reason");
+    const { releaseDay } = await import("@/lib/schedule");
+    await releaseDay((await getQuoteById(id))!, reason, me.actor);
+  });
+}
+export async function opsMessage(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  await run(`/ops/job/${id}`, async () => {
+    const q = (await getQuoteById(id))!;
+    const { postMessage } = await import("@/lib/thread");
+    await postMessage(q.token, "ops", me.name, s(f, "body"));
+  });
+}
+export async function saveScheduling(f: FormData) {
+  const me = await requireStaff();
+  const { setSetting } = await import("@/lib/settings");
+  await run("/ops/settings", async () => {
+    const n = (k: string, lo: number, hi: number, d: number) => { const v = Number(s(f, k)); return Number.isFinite(v) && s(f, k) !== "" ? Math.min(hi, Math.max(lo, v)) : d; };
+    await setSetting("scheduling", { gear_lead_days: n("gear_lead_days", 0, 30, 3), decline_hours: n("decline_hours", 1, 72, 24), earlier_offer_hours: n("earlier_offer_hours", 1, 72, 12) }, me.name);
+  });
 }

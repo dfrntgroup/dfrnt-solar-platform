@@ -1,7 +1,7 @@
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
 import { getSetting } from "@/lib/settings";
-import { saveDesignCheck, saveTrust } from "../actions";
+import { saveDesignCheck, saveScheduling, saveTrust } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +10,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const dc = await getSetting("design_check");
   const t = await getSetting("trust");
+  const sc = await getSetting("scheduling");
   const F = ({ name, label, value, hint }: { name: string; label: string; value: string; hint?: string }) => (
     <label style={{ display: "block", margin: "10px 0" }}><span className="small" style={{ fontWeight: 600 }}>{label}</span>{hint && <span className="small muted" style={{ display: "block" }}>{hint}</span>}<input name={name} defaultValue={value} style={input} /></label>);
   return (
@@ -36,6 +37,14 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <button className="btn">Save</button>
         </form>
       </div>
+      <form action={saveScheduling} className="card" style={{ marginTop: 16 }}>
+        <strong>Install scheduling</strong>
+        <span className="small muted">The booking desk switch is on Ops → Booking desk.</span>
+        <F name="gear_lead_days" label="Working days for gear to arrive" value={String(sc.gear_lead_days)} hint="No install day is offered sooner than this" />
+        <F name="decline_hours" label="Hours an installer has to say they can't do a booked day" value={String(sc.decline_hours)} />
+        <F name="earlier_offer_hours" label="Hours an 'earlier day opened' offer stays open" value={String(sc.earlier_offer_hours)} />
+        <button className="btn">Save</button>
+      </form>
     </AdminShell>
   );
 }

@@ -8,11 +8,12 @@ import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2 } from "@/lib/site";
-import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent, photoPublic, formbaySend, formbayLink, formbaySyncNow, opsDesignFeePaid, opsRevise } from "../../actions";
+import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent, photoPublic, formbaySend, formbayLink, formbaySyncNow, opsDesignFeePaid, opsRevise, opsReleaseDay, opsMessage } from "../../actions";
 import { buildFormbayJob } from "@/lib/formbay-job";
 import { formbayConfigured } from "@/lib/formbay";
 import { Step } from "@/components/Step";
 import { ReviseForm } from "@/components/ReviseForm";
+import { JobThread } from "@/components/JobThread";
 import { REVISABLE } from "@/lib/jobs";
 
 export const dynamic = "force-dynamic";
@@ -64,6 +65,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             {q.site_draft?.address && <p className="small">{q.site_draft.address.unit ? `${q.site_draft.address.unit}/` : ""}{q.site_draft.address.line1}, {q.site_draft.address.suburb} {q.site_draft.address.postcode}{q.site_draft.address.gnafPid ? ` · G-NAF ${q.site_draft.address.gnafPid}` : " · typed, not matched"}</p>}
           </div>}
           {q.design_review && <p className="small muted">Went to an installer photo check.</p>}
+          {(q.install_date || q.rebook) && <p className="small">Install: {q.rebook ? "customer picking a new day" : `${q.install_date}${q.install_part === "am" ? " (morning)" : ""}`} · {q.job_days ?? "?"} crew-day(s) · booked via {q.booked_via ?? "–"}{q.google_event_id ? " · in installer's Google Calendar" : ""}{q.access_notes ? ` · access: ${q.access_notes}` : ""}</p>}
           {q.pricing_reasons?.length ? <div className="note" style={{ marginTop: 8 }}>Needs pricing: {q.pricing_reasons.join(" · ")}</div> : null}
           <h3 style={{ marginTop: 18 }}>Photos</h3>
           <div className="filters">{urls.length ? urls.map((u, i) => u.url ? <a key={i} className="chip" href={u.url} target="_blank">{u.kind}</a> : <span key={i} className="chip">{u.kind} (local)</span>) : <span className="muted small">None</span>}</div>
@@ -106,6 +108,10 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <span className="small muted">Marking it received issues a credit for the same amount on this job and sends it to the installer to check.</span>
             <button className="btn" type="submit">Fee received — send to installer</button></form>}
           {REVISABLE.includes(q.status) && <ReviseForm q={q} action={opsRevise} hidden={<input type="hidden" name="id" value={id} />} />}
+          {["booked", "gear_ordered", "delivered"].includes(q.status) && q.install_date && !q.rebook && <form action={opsReleaseDay} className="card" style={{ marginBottom: 12 }}>
+            <input type="hidden" name="id" value={id} /><strong>Move the install day</strong><span className="small muted">Releases the day; the customer picks a new one and the freed day is offered to customers booked later.</span>
+            <select name="reason" style={input} defaultValue="ops"><option value="ops">Our call</option><option value="customer">Customer asked</option><option value="rain">Rain</option><option value="sick">Installer sick</option><option value="parts">Parts</option><option value="declined">Installer can&apos;t do it</option></select>
+            <button className="btn ghost sm">Release day</button></form>}
           {(q.status === "payment_pending" || q.status === "payment_review") && <form action={opsMarkPaid} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Bank transfer {q.payment_reference}</strong><span className="small">Expecting {aud2(p.stack.amount_payable)}</span>
             <button className="btn" type="submit">Funds received — mark paid</button></form>}
@@ -148,6 +154,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
           <div className="card" style={{ marginBottom: 12 }}><strong>Variations</strong>{vars.length ? vars.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.sell_inc as number)} · {x.status as string}</span>) : <span className="small muted">None</span>}</div>
           <div className="card" style={{ marginBottom: 12 }}><strong>Installer pay</strong>{ledger.length ? ledger.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.amount_ex as number)} · {x.status as string}</span>) : <span className="small muted">None yet</span>}</div>
           <div className="card" style={{ marginBottom: 12 }}><strong>Messages</strong>{msgs.length ? msgs.map((m, i) => <span key={i} className="small">{m.template as string} · {m.subject as string} · {m.status as string}</span>) : <span className="small muted">None</span>}</div>
+          {["awaiting_date", "booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed"].includes(q.status) && <JobThread quoteId={id} action={opsMessage} hidden={<input type="hidden" name="id" value={id} />} me="ops" title="Messages (customer and installer see these)" />}
           <form action={addStaffNote} className="card"><input type="hidden" name="id" value={id} /><strong>Note</strong><input name="note" style={input} /><button className="btn ghost sm" type="submit">Add note</button></form>
         </aside>
       </div>

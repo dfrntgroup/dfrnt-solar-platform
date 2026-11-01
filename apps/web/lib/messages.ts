@@ -24,6 +24,15 @@ const TEMPLATES: Record<string, (v: Vars, link: string) => { subject: string; bo
   M13: (v, l) => ({ subject: v.second ? "Your locked price is waiting" : "Finish getting your confirmed price", body: `Hi ${v.name ?? "there"}, you're ${v.left} away from your confirmed price (${aud(v.amount)} installed after rebates, locked until ${v.until}). It takes about two minutes, and you can do the photos on your phone: ${l}\n\nRather talk it through? Reply to this email or call ${v.phone} and a real person will help.` }),
   M14: (v, l) => ({ subject: "We've suggested a change to your system", body: `Hi ${v.name ?? "there"}, after looking at your home we suggest a change to your system. The new price is ${aud(v.amount)} installed after rebates (was ${aud(v.was)}). See the change and accept it, or keep your original: ${l}` }),
   M15: (v, l) => ({ subject: "Your design check", body: `Hi ${v.name ?? "there"}, your home needs an installer to check your photos before we confirm the price. The design check is ${aud(v.amount)}, and it comes off your system price when you go ahead. Pay by bank transfer with reference ${v.reference}. Details: ${l}` }),
+  M17: (v, l) => ({ subject: "Your new install day", body: `Hi ${v.name ?? "there"}, your install is now booked for ${v.date}. Everything about your system lives here: ${l}` }),
+  M18: (v, l) => ({ subject: "We need to move your install day", body: `Hi ${v.name ?? "there"}, sorry: ${v.why}, so ${v.date} no longer works. Pick a new day from your installer's free days here, all inside your rebate deadline: ${l}` }),
+  M19: (v, l) => ({ subject: "An earlier install day just opened", body: `Hi ${v.name ?? "there"}, ${v.date} has just become free with your installer. Want it? First to tap gets it, and your current day stays if you don't: ${l}?offer=${v.offer}` }),
+  M20: (v, l) => ({ subject: "Pick your install day", body: `Hi ${v.name ?? "there"}, your installer has offered days for your install. Pick the one that suits you: ${l}` }),
+  M21: (v, l) => ({ subject: `New message from ${v.from}`, body: `Hi ${v.name ?? "there"}, ${v.from} wrote:\n\n${v.preview}\n\nReply on your system record: ${l}` }),
+  I1: (v) => ({ subject: `${v.rebook ? "Rebooked" : "New install booked"}: ${v.date}`, body: `Hi ${v.name ?? "there"}, a DFRNT Solar install is booked for ${v.date} at ${v.place} (${v.days} crew-day${Number(v.days) === 1 ? "" : "s"}). It's in your DFRNT Solar calendar if you've connected Google.\n\nCan't do this day? Tap "Can't do this day" on the job within 24 hours: ${siteUrl()}/installer/job/${v.jobId}` }),
+  I2: (v) => ({ subject: "Paid job: please offer install days", body: `Hi ${v.name ?? "there"}, a customer at ${v.place} has paid. Please offer up to three days that suit you${v.until ? `, on or before ${v.until} (their rebate deadline)` : ""}: ${siteUrl()}/installer/job/${v.jobId}\n\nConnect your Google Calendar and customers will book your free days themselves: ${siteUrl()}/installer/calendar` }),
+  I3: (v) => ({ subject: `Message from ${v.from}`, body: `Hi ${v.name ?? "there"}, ${v.from} wrote:\n\n${v.preview}\n\nReply on the job: ${siteUrl()}/installer/job/${v.jobId}` }),
+  I4: (v) => ({ subject: `Tomorrow: ${v.title}`, body: `${v.sheet}` }),
   M8: (v, l) => ({ subject: "Please approve a change to your install", body: `Hi ${v.name ?? "there"}, your installer has found work outside the agreed scope (${aud(v.amount)} inc GST). Approve or decline here: ${l}` }),
 };
 
@@ -39,7 +48,7 @@ export async function queueMessage(template: string, token: string, to: string |
 
 /** Ops: render every template with sample values and send them to one address (ignores the mode). */
 export async function sendAllTemplatesTo(to: string, token: string) {
-  const sample: Vars = { name: "Karl", amount: 12345.76, reference: "DS4A020F", date: "Tue, 3 Nov", drop: "Thu, 31 Dec", until: "Sun, 15 Nov", left: "two short steps", phone: "1300 133 768", was: 11990, second: false };
+  const sample: Vars = { why: "rain is forecast", offer: "00000000-0000-0000-0000-000000000000", from: "Faultless Solar", preview: "Gate code is 1234, dog is friendly.", place: "12 Smith St, Buderim 4556", jobId: "test", days: 1, rebook: false, title: "Test job", sheet: "Job sheet preview", name: "Karl", amount: 12345.76, reference: "DS4A020F", date: "Tue, 3 Nov", drop: "Thu, 31 Dec", until: "Sun, 15 Nov", left: "two short steps", phone: "1300 133 768", was: 11990, second: false };
   const results: string[] = [];
   for (const [key, t] of Object.entries(TEMPLATES)) {
     const { subject, body } = t(sample, `${siteUrl()}/quote/${token}`);

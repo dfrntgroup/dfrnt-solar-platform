@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@dfrnt/db";
 import type { SiteAnswers } from "@dfrnt/engine";
-import { answerRevision, applyCode, book, chooseBank, CUSTOMER, cancel, decideVariation, getQuote, sign, submitSite } from "@/lib/jobs";
+import { answerRevision, applyCode, chooseBank, CUSTOMER, cancel, decideVariation, getQuote, sign, submitSite } from "@/lib/jobs";
 import { queueMessage } from "@/lib/messages";
 import { longDate } from "@/lib/site";
 import { putPhoto } from "@/lib/storage";
@@ -169,7 +169,48 @@ export async function payByBank(f: FormData) {
 
 export async function pickDate(f: FormData) {
   const token = s(f, "token");
-  await run(token, async () => book((await getQuote(token))!, s(f, "date")));
+  await run(token, async () => {
+    const { bookDay } = await import("@/lib/schedule");
+    await bookDay((await getQuote(token))!, s(f, "date"), CUSTOMER, "customer");
+  });
+}
+
+/** Scheduling S4: "Yes, move me earlier". */
+export async function takeEarlierDay(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => {
+    const { takeEarlier } = await import("@/lib/schedule");
+    await takeEarlier((await getQuote(token))!, s(f, "offer"));
+  });
+}
+
+/** The customer moves their own day (more than 3 working days out); they then pick again. */
+export async function changeMyDay(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => {
+    const q = (await getQuote(token))!;
+    if (q.status !== "booked" || !q.install_date) throw new Error("Call us to change your day now the gear is on its way");
+    const { addWorkdays } = await import("@dfrnt/engine");
+    const { todayAEST } = await import("@/lib/api");
+    if (q.install_date <= addWorkdays(todayAEST(), 3, [1, 2, 3, 4, 5])) throw new Error("Your install is only a few days away. Call us on 1300 133 768 to move it.");
+    const { releaseDay } = await import("@/lib/schedule");
+    await releaseDay(q, "customer", CUSTOMER);
+  });
+}
+
+export async function saveAccess(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => { await db()`update quotes set access_notes = ${s(f, "access").slice(0, 1000) || null} where token = ${token}`; });
+}
+
+export async function customerMessage(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => {
+    if (!(await allow("msg", 20))) throw new Error("Too many messages — please wait a few minutes");
+    const q = (await getQuote(token))!;
+    const { postMessage } = await import("@/lib/thread");
+    await postMessage(token, "customer", (q.customer_name ?? "").split(" ")[0] || null, s(f, "body"));
+  });
 }
 
 export async function approveVariation(f: FormData) { await answerVariation(f, true); }

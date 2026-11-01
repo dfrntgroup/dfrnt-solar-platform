@@ -9,7 +9,10 @@ import { db } from "@dfrnt/db";
 import { BOARD, refundRule, type JobState, type Quote } from "@dfrnt/engine";
 import { Header, Footer } from "@/components/Header";
 import { PhotoInput } from "@/components/PhotoInput";
-import { availableDates, getQuote, REVISABLE } from "@/lib/jobs";
+import { getQuote, REVISABLE } from "@/lib/jobs";
+import { daysFor, needsOf } from "@/lib/schedule";
+import { DayPicker, dayLabel } from "@/components/DayPicker";
+import { JobThread } from "@/components/JobThread";
 import { Checkout, stepFor } from "@/components/Checkout";
 import { CallBack } from "@/components/CallBack";
 import { Trust } from "@/components/Trust";
@@ -17,7 +20,7 @@ import { installersFor } from "@/lib/installers";
 import { siteUrl } from "@/lib/messages";
 import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate } from "@/lib/site";
-import { acceptRevision, keepOriginal, addCode, approveVariation, declineVariation, cancelOrder, payByBank, pickDate, signAgreement, submitHome } from "./actions";
+import { takeEarlierDay, changeMyDay, saveAccess, customerMessage, acceptRevision, keepOriginal, addCode, approveVariation, declineVariation, cancelOrder, payByBank, pickDate, signAgreement, submitHome } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your solar record", robots: { index: false } };
@@ -65,7 +68,11 @@ export default async function Record({ params, searchParams }: { params: Promise
   const shown = q.snapshot ?? q.result;
   const state = q.status;
   const step = STEPS.findIndex(([, ss]) => ss.includes(state));
-  const dates = state === "awaiting_date" ? await availableDates(q) : [];
+  const picking = state === "awaiting_date" || (["booked", "gear_ordered", "delivered"].includes(state) && q.rebook);
+  const choice = picking ? await daysFor(q) : null;
+  const [earlier] = ["booked", "gear_ordered"].includes(state) && !q.rebook && sp.offer && /^[0-9a-f-]{36}$/.test(sp.offer)
+    ? await db()`select id, dates::text[] dates from date_offers where id = ${sp.offer} and quote_id = ${q.id} and kind = 'earlier' and status = 'open' and expires_at > now()` : [];
+  const threadOpen = ["awaiting_date", "booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed"].includes(state);
   const variations = await db()`select id, description, sell_inc::float8 as sell_inc, status from variations where quote_id = ${q.id} order by created_at`;
   const [mine] = await db()`select code from codes where owner_quote_id = ${q.id} and active`;
   const myCode = mine?.code as string | undefined;
@@ -73,7 +80,7 @@ export default async function Record({ params, searchParams }: { params: Promise
   const canCancel = ["signed", "payment_pending", "payment_review", "awaiting_date", "booked", "gear_ordered", "delivered"].includes(state);
   const open = ["saved", "secured", "lapsed"].includes(state);
   const have = new Set(open ? (await db()`select distinct kind from quote_photos where quote_id = ${q.id}`).map((r) => r.kind as string) : []);
-  const choices = open && q.site_draft?.address ? await installersFor(q.site_draft.address.postcode ?? q.postcode) : [];
+  const choices = open && q.site_draft?.address ? await installersFor(q.site_draft.address.postcode ?? q.postcode, needsOf(q)) : [];
   const [fee] = q.design_fee_status === "due" ? await db()`select amount::float8 amount, reference from payments where quote_id = ${q.id} and kind = 'report' and status = 'pending' limit 1` : [];
   const rev = q.revision && REVISABLE.includes(state) ? q.revision : null;
   const rule = canCancel && q.signed_at ? refundRule(q.signed_at.toISOString().slice(0, 10), todayAEST(), state) : null;
@@ -171,18 +178,29 @@ export default async function Record({ params, searchParams }: { params: Promise
           <Breakdown q={shown} />
         </>)}
 
-        {state === "awaiting_date" && (<>
-          <h2 style={{ marginTop: 20 }}>Pick your install date</h2>
-          <p className="muted">These are your installer&apos;s real free days{shown.window.window_end ? `, all on or before ${longDate(shown.window.window_end)} so your rebate holds` : ""}.</p>
-          {dates.length ? (
-            <form action={pickDate}><input type="hidden" name="token" value={token} />
-              <div className="filters">{dates.map((d) => <label key={d} className="chip"><input type="radio" name="date" value={d} required /> {longDate(d)}</label>)}</div>
-              <button className="btn block" type="submit">Book this date</button></form>
-          ) : <div className="note">No dates free inside your rebate window right now. We&apos;ll call you today to arrange one.</div>}
+        {picking && choice && (<>
+          <h2 style={{ marginTop: 20 }}>{q.rebook ? "Pick your new install day" : "Pick your install day"}</h2>
+          <DayPicker token={token} choice={choice} action={pickDate} rebook={q.rebook} />
+          <CallBack back={`/quote/${token}`} token={token} state={sp.callback} compact />
         </>)}
+        {earlier && (
+          <div className="card" style={{ marginTop: 16, borderColor: "var(--teal)" }}>
+            <strong>An earlier day opened up: {longDate((earlier.dates as string[])[0]!)}</strong>
+            <span className="small">Want it instead of {q.install_date ? longDate(q.install_date) : "your current day"}? First to tap gets it. If it&apos;s gone, your current day stays.</span>
+            <form action={takeEarlierDay}><input type="hidden" name="token" value={token} /><input type="hidden" name="offer" value={earlier.id as string} /><button className="btn" type="submit">Yes, move me earlier</button></form>
+          </div>)}
 
         {["booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed", "lodged", "settled", "complete"].includes(state) && (<>
-          <div className="ok" style={{ marginTop: 16 }}>{q.install_date ? <>Install date: <strong>{longDate(q.install_date)}</strong>, arriving 7–8 am.</> : "Installed."} Status: <strong>{BOARD[state]}</strong>.</div>
+          {!q.rebook && <div className="ok" style={{ marginTop: 16 }}>{q.install_date ? <>Install day: <strong>{dayLabel([q.install_date], q.install_part)}{q.job_days && q.job_days > 1 ? ` (${q.job_days} days)` : ""}</strong>, arriving 7–8 am.</> : "Installed."} Status: <strong>{BOARD[state]}</strong>.</div>}
+          {["booked", "gear_ordered", "delivered"].includes(state) && !q.rebook && (
+            <form action={saveAccess} className="card" style={{ marginTop: 12 }}><input type="hidden" name="token" value={token} />
+              <strong>Access on the day</strong><span className="small muted">Gate code, pets, where to park, who&apos;ll be home. Your installer sees this.</span>
+              <textarea name="access" defaultValue={q.access_notes ?? ""} maxLength={1000} style={{ minHeight: 60, padding: 10, border: "1px solid var(--line)", borderRadius: 6, font: "inherit" }} />
+              <button className="btn ghost sm" type="submit">Save</button></form>)}
+          {state === "booked" && !q.rebook && q.install_date && <details style={{ marginTop: 8 }}><summary className="small muted">Need a different day?</summary>
+            <form action={changeMyDay} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} />
+              <p className="small">You&apos;ll pick a new day from your installer&apos;s free days, inside your rebate deadline. Within 3 working days of install, call us instead.</p>
+              <button className="btn ghost sm" type="submit">Release my day and pick another</button></form></details>}
           {variations.length > 0 && <><h2 style={{ marginTop: 24 }}>Changes to your install</h2>
             {variations.map((v) => (
               <div key={v.id as string} className="card" style={{ marginBottom: 10 }}>
@@ -193,7 +211,7 @@ export default async function Record({ params, searchParams }: { params: Promise
                   <button className="btn ghost sm" formAction={declineVariation}>Decline</button></form>}
               </div>))}</>}
           {["installed", "lodged", "settled", "complete"].includes(state) && myCode && <div className="ok" style={{ marginTop: 16 }}>Your referral code: <strong>{myCode}</strong>. Friends get $250 off, and we pay you $250 after their install.</div>}
-          {["booked", "gear_ordered", "delivered"].includes(state) && <p className="small"><Link href={`/contact?quote=${token}&kind=question`}>Need a different date?</Link> Tell us and we&apos;ll offer the next free days{shown.window.window_end ? ` (moving past ${longDate(shown.window.window_end)} means re-pricing at the new rebate)` : ""}.</p>}
+          {threadOpen && <JobThread quoteId={q.id} action={customerMessage} hidden={<input type="hidden" name="token" value={token} />} me="customer" />}
           <p className="small"><Link href={`/contact?quote=${token}`}>Questions about your system?</Link></p>
           <h2 style={{ marginTop: 24 }}>Your documents</h2>
           <table className="lines"><tbody>{docs.map((d) => {

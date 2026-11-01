@@ -106,10 +106,32 @@ export async function runCheckoutFollowups() {
 }
 
 /** 5 pm: jobs still waiting for an installer's price go to the next installer for the postcode; none → ops tech review. */
+/** Scheduling S5: the evening job sheet for tomorrow's installs, to each installer. */
+export async function runJobSheets() {
+  const tomorrow = new Date(Date.now() + 34 * 3600_000).toISOString().slice(0, 10);
+  const jobs = await db()`select q.id, q.token, q.title, q.customer_name, q.customer_phone, q.site, q.access_notes, q.install_part, q.job_days::float8 days, q.snapshot, q.reminders,
+      i.business_name, i.email from quotes q join installers i on i.id = q.installer_id
+    where q.install_date = ${tomorrow} and not q.rebook and q.status in ('booked','gear_ordered','delivered') and not (q.reminders ? 'sheet')`;
+  const { siteUrl } = await import("./messages");
+  for (const j of jobs) {
+    const a = (j.site as { address?: { unit?: string; line1: string; suburb: string; postcode: string } } | null)?.address;
+    const place = a ? `${a.unit ? `${a.unit}/` : ""}${a.line1}, ${a.suburb} ${a.postcode}` : "";
+    const parts = ((j.snapshot as { config?: { bom?: { description: string; qty: number; included?: boolean }[] } } | null)?.config?.bom ?? []).filter((b) => !b.included).map((b) => `• ${b.qty} × ${b.description}`).join("\n");
+    const sheet = [`Tomorrow${j.install_part === "am" ? " morning" : ""}: ${j.title}`, ``, `Customer: ${j.customer_name ?? ""}  ${j.customer_phone ?? ""}`, `Address: ${place}`,
+      `Map: https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(place)}`, `Length: ${j.days ?? 1} crew-day(s), arrive 7–8 am`, ``,
+      `Access: ${j.access_notes ?? "nothing noted"}`, ``, `Parts:`, parts, ``, `Photos, messages and the job: ${siteUrl()}/installer/job/${j.id}`].join("\n");
+    if (j.email) await queueMessage("I4", j.token as string, j.email as string, { title: `${j.title} · ${a?.suburb ?? ""}`, sheet });
+    await db()`update quotes set reminders = reminders || '{"sheet":true}' where id = ${j.id}`;
+  }
+  await db()`update date_offers set status = 'expired' where kind = 'earlier' and status = 'open' and expires_at < now()`;
+  return jobs.length;
+}
+
 export async function runCutoff() {
   const followups = await runCheckoutFollowups();
+  const sheets = await runJobSheets();
   const dow = new Date(Date.now() + 10 * 3600_000).getUTCDay();
-  if (dow === 0 || dow === 6) return { followups, reassigned: 0, to_ops: 0, weekend: true };
+  if (dow === 0 || dow === 6) return { followups, sheets, reassigned: 0, to_ops: 0, weekend: true };
   const waiting = await db()`select id, installer_id, postcode, pricing_reasons from quotes
     where status = 'pricing_installer' and updated_at < now() - interval '1 hour'`;
   let reassigned = 0, toOps = 0;
@@ -127,7 +149,7 @@ export async function runCutoff() {
       toOps++;
     }
   }
-  return { followups, reassigned, to_ops: toOps };
+  return { followups, sheets, reassigned, to_ops: toOps };
 }
 
 /** Formbay has no webhooks: poll every linked job that isn't finished, store its status, and move installed jobs to lodged

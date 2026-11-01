@@ -10,7 +10,7 @@ import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate, sitePostcode } from "@/lib/site";
 import { Media } from "@/components/SystemCard";
 import { friendlyInverter, friendlyPanel, imageFor } from "@/lib/images";
-import { earliestFor, outcome } from "@/lib/capacity";
+import { nextDays, outcome } from "@/lib/capacity";
 import { Trust } from "@/components/Trust";
 import { CallBack } from "@/components/CallBack";
 
@@ -37,7 +37,9 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const q = priceSystem(s, { postcode, asOf: todayAEST() }, data);
   const st = q.stack, c = q.config, r = q.rebate;
   const opts = configOptions({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode, installDate: q.window.lock_until, ...s.config } as ConfigInput, data.rules);
-  const earliest = await earliestFor(postcode);
+  const jobNeeds = { brand: s.brand, kind: s.kind === "battery_only" ? "battery_only" as const : "solar_battery" as const, panelKw: c.panel_kw };
+  const next = await nextDays(postcode, jobNeeds, 3);
+  const earliest = next === null ? null : next?.[0];
   const rulesPanel = data.rules.panels[s.config.panelSku]?.model;
   const parts = c.bom.filter((b) => !b.included && !b.sku.startsWith("BOS") && !b.sku.startsWith("MNT"));
   return (
@@ -90,7 +92,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
                 you_pay: st.amount_payable, before_rebates: st.price_inc_gst, rebates: st.less_stcs, gst: st.gst, equipment: st.hardware_ex_gst, installation: st.installation_ex_gst,
                 solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message) }} />
             <table className="incl" style={{ marginTop: 6 }}><tbody>
-              <tr><td className="k">Earliest install</td><td>{earliest ? <strong>{longDate(earliest)}</strong> : earliest === null ? "Not in your area yet — join the waitlist" : "Confirmed when you book"}<br /><span className="small muted">From your installer&apos;s real free days</span></td></tr>
+              <tr><td className="k">Next free days</td><td>{next?.length ? <strong>{next.map((d) => longDate(d)).join(" · ")}</strong> : next === null ? "Not in your area yet — join the waitlist" : "Confirmed when you book"}<br /><span className="small muted">{next?.length ? "From installers' live calendars. You pick your day after paying." : "From your installer's real free days"}</span></td></tr>
               {q.window.window_end && <tr><td className="k">Rebate</td><td>{aud(st.less_stcs)} off now. Locked for installs on or before {longDate(q.window.window_end)}.</td></tr>}
               <tr><td className="k">Installed by</td><td>A licensed, SAA-accredited local electrician, named before you pay.</td></tr>
               <tr><td className="k">Warranty</td><td>Panels 25 yr · inverter 10 yr · battery 10 yr · our workmanship 10 yr</td></tr>

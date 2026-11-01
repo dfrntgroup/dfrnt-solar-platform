@@ -212,3 +212,8 @@ input:focus-visible + .pill-r { outline: 2px solid var(--teal); }
 .hdr .tel { font-weight: 700; text-decoration: none; color: var(--ink); white-space: nowrap; font-size: 14px; }
 .show-sm { display: none; }
 @media (max-width: 600px) { .show-sm { display: inline; font-size: 18px; } }
+
+/* Scheduling: day picker */
+.days { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.day { border: 2px solid var(--line); padding: 10px; display: flex; gap: 8px; align-items: center; cursor: pointer; font-weight: 600; font-size: 14px; }
+.day:has(input:checked) { border-color: var(--ink); background: var(--ink); color: #fff; }
