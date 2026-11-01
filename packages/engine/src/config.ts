@@ -230,7 +230,7 @@ export function resolveConfig(inputArg: ConfigInput, ctx: { rules?: ConfigRules 
   // a. DNSP + phases
   const phases: 1 | 3 = input.phases === "unknown" ? 1 : input.phases;
   if (input.phases === "unknown") warnings.push({ step: "dnsp", message: "Phases unknown: priced as single phase until the installer confirms from the switchboard photo" });
-  if (family.phases !== phases) blockers.push({ step: "dnsp", message: `${family.brand} ${input.familyKey} is a ${family.phases}-phase system; the site is ${phases}-phase` });
+  if (family.phases !== phases) blockers.push({ step: "dnsp", message: phases === 3 ? `Your home has three-phase power and this ${family.brand} system is single-phase, so your installer will match it to a three-phase system` : `Your home has single-phase power and this ${family.brand} system is three-phase, so your installer will match it to a single-phase system` });
   const dnsp = resolveDnsp(rules, input.postcode, phases);
   if (!dnsp) warnings.push({ step: "dnsp", message: `No network rules for postcode ${input.postcode}; confirm limits with the installer` });
   const capW = dnsp?.cap_kva ? dnsp.cap_kva * 1000 : Infinity;
