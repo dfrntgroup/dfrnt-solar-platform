@@ -72,7 +72,7 @@ export default async function Usage({ params, searchParams }: { params: Promise<
           <Link className="btn" href={estimateHref}>Size from my bill</Link>
           <form action={refreshUsage} style={{ display: "inline-block", marginLeft: 8 }}><input type="hidden" name="token" value={token} /><button className="btn ghost" type="submit">Try again</button></form>
         </> : <>
-          <h1>{p ? `Your home used ${k(p.annual_import_kwh + p.annual_controlled_kwh)} kWh last year, ${pct(p.evening_share)} of it after the sun went down.` : `Your home uses about ${s.targets.daily_kwh} kWh a day.`}</h1>
+          <h1>{p ? `Your home ${p.days >= 300 ? "used" : "uses about"} ${k(p.annual_import_kwh + p.annual_controlled_kwh)} kWh ${p.days >= 300 ? "last year" : "a year"}, ${pct(p.evening_share)} of it after the sun goes down.` : `Your home uses about ${s.targets.daily_kwh} kWh a day.`}</h1>
           {p && <p className="muted" style={{ marginTop: -4 }}>{p.days} days of meter data, {p.from} to {p.to}{p.days < 300 ? " (your retailer sent less than a year, so the year is scaled from these days)" : ""}. About {p.daily_kwh} kWh a day; {p.night_kwh} kWh of it between sunset and sunrise.{p.has_export ? ` Your solar sends about ${p.daily_export_kwh} kWh a day back to the grid.` : ""}</p>}
           {p && <UsageCharts profile={p} panelKw={s.rec?.panel_kw ?? 0} loc={loc} />}
 
