@@ -216,7 +216,11 @@ export async function pullLink(id: string, opts: { force?: boolean; monthlyOnly?
     const loc = yieldFor(l.postcode ?? postcode, set.yields);
     let profile: UsageProfile | null = null, path: "interval" | "totals" = "interval", sizing: Sizing;
     const linkForSizing = { ...l, postcode: l.postcode ?? postcode ?? null };
-    if (days.length >= 30) {
+    if (days.length < 7 && !totals.length && age < 20) {           // sync still filling in: wait for the next event
+      await db()`update energy_links set status = 'waiting' where id = ${l.id} and status in ('new','consenting','fallback')`;
+      return l;
+    }
+    if (days.length >= 7) {
       profile = profileUsage(days, loc);
       sizing = await recommend(linkForSizing, profile!, days, tariff, set);
     } else {
