@@ -16,7 +16,7 @@ async function setStatus(id: string, from: string, to: string, why: string, extr
 
 export async function runDaily() {
   const today = todayAEST();
-  const out: Record<string, number> = {};
+  const out: Record<string, unknown> = {};
   // Price locks: secured or priced quotes past their lock lapse (the lock is held while we're pricing).
   const lapsed = await db()`select id, status from quotes where status in ('secured','priced') and lock_until < ${today}`;
   for (const q of lapsed) await setStatus(q.id as string, q.status as string, "lapsed", "Price lock expired");
@@ -100,14 +100,17 @@ export async function runDaily() {
   }
   out.service_plan = planMsgs;
   // B1: Xero.
-  try { const { runAgentsDaily } = await import("./agent-runtime"); out.agents = (await runAgentsDaily()) as never; } catch { /* shown in Ops → Agents */ }
-  try { const { reconcileStripe } = await import("./stripe"); out.stripe = (await reconcileStripe()) as never; } catch { /* shown in Ops → Payments */ }
-  try { const { syncXero } = await import("./xero"); out.xero = (await syncXero()) as never; } catch { /* shown in Ops → Xero */ }
+  const { report } = await import("./report");
+  const step = async (name: string, fn: () => Promise<unknown>) => { try { out[name] = (await fn()) as never; } catch (e) { out[name] = { failed: (e as Error).message } as never; await report(`timers.daily.${name}`, e); } };
+  await step("agents", async () => (await import("./agent-runtime")).runAgentsDaily());
+  await step("stripe", async () => (await import("./stripe")).reconcileStripe());
+  await step("xero", async () => (await import("./xero")).syncXero());
   // G4: waitlist alerts where an installer now covers the postcode.
-  try { const { notifyWaitlist } = await import("./campaigns"); out.waitlist_alerts = await notifyWaitlist(); } catch { /* reported in messages */ }
+  await step("waitlist_alerts", async () => (await import("./campaigns")).notifyWaitlist());
   // Formbay status for every linked job.
-  try { out.formbay = (await runFormbaySync()) as never; } catch { /* reported on the job pages */ }
-  try { const { runEnergy } = await import("./energy"); out.energy = (await runEnergy()) as never; } catch { /* shown in Ops → Real usage */ }
+  await step("formbay", () => runFormbaySync());
+  await step("energy", async () => (await import("./energy")).runEnergy());
+  await step("email_retry", async () => (await import("./email")).retryFailedMessages());
   // Agent proposals expire after 24 h.
   const exp = await db()`update approvals set status = 'expired', decided_at = now(), decision_note = 'Expired after 24 h'
     where status = 'pending' and created_at < now() - interval '24 hours' returning id`;
@@ -161,18 +164,20 @@ export async function runJobSheets() {
 export async function runCutoff() {
   const followups = await runCheckoutFollowups();
   const sheets = await runJobSheets();
-  try { const { processAgentQueue } = await import("./agent-runtime"); await processAgentQueue(); } catch { /* shown in Ops → Agents */ }
+  try { const { processAgentQueue } = await import("./agent-runtime"); await processAgentQueue(); } catch (e) { await (await import("./report")).report("timers.cutoff.agents", e); }
+  try { await (await import("./email")).retryFailedMessages(); } catch (e) { await (await import("./report")).report("timers.cutoff.email_retry", e); }
   const dow = new Date(Date.now() + 10 * 3600_000).getUTCDay();
   if (dow === 0 || dow === 6) return { followups, sheets, reassigned: 0, to_ops: 0, weekend: true };
-  const waiting = await db()`select id, installer_id, postcode, pricing_reasons from quotes
+  const waiting = await db()`select id, installer_id, postcode, pricing_reasons, tried_installers from quotes
     where status = 'pricing_installer' and updated_at < now() - interval '1 hour'`;
   let reassigned = 0, toOps = 0;
   for (const q of waiting) {
     const pc = parseInt(q.postcode as string, 10);
-    const [next] = await db()`select id from installers where active and id <> ${q.installer_id} and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int) order by is_test, created_at limit 1`;
+    const tried = [...((q.tried_installers as string[] | null) ?? []), q.installer_id as string].filter(Boolean);
+    const [next] = await db()`select id from installers where active and not (id = any(${tried}::uuid[])) and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int) order by is_test, created_at limit 1`;
     if (next) {
       await write({ actor: SYSTEM, action: "timers.reassign", rationale: "5 pm cut-off missed" }, { id: q.id }, async (tx) => {
-        await tx`update quotes set installer_id = ${next.id}, updated_at = now() where id = ${q.id}`;
+        await tx`update quotes set installer_id = ${next.id}, tried_installers = ${tried}::uuid[], updated_at = now() where id = ${q.id}`;
         return { entity: "quote", entityId: q.id as string, event: "quote.reassigned", result: { installer: next.id } };
       });
       reassigned++;
@@ -207,7 +212,7 @@ export async function runFormbaySync() {
         await setStatus(j.id as string, "installed", "lodged", `Formbay status ${r.status}: submitted to the Clean Energy Regulator`);
         lodged++;
       }
-    } catch { failed++; }
+    } catch (e) { failed++; await (await import("./report")).report("timers.formbay_sync", e, { quote_id: j.id }); }
   }
   return { jobs: jobs.length, synced, lodged, failed };
 }

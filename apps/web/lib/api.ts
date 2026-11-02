@@ -3,6 +3,8 @@ import { db, type Actor } from "@dfrnt/db";
 
 /** Today's date in Brisbane (yyyy-mm-dd). */
 export const todayAEST = () => new Date(Date.now() + 10 * 3600_000).toISOString().slice(0, 10);
+/** The Brisbane calendar date of a timestamp (never slice a UTC ISO string for a date). */
+export const dateAEST = (d: Date) => new Date(d.getTime() + 10 * 3600_000).toISOString().slice(0, 10);
 
 export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body, null, 2), { status, headers: { "content-type": "application/json" } });

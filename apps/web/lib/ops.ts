@@ -2,7 +2,7 @@
 import { randomBytes } from "node:crypto";
 import { db, write, type Actor } from "@dfrnt/db";
 import { refundRule } from "@dfrnt/engine";
-import { todayAEST } from "./api";
+import { dateAEST, todayAEST } from "./api";
 import { advance, getQuoteById } from "./jobs";
 import { pricingDataFor } from "./pricing-data";
 import { queueMessage } from "./messages";
@@ -64,7 +64,7 @@ export async function recordRefund(quoteId: string, amount: number, note: string
     coalesce(sum(amount) filter (where kind = 'refund' and status <> 'failed'), 0)::float8 refunded from payments where quote_id = ${quoteId}`;
   const maxRefund = round2((paid!.paid as number) - (paid!.refunded as number));
   if (!(amount > 0) || amount > maxRefund + 0.001) throw new Error(`Refund must be between $0.01 and ${maxRefund.toFixed(2)}`);
-  const rule = q.signed_at ? refundRule(q.signed_at.toISOString().slice(0, 10), todayAEST(), "cancelled") : "full_cooling_off";
+  const rule = q.signed_at ? refundRule(dateAEST(q.signed_at), todayAEST(), q.status_before_cancel ?? "cancelled") : "full_cooling_off";
   const w = await write({ actor, action: "refunds.record", rationale: note }, { quoteId, amount }, async (tx) => {
     const [r] = await tx`insert into payments (quote_id, kind, method, amount, reference, status, refund_rule, note)
       values (${quoteId}, 'refund', ${q.payment_method ?? "bank"}, ${amount}, ${`RF${q.token.slice(0, 6).toUpperCase()}`}, 'pending', ${rule}, ${note}) returning id`;

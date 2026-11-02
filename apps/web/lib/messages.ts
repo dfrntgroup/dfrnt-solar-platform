@@ -47,7 +47,7 @@ export async function queueMessage(template: string, token: string, to: string |
   const { subject, body } = t(vars, `${siteUrl()}/quote/${token}`);
   const [row] = await db()`insert into messages (quote_id, template, channel, recipient, subject, body)
     select id, ${template}, 'email', ${to}, ${subject}, ${body} from quotes where token = ${token} returning id`;
-  if (row) await deliver(row.id as string).catch(() => "failed");
+  if (row) await deliver(row.id as string).catch(async (e) => { const { report } = await import("./report"); await report("email.queue", e, { message_id: row.id, template }); return "failed"; });
 }
 
 /** Ops: render every template with sample values and send them to one address (ignores the mode). */

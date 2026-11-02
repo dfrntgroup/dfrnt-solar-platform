@@ -5,7 +5,7 @@ import {
   addDays, cannotDo, DEFAULT_PROFILE, DEFAULT_RULES, earliestDate, freeSlots, jobDays, loadFrom, rebateWindow,
   type Capacity, type CrewCalendar, type InstallerProfile, type JobNeeds, type Slot,
 } from "@dfrnt/engine";
-import { todayAEST } from "./api";
+import { dateAEST, todayAEST } from "./api";
 import { getQuote, type QuoteRow } from "./jobs";
 import { queueMessage, siteUrl } from "./messages";
 import { pricingDataFor } from "./pricing-data";
@@ -99,7 +99,8 @@ async function installerRow(id: string) {
 export interface DayChoice { mode: "live" | "offer" | "none"; days: number; slots: Slot[]; offered?: string[]; until: string | null }
 
 async function windowEnd(q: QuoteRow) {
-  return rebateWindow(q.created_at.toISOString().slice(0, 10), (await pricingDataFor(q.result.versions)).rebates).window_end;
+  // The window the price was computed for (its rebate date), not the UTC day the row was created.
+  return rebateWindow(q.input.installDate ?? dateAEST(q.created_at), (await pricingDataFor(q.result.versions)).rebates).window_end;
 }
 
 /** The days this customer can book: live from their installer's calendars, else the days their installer offered. */
@@ -206,7 +207,8 @@ export async function bookDay(q: QuoteRow, date: string, actor: Actor, via: "cus
       where id = ${q.id} and status = ${q.status} returning id`;
     if (!row) throw new Error("Job changed while you were booking; reload and try again");
     if (!rebooking && q.installer_id) await tx`insert into pay_ledger (installer_id, quote_id, description, amount_ex)
-      values (${q.installer_id}, ${q.id}, 'Installation (frozen at pricing)', ${(q.snapshot ?? q.result).stack.installer_pay_ex_gst})`;
+      select ${q.installer_id}, ${q.id}, 'Installation (frozen at pricing)', ${(q.snapshot ?? q.result).stack.installer_pay_ex_gst}
+      where not exists (select 1 from pay_ledger where quote_id = ${q.id} and variation_id is null)`;
     await tx`update date_offers set status = case when kind = 'installer' then 'taken' else status end where quote_id = ${q.id} and status = 'open' and kind = 'installer'`;
     return { entity: "quote", entityId: q.id, event: rebooking ? "quote.rebooked" : "quote.booked", result: { date, crew: slot.crewId || null, via } };
   });

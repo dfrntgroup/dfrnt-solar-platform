@@ -2,7 +2,7 @@
 import { db, write, type Actor } from "@dfrnt/db";
 import {
   assertTransition, autoStacks, instantPriceBlockers, quote, rebateWindow, variationAmount, variationLine,
-  labourLines, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest,
+  labourLines, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest, requestFromLine,
 } from "@dfrnt/engine";
 import { todayAEST } from "./api";
 import { queueMessage } from "./messages";
@@ -14,7 +14,7 @@ export const CUSTOMER: Actor = { type: "customer", id: "record-link" };
 import { AGREEMENT_VERSION } from "./legal";
 export interface QuoteRow {
   id: string; token: string; status: JobState; title: string | null; input: ConfigInput; result: Quote; snapshot: Quote | null;
-  site: SiteAnswers | null; installer_id: string | null; pricing_reasons: string[] | null; lock_until: string; install_date: string | null;
+  site: SiteAnswers | null; installer_id: string | null; pricing_reasons: string[] | null; lock_until: string; install_date: string | null; status_before_cancel: JobState | null;
   signed_at: Date | null; signed_name: string | null; agreement_version: string | null; invoice_number: string | null; payment_method: string | null; payment_reference: string | null; paid_at: Date | null;
   customer_email: string | null; customer_name: string | null; customer_phone: string | null; postcode: string; created_at: Date;
   discount_code: string | null; referral_discount: number | null; credit_code: string | null; credit_amount: number | null;
@@ -34,7 +34,7 @@ export interface Revision {
 
 export async function getQuote(token: string): Promise<QuoteRow | null> {
   const [row] = await db()`select id, token, status, title, input, result, snapshot, site, installer_id, pricing_reasons,
-    lock_until::text as lock_until, install_date::text as install_date, signed_at, signed_name, agreement_version, invoice_number, payment_method, payment_reference, paid_at,
+    lock_until::text as lock_until, install_date::text as install_date, status_before_cancel, signed_at, signed_name, agreement_version, invoice_number, payment_method, payment_reference, paid_at,
     customer_email, customer_name, customer_phone, postcode, created_at, discount_code, credit_code,
     site_draft, checkout_at, design_review, design_fee_status, revision, chosen_installer_id,
     heard_from, heard_note, serials, commissioned_on::text as commissioned_on, warranty, attribution, crew_id, job_days::float8 as job_days, install_part, booked_via, booked_at, decline_until, google_event_id, rebook, access_notes, desk_called_at, desk_notes,
@@ -91,7 +91,12 @@ async function move(q: QuoteRow, to: JobState, actor: Actor, action: string, set
 /* C1–C3: home + photos → instant price or installer pricing */
 export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name: string; email: string; phone: string }, opts: { feePaid?: boolean } = {}) {
   if (!["saved", "secured", "lapsed"].includes(q.status)) throw new Error("This quote has already been priced");
-  if (q.status === "saved" || q.status === "lapsed") { await move(q, "secured", CUSTOMER, "quotes.secure"); q = (await getQuote(q.token))!; }
+  if (q.status === "saved" || q.status === "lapsed") {
+    // A fresh lock from today: new lock date and a rebate date inside today's window (a lapsed quote kept the old ones).
+    const w = rebateWindow(todayAEST(), (await pricingDataFor(q.result.versions)).rebates);
+    await move(q, "secured", CUSTOMER, "quotes.secure", { lock_until: w.lock_until, input: db().json({ ...q.input, installDate: w.lock_until } as never) });
+    q = (await getQuote(q.token))!;
+  }
   const inst = await installerFor(q, site);
   const priced = await reprice(q, { site });
   const reasons = inst ? instantPriceBlockers(site, inst.scope) : ["No installer covers this postcode yet"];
@@ -143,10 +148,20 @@ export async function installerPrice(q: QuoteRow, actor: Actor, extraCodes: stri
   await freezePrice(q, p, actor, note || (extraCodes.length ? `Installer added ${extraCodes.map((c) => c.replace(":", " × ")).join(", ")}` : "Installer confirmed standard price"));
 }
 
+const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400_000);
+
 /* D2: sign the agreement */
 export async function sign(q: QuoteRow, name: string) {
   if (q.status !== "priced") throw new Error("Nothing to sign");
   if (q.lock_until < todayAEST()) { await move(q, "lapsed", SYSTEM, "quotes.lapse", {}, "Lock expired before signing"); throw new Error("This price has expired. Secure it again at today's price."); }
+  {
+    // Signing inside the last days of a rebate window would leave a paid job with no bookable day (every offered
+    // date must be inside the window). Stop before money changes hands and send them to a person.
+    const { rebates } = await pricingDataFor(q.result.versions);
+    const end = rebateWindow(q.input.installDate ?? todayAEST(), rebates).window_end;
+    const { gear_lead_days } = await (await import("./settings")).getSetting("scheduling");
+    if (end && daysBetween(todayAEST(), end) < gear_lead_days + 2) throw new Error(`The current rebate period ends on ${end} and installers need ${gear_lead_days} days' notice for equipment. Call us on 1300 133 768 and we'll re-price you into the next period before you sign.`);
+  }
   await move(q, "signed", CUSTOMER, "quotes.sign", { signed_at: new Date(), signed_name: name, agreement_version: AGREEMENT_VERSION });
   { const { trackConversion } = await import("./conversions"); await trackConversion(q.id, "SignedAgreement", (q.snapshot ?? q.result).stack.amount_payable); }
 }
@@ -239,12 +254,16 @@ export const extraLabourOf = (q: QuoteRow) => extraFromSnapshot(q);
 /** Installation lines the installer added at pricing (anything beyond the configuration's own triggers). */
 function extraFromSnapshot(q: QuoteRow): LabourRequest[] {
   const base = new Set(q.result.stack.lines.filter((l) => l.kind === "installation").map((l) => l.code));
-  return (q.snapshot?.stack.lines ?? []).filter((l) => l.kind === "installation" && !base.has(l.code)).map((l) => ({ code: l.code, qty: l.qty }));
+  return (q.snapshot?.stack.lines ?? []).filter((l) => l.kind === "installation" && !base.has(l.code)).map(requestFromLine);
 }
 
 /* Ops: funds received → awaiting_date (D5) */
 export async function markPaid(q: QuoteRow, actor: Actor) {
   if (!["payment_pending", "payment_review"].includes(q.status)) throw new Error("Not awaiting payment");
+  if (actor.type === "staff") {
+    const { isOnline } = await import("./stripe");
+    if (isOnline(q.payment_method)) throw new Error("Card and PayTo payments are confirmed by Stripe, not by hand. Use Reconcile on Ops → Payments, or ask the customer to change how they pay.");
+  }
   await db()`update payments set status = 'received', received_at = now() where quote_id = ${q.id} and kind = 'system' and status in ('pending','review')`;
   await move(q, "awaiting_date", actor, "payments.receive", { paid_at: new Date(), slot_hold_until: new Date(Date.now() + 48 * 3600_000) }, "Funds matched to reference");
   // Tax invoice number is issued at the moment payment is received.
@@ -256,7 +275,12 @@ export async function markPaid(q: QuoteRow, actor: Actor) {
 }
 
 /* Stage moves by ops / installer (O2, I4) */
+/** Transitions "Change stage" must never take: each has its own action that moves money or the ledger. */
+export const MONEY_MOVES: [JobState, JobState][] = [
+  ["payment_pending", "awaiting_date"], ["payment_review", "awaiting_date"], ["awaiting_date", "booked"], ["signed", "payment_pending"],
+];
 export async function advance(q: QuoteRow, to: JobState, actor: Actor, rationale: string) {
+  if (MONEY_MOVES.some(([a, b]) => a === q.status && b === to)) throw new Error(`${q.status} → ${to} moves money or the installer ledger; use "Mark paid" / the booking step instead of Change stage.`);
   await move(q, to, actor, "jobs.advance", {}, rationale);
   if (to === "installed") {
     const st = (q.snapshot ?? q.result);
@@ -264,7 +288,10 @@ export async function advance(q: QuoteRow, to: JobState, actor: Actor, rationale
     await db()`update pay_ledger set status = 'eligible' where quote_id = ${q.id} and status = 'accrued'`;
     if (q.discount_code) await db()`insert into payouts (code, quote_id, amount, status) select code, ${q.id}, reward, 'eligible' from codes where code = ${q.discount_code} on conflict do nothing`;
     const first = (q.customer_name ?? "FRIEND").split(" ")[0]!.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 8) || "FRIEND";
-    await db()`insert into codes (code, kind, owner_quote_id) values (${`${first}${q.token.slice(0, 4).toUpperCase()}`}, 'referral', ${q.id}) on conflict do nothing`;
+    // Name + 6 random characters (no 0/O/1/I): about a billion codes per first name, so they can't be guessed.
+    const { randomInt } = await import("node:crypto");
+    const tail = Array.from({ length: 6 }, () => "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"[randomInt(32)]).join("");
+    await db()`insert into codes (code, kind, owner_quote_id) select ${`${first}-${tail}`}, 'referral', ${q.id} where not exists (select 1 from codes where owner_quote_id = ${q.id} and kind = 'referral')`;
     await queueMessage("M6", q.token, q.customer_email, { name: q.customer_name });
   }
 }
@@ -303,7 +330,9 @@ export async function decideVariation(q: QuoteRow, variationId: string, approve:
 
 /* D7: cancellation (refund handled by ops; Stripe refunds switch on at go-live) */
 export async function cancel(q: QuoteRow, actor: Actor, reason: string) {
-  await move(q, "cancelled", actor, "jobs.cancel", { cancelled_at: new Date(), cancel_reason: reason, install_date: null }, reason);
+  await move(q, "cancelled", actor, "jobs.cancel", { cancelled_at: new Date(), cancel_reason: reason, install_date: null, status_before_cancel: q.status }, reason);
+  // A card/PayTo intent must not stay live on a cancelled job (it would collect with nowhere to go).
+  { const { releaseSystemPayment } = await import("./stripe"); await releaseSystemPayment(q.id).catch(() => null); }
   if (q.install_date) {
     const { offerEarlier } = await import("./schedule");
     const { removeEvent } = await import("./google");
@@ -330,9 +359,9 @@ export async function applyCode(q: QuoteRow, raw: string) {
     });
     return repriceFrozen(q);
   }
-  const [c] = await db()`select code, owner_quote_id from codes where code = ${code} and active`;
+  const [c] = await db()`select c.code, c.owner_quote_id, o.customer_email owner_email from codes c left join quotes o on o.id = c.owner_quote_id where c.code = ${code} and c.active`;
   if (!c) throw new Error("That code isn't valid");
-  if (c.owner_quote_id === q.id) throw new Error("You can't use your own code");
+  if (c.owner_quote_id === q.id || (c.owner_email && q.customer_email && String(c.owner_email).toLowerCase() === q.customer_email.toLowerCase())) throw new Error("You can't use your own code");
   await write({ actor: CUSTOMER, action: "quotes.apply_code" }, { token: q.token, code }, async (tx) => {
     await tx`update quotes set discount_code = ${code}, updated_at = now() where id = ${q.id}`;
     return { entity: "quote", entityId: q.id, event: "quote.code_applied", result: { code } };

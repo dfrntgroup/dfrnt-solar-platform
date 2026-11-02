@@ -31,7 +31,14 @@ function inject(id: string, code: string) {
 export function Tags({ meta, google, clarity }: { meta?: string; google?: string; clarity?: string }) {
   const path = usePathname();
   useEffect(() => {
-    if (PRIVATE.test(path)) return;
+    if (PRIVATE.test(path)) {
+      // Arrived here by client-side navigation with tags already loaded: stop recording and tracking on private pages.
+      const w = window as unknown as { clarity?: (...a: unknown[]) => void; fbq?: (...a: unknown[]) => void };
+      try { w.clarity?.("stop"); } catch { /* not loaded */ }
+      try { w.fbq?.("consent", "revoke"); } catch { /* not loaded */ }
+      return;
+    }
+    try { (window as unknown as { fbq?: (...a: unknown[]) => void }).fbq?.("consent", "grant"); } catch { /* not loaded */ }
     rememberFirstTouch();
     const w = window as unknown as { fbq?: (...a: unknown[]) => void; gtag?: (...a: unknown[]) => void };
     if (meta) {

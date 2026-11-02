@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { createServerClient } from "@supabase/ssr";
 import { db, type Actor } from "@dfrnt/db";
 
-export const devAuth = () => process.env.DEV_AUTH === "1" && !process.env.VERCEL;
+// Dev sign-in by cookie: never on Vercel, and on a production build only when DEV_AUTH_LOCAL=1 is set as well (local testing of the built app).
+export const devAuth = () => process.env.DEV_AUTH === "1" && !process.env.VERCEL && (process.env.NODE_ENV !== "production" || process.env.DEV_AUTH_LOCAL === "1");
 
 export async function supabase() {
   const store = await cookies();

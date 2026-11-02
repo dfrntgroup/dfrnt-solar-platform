@@ -10,7 +10,7 @@ const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 /** Ticked extras, with a quantity for per-metre / per-km items ("CODE:qty"). */
 const extraCodes = (f: FormData) => f.getAll("codes").map(String).map((c) => { const q = s(f, `qty_${c}`); return q ? `${c}:${q}` : c; });
 async function run(path: string, fn: () => Promise<unknown>) {
-  try { await fn(); } catch (e) { if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e; redirect(`${path}?error=${encodeURIComponent((e as Error).message)}`); }
+  try { await fn(); } catch (e) { if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e; const { report } = await import("@/lib/report"); await report("ops.action", e, { path }); redirect(`${path}?error=${encodeURIComponent((e as Error).message)}`); }
   revalidatePath(path); redirect(path);
 }
 

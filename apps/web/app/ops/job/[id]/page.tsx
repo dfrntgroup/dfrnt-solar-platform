@@ -5,7 +5,7 @@ import { TRANSITIONS } from "@dfrnt/engine";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
 import { UsageJobCard } from "@/components/UsageJobCard";
-import { getQuoteById } from "@/lib/jobs";
+import { getQuoteById, MONEY_MOVES } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2 } from "@/lib/site";
@@ -169,7 +169,8 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             : <div key={x.id as string} className="card" style={{ marginBottom: 12 }}><strong>Refund {aud2(x.amount as number)} to send</strong><Step action={refundSent} fields={{ id, payment: x.id as string }} label="Bank refund sent" /></div>)}
           {next.length > 0 && <form action={opsAdvance} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Change stage</strong>
-            <select name="to" style={input}>{next.map((t) => <option key={t} value={t}>{t}</option>)}</select>
+            <select name="to" style={input}>{next.filter((t) => !MONEY_MOVES.some(([a, b]) => a === q.status && b === t)).map((t) => <option key={t} value={t}>{t}</option>)}</select>
+            <span className="small muted">Payment and booking stages move through their own buttons, never from here.</span>
             <input name="reason" placeholder="Reason (required)" style={input} />
             <button className="btn" type="submit">Move</button></form>}
           {["booked", "gear_ordered", "delivered", "on_site"].includes(q.status) && <form action={opsVariation} className="card" style={{ marginBottom: 12 }}>

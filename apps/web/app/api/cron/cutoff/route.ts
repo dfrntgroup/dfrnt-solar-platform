@@ -1,6 +1,7 @@
 import { runCutoff } from "@/lib/timers";
+import { cronAuthorised } from "@/lib/cron-auth";
 export const dynamic = "force-dynamic";
 export async function GET(req: Request) {
-  if (!process.env.CRON_SECRET || req.headers.get("authorization") !== `Bearer ${process.env.CRON_SECRET}`) return new Response("Unauthorized", { status: 401 });
+  if (!cronAuthorised(req)) return new Response("Unauthorized", { status: 401 });
   return Response.json(await runCutoff());
 }

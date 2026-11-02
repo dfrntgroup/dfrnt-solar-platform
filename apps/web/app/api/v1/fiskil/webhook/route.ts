@@ -31,7 +31,9 @@ export async function POST(req: Request) {
   if (!l) return new Response("ok");
   if (d.consent_id) await db()`update energy_links set consent_id = ${d.consent_id} where id = ${l.id} and consent_id is distinct from ${d.consent_id}`;
   const kind = webhookEventKind(event);
-  if (kind === "revoked" || kind === "expired") await consentEnded(endUser, kind === "revoked");
+  // Unsigned (no FISKIL_WEBHOOK_SECRET) on the live site: never delete data on a webhook's say-so; the daily pull notices a revoked consent itself.
+  const trusted = !!secret || process.env.VERCEL_ENV !== "production";
+  if ((kind === "revoked" || kind === "expired") && trusted) await consentEnded(endUser, kind === "revoked");
   else if (kind === "sync" && /usage|accounts|servicepoints/.test(event) && l.status !== "disconnected") await pullLink(l.id as string, { force: l.status !== "ready" });
   return new Response("ok");
 }

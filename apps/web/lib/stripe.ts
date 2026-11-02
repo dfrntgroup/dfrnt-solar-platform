@@ -145,7 +145,13 @@ export async function applyIntent(pi: Stripe.PaymentIntent) {
     const fee = await feeOf(pi);
     if (p.kind === "system") {
       if (q && ["payment_pending", "payment_review"].includes(q.status)) await markPaid(q, STRIPE_ACTOR);
-      else await db()`update payments set status = 'received', received_at = now() where id = ${p.id}`;
+      else {
+        // Money arrived for a job that isn't waiting for it (cancelled, or marked paid by hand). Record it and raise it.
+        await db()`update payments set status = 'received', received_at = now() where id = ${p.id}`;
+        const { openTicket } = await import("./ops");
+        await openTicket({ kind: "fault", subject: `Stripe payment on a job in state ${q?.status ?? "unknown"}`, quoteId: p.quote_id as string, name: q?.customer_name ?? undefined, email: q?.customer_email ?? undefined,
+          body: `${pi.id} for ${(p.amount as number).toFixed(2)} succeeded but the job is ${q?.status ?? "missing"}. Check whether it needs a refund (Ops → Payments → the job).` }).catch(() => null);
+      }
     } else {
       await write({ actor: STRIPE_ACTOR, action: "payments.receive" }, { paymentId: p.id }, async (tx) => {
         await tx`update payments set status = 'received', received_at = now() where id = ${p.id} and status <> 'received'`;

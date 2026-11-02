@@ -289,3 +289,11 @@ footer .biz a { line-height: inherit; }
 .guar li::before { content: "✓"; position: absolute; left: 0; color: var(--teal-dark, #007a75); font-weight: 800; }
 .scam { border-left: 4px solid #b3261e; background: #fff; padding: 10px 12px; border-radius: 6px; font-size: 14px; margin-top: 12px; }
 .guar li.nock::before { content: ""; }
+
+/* Review fixes (3 Nov 2026) */
+.tscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+table.index th { text-align: left; padding: 9px 6px 9px 0; border-bottom: 2px solid var(--ink); font-size: 13px; vertical-align: bottom; }
+table.index th.r, table.index td.r { text-align: right; padding-left: 10px; }
+table.index th span { display: block; font-weight: 400; }
+table.index td { padding-right: 6px; }
+@media (max-width: 600px) { table.index { font-size: 13px; } table.index th { font-size: 12px; } }

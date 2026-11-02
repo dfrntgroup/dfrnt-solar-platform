@@ -42,21 +42,23 @@ export function messageRisk(text: string): string | null {
 /* ---------- context per agent ---------- */
 async function contextFor(agent: AgentRow, trigger: string, ref: string | null, fixture?: Record<string, unknown>): Promise<string> {
   if (fixture?.context) return String(fixture.context);
+  // Customer text can never close or open our own tags (prompt-injection fence).
+  const fence = (t: unknown) => String(t ?? "").replace(/<\/?\s*customer_message\b[^>]*>/gi, "[tag removed]");
   if (agent.id === "support" && trigger === "ticket.opened" && ref) {
     const [t] = await db()`select id, kind, subject, body, name, email, quote_id, created_at from tickets where id = ${ref}`;
     if (!t) return "The ticket no longer exists. Do nothing.";
     const replies = await db()`select author, body, internal from ticket_replies where ticket_id = ${ref} order by created_at`;
     return `A new support ticket (ticket_id ${t.id}${t.quote_id ? `, quote_id ${t.quote_id}` : ", not linked to a job"}). Kind: ${t.kind}. From: ${t.name ?? "unknown"}.
 <customer_message>
-Subject: ${t.subject}
-${String(t.body).slice(0, 4000)}
+Subject: ${fence(t.subject)}
+${fence(t.body).slice(0, 4000)}
 </customer_message>
 ${replies.length ? `Earlier replies:\n${replies.map((r) => `${r.internal ? "[internal] " : ""}${r.author}: ${String(r.body).slice(0, 500)}`).join("\n")}` : ""}`;
   }
   if (agent.id === "support" && trigger === "job.message" && ref) {
     const msgs = await db()`select author, body, created_at from job_messages where quote_id = ${ref} order by created_at desc limit 8`;
     return `A customer wrote in their job's message thread (quote_id ${ref}). Latest messages, newest last:
-${msgs.reverse().map((m) => m.author === "customer" ? `<customer_message>${String(m.body).slice(0, 2000)}</customer_message>` : `${m.author}: ${String(m.body).slice(0, 500)}`).join("\n")}`;
+${msgs.reverse().map((m) => m.author === "customer" ? `<customer_message>${fence(m.body).slice(0, 2000)}</customer_message>` : `${m.author}: ${String(m.body).slice(0, 500)}`).join("\n")}`;
   }
   if (agent.id === "ops") return `Morning sweep, ${new Date().toLocaleDateString("en-AU", { weekday: "long", day: "numeric", month: "long", timeZone: "Australia/Brisbane" })}. Start with list_stuck_jobs, then do the one most useful next thing for each stuck job (at most 10 actions).`;
   return `Trigger ${trigger}${ref ? ` (${ref})` : ""}.`;
@@ -106,7 +108,12 @@ export async function runAgent(agentId: string, trigger: string, ref: string | n
 
   // Safety words: a person, now, before any model runs.
   const ctxText = await contextFor(agent, trigger, ref, opts.test?.fixture);
-  if (agentId === "support" && SAFETY_WORDS.test(ctxText.match(/<customer_message>[\s\S]*?<\/customer_message>/g)?.join(" ") ?? "")) {
+  const customerText = ctxText.match(/<customer_message>[\s\S]*?<\/customer_message>/g)?.join(" ") ?? "";
+  // Refund / fault / $ wording in what the CUSTOMER wrote also sends the reply to a person (the locked rule says so).
+  const inboundRisk = agentId === "support" ? messageRisk(customerText) : null;
+  // The record this run is about: tools may only act on it (the model can't be steered at another customer).
+  const bound = { ticket: trigger === "ticket.opened" ? ref : ctxText.match(/ticket_id ([0-9a-f-]{36})/)?.[1], quote: trigger === "job.message" ? ref : ctxText.match(/quote_id ([0-9a-f-]{36})/)?.[1] };
+  if (agentId === "support" && SAFETY_WORDS.test(customerText)) {
     const ticket = ctxText.match(/ticket_id ([0-9a-f-]{36})/)?.[1];
     if (ticket) {
       const r = await gate("route_to_person", { ticket_id: ticket, note: "Safety words in the customer's message: call them now.", urgent: true }, "Safety words detected", { forceAct: true });
@@ -131,6 +138,11 @@ export async function runAgent(agentId: string, trigger: string, ref: string | n
     const parsed = tool.input.safeParse(rawInput ?? {});
     if (!parsed.success) return { content: `Invalid input: ${parsed.error.issues.map((i) => i.message).join("; ")}`, call: { tool: name, outcome: "invalid", input: rawInput } };
     const input = parsed.data;
+    if (agentId === "support" && !o.forceAct) {
+      const t = (input as Record<string, unknown>);
+      const off = (t.ticket_id && bound.ticket && t.ticket_id !== bound.ticket) || (t.quote_id && bound.quote && t.quote_id !== bound.quote) || (t.quote_id && !bound.quote && bound.ticket);
+      if (off) { await rec("blocked", input, { reason: "Not the record this run is about" }); return { content: "Blocked: you can only act on the ticket or job this run is about.", call: { tool: name, outcome: "blocked", input, reason: "wrong target" } }; }
+    }
     const target = (x: unknown) => { const o = (x ?? {}) as Record<string, unknown>; return `${o.ticket_id ?? ""}|${o.quote_id ?? ""}`; };
     if (tool.kind === "write" && calls.some((c) => c.tool === name && ["acted", "proposed"].includes(c.outcome) && target(c.input) === target(input))) {
       return { content: "Already done in this run. Don't repeat it; finish with your summary.", call: { tool: name, outcome: "duplicate", input } };
@@ -152,7 +164,7 @@ export async function runAgent(agentId: string, trigger: string, ref: string | n
           return { content: "Blocked: this person has had enough messages today. Leave a note or route to a person.", call: { tool: name, outcome: "blocked", input, reason: "daily limit", body: msgBody } };
         }
       }
-      forced = messageRisk(m.body);
+      forced = inboundRisk ?? messageRisk(m.body);
     }
     if (mode === "act" && !forced) {
       if (test) return { content: "Done.", call: { tool: name, outcome: "acted", input, body: msgBody } };

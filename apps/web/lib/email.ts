@@ -16,7 +16,7 @@ export async function emailSettings(): Promise<{ mode: EmailMode; test_to: strin
 }
 export const emailReady = () => !!process.env.RESEND_API_KEY;
 
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const linkLabel = (u: string) => u.endsWith("/doc/invoice") ? "Your tax invoice" : u.includes("/quote/") ? "Open your system record" : u;
 
 /** Plain, branded HTML from the plain-text body: paragraphs, with links given readable labels. */
@@ -57,7 +57,18 @@ export async function deliver(id: string) {
   if (!to) return "held";
   const subject = mode === "test" ? `[TEST to ${m.recipient}] ${m.subject}` : (m.subject as string);
   const r = await sendEmail(to, subject, m.body as string);
-  if (r.ok) await db()`update messages set status = 'sent', sent_at = now(), sent_to = ${to}, provider_id = ${r.id}, error = null where id = ${id}`;
-  else await db()`update messages set status = 'failed', error = ${r.error}, sent_to = ${to} where id = ${id}`;
+  if (r.ok) await db()`update messages set status = 'sent', sent_at = now(), sent_to = ${to}, provider_id = ${r.id}, error = null, attempts = attempts + 1, last_attempt_at = now() where id = ${id}`;
+  else {
+    await db()`update messages set status = 'failed', error = ${r.error}, sent_to = ${to}, attempts = attempts + 1, last_attempt_at = now() where id = ${id}`;
+    const { report } = await import("./report"); await report("email.deliver", new Error(r.error), { message_id: id, to });
+  }
   return r.ok ? "sent" : "failed";
+}
+
+/** Retry failed messages (up to 5 attempts, at least an hour apart). Run from the timers. */
+export async function retryFailedMessages() {
+  const rows = await db()`select id from messages where status = 'failed' and attempts < 5 and (last_attempt_at is null or last_attempt_at < now() - interval '1 hour') order by created_at limit 50`;
+  let sent = 0, failed = 0;
+  for (const r of rows) { const out = await deliver(r.id as string).catch(() => "failed"); if (out === "sent") sent++; else if (out === "failed") failed++; }
+  return { sent, failed, pending: rows.length - sent - failed };
 }

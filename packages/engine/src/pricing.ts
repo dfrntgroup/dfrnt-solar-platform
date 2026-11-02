@@ -29,6 +29,8 @@ export interface LabourRequest { code: string; qty?: number }
 export interface PriceLine {
   kind: "hardware" | "bos" | "installation" | "variation";
   code: string; description: string; qty: number;
+  /** What was asked for before any free allowance (e.g. 60 km of travel → qty 10). Feed this back when re-pricing. */
+  req_qty?: number;
   /** Unit cost ex GST (component cost, or installer rate). */
   unit_cost: number | null;
   /** Line cost ex GST: what we pay the supplier / installer. */
@@ -70,12 +72,15 @@ export function labourLines(
     const pending = !(rate > 0);
     const cost = pending ? null : round2(qty * rate);
     out.push({
-      kind: opts.kind ?? "installation", code: item.code, description: item.description, qty, unit_cost: pending ? null : rate,
+      kind: opts.kind ?? "installation", code: item.code, description: item.description, qty, req_qty: r.qty, unit_cost: pending ? null : rate,
       cost_ex_gst: cost, sell_ex_gst: cost == null ? null : round2(cost / (1 - m.installation)), price_pending: pending,
     });
   }
   return out;
 }
+
+/** The request that reproduces a priced labour line exactly (the inverse of labourLines). */
+export const requestFromLine = (l: PriceLine): LabourRequest => ({ code: l.code, qty: l.req_qty ?? l.qty });
 
 /** A named site variation priced by the installer (from photos or on site). Sell = cost ÷ 0.9. */
 export function variationLine(code: string, description: string, installerCostEx: number, margins: Margins = DEFAULT_MARGINS): PriceLine {

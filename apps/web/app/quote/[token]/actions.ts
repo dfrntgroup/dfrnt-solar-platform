@@ -8,12 +8,13 @@ import { queueMessage } from "@/lib/messages";
 import { longDate } from "@/lib/site";
 import { putPhoto } from "@/lib/storage";
 import { allow } from "@/lib/ratelimit";
+import { safeMessage } from "@/lib/report";
 
 const back = (token: string, err?: string) => redirect(`/quote/${token}${err ? `?error=${encodeURIComponent(err)}` : ""}`);
 const s = (f: FormData, k: string) => String(f.get(k) ?? "").trim();
 
 async function run(token: string, fn: () => Promise<unknown>) {
-  try { await fn(); } catch (e) { if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e; back(token, (e as Error).message); }
+  try { await fn(); } catch (e) { if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e; back(token, await safeMessage(e, "quote.action", { token })); }
   revalidatePath(`/quote/${token}`);
   back(token);
 }
@@ -24,7 +25,7 @@ const goto = (token: string, step?: number, err?: string) =>
 
 async function stepRun(token: string, step: number, fn: () => Promise<number | void>) {
   let next: number | void = undefined;
-  try { next = await fn(); } catch (e) { if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e; goto(token, step, (e as Error).message); }
+  try { next = await fn(); } catch (e) { if ((e as { digest?: string }).digest?.startsWith("NEXT_REDIRECT")) throw e; goto(token, step, await safeMessage(e, "quote.step", { token, step })); }
   revalidatePath(`/quote/${token}`);
   goto(token, next || undefined);
 }
@@ -258,7 +259,7 @@ export async function cancelOrder(f: FormData) {
 
 export async function addCode(f: FormData) {
   const token = s(f, "token");
-  await run(token, async () => applyCode((await getQuote(token))!, s(f, "code")));
+  await run(token, async () => { if (!(await allow("code", 10))) throw new Error("Too many attempts; wait ten minutes and try again"); await applyCode((await getQuote(token))!, s(f, "code")); });
 }
 
 /** A21/A22: the customer's review and showcase consent, once the system is installed. */
@@ -315,6 +316,7 @@ export async function passRecord(f: FormData) {
   const token = s(f, "token");
   let done = false;
   try {
+    if (!(await allow("pass", 5))) throw new Error("Too many attempts; wait ten minutes and try again");
     if (f.get("confirm") !== "on") throw new Error("Tick the box to confirm");
     const email = s(f, "email").toLowerCase(), name = s(f, "name");
     if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email)) throw new Error("Enter the buyer's name and email");

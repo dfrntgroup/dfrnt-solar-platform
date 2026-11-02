@@ -14,11 +14,11 @@ export default async function PriceIndex({ searchParams }: { searchParams: Promi
         <p className="eyebrow">Price Index · {postcode} · {rebateDate()}</p>
         <h1>What solar and batteries really cost.</h1>
         <p className="muted">Installed prices after rebates, worked out the same way for every system. Updated whenever our prices change.</p>
-        <table className="lines"><tbody>
-          <tr><td><strong>System</strong></td><td className="r"><strong>You pay</strong></td><td className="r"><strong>Whole price ÷ battery kWh</strong></td><td className="r"><strong>Whole price ÷ solar kW</strong></td></tr>
-          {rows.map(({ s, q }) => <tr key={s.slug}><td>{s.brand} · {s.title}</td><td className="r">{aud(q.stack.amount_payable)}</td>
+        <div className="tscroll"><table className="lines index"><thead>
+          <tr><th>System</th><th className="r">You pay</th><th className="r">Per battery kWh<span className="small muted">whole price ÷ kWh</span></th><th className="r">Per solar kW<span className="small muted">whole price ÷ kW</span></th></tr></thead><tbody>
+          {rows.map(({ s, q }) => <tr key={s.slug}><td><strong>{s.brand}</strong><br /><span className="small">{s.title}</span></td><td className="r">{aud(q.stack.amount_payable)}</td>
             <td className="r">{aud(q.stack.amount_payable / q.config.usable_kwh)}</td><td className="r">{q.config.panel_kw ? aud(q.stack.amount_payable / q.config.panel_kw) : "—"}</td></tr>)}
-        </tbody></table>
+        </tbody></table></div>
       </div></section>
       <Footer />
     </>

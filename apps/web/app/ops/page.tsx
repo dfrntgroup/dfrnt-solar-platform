@@ -24,6 +24,7 @@ export default async function Board({ searchParams }: { searchParams: Promise<{ 
        or (status = 'payment_pending' and updated_at < now() - interval '3 days') order by updated_at limit 20`;
   const insts = await db()`select business_name, capacity, (select json_object_agg(d, n) from (select install_date::text d, count(*)::int n from quotes q where q.installer_id = i.id and install_date is not null and status in ('booked','gear_ordered','delivered','on_site','variation_pending') group by 1) x) booked from installers i where active`;
   const earliest = insts.map((i) => ({ name: i.business_name as string, d: earliestDate(todayAEST(), { ...(i.capacity as Omit<Capacity, "booked">), booked: (i.booked ?? {}) as Record<string, number> }) }));
+  const failures = await db()`select where_, message, count(*)::int n, max(created_at) last from failures where created_at > now() - interval '7 days' group by 1, 2 order by last desc limit 8`.catch(() => []);
   const days = (d: string | null) => d ? Math.round((Date.parse(d) - Date.parse(todayAEST())) / 86400000) : 999;
   const throttle = earliest.length > 0 && earliest.every((e) => days(e.d) > 21);
   const by = (col: string) => rows.filter((r) => BOARD[r.status as keyof typeof BOARD] === col);
@@ -34,6 +35,8 @@ export default async function Board({ searchParams }: { searchParams: Promise<{ 
       <p className="small muted">{counts.map((c) => `${c.status} ${c.n}`).join(" · ")}</p>
       <p className="small">Earliest install: {earliest.map((e) => `${e.name} ${e.d ? longDate(e.d) : "none"}`).join(" · ")}</p>
       {throttle && <div className="note" style={{ margin: "12px 0" }}><strong>Throttle:</strong> every installer&apos;s earliest date is more than 21 days out. Pause creator and paid spend until capacity frees up (O18).</div>}
+      {failures.length > 0 && <div className="note" style={{ margin: "12px 0" }}><strong>Something failed in the last 7 days:</strong>
+        <ul className="small" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{failures.map((f, i) => <li key={i}><code>{f.where_ as string}</code> ×{f.n as number}: {f.message as string}</li>)}</ul></div>}
       {alerts.length > 0 && <div className="note" style={{ margin: "12px 0" }}><strong>Needs attention:</strong> {alerts.map((a, i) => <span key={a.id as string}>{i ? " · " : " "}<Link href={`/ops/job/${a.id}`}>{(a.customer_name as string) ?? a.title} ({a.status as string})</Link></span>)}</div>}
       <div className="mob-only">
         {stage && COLUMNS.includes(stage) ? <>

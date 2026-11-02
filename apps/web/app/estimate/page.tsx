@@ -63,6 +63,8 @@ export default async function FindMySystem({ searchParams }: { searchParams: Pro
         {showUsage && <UsageConnect action={connectFromEstimate} askEmail error={sp.usage_error}
           hidden={{ postcode, solar: hasSolar ? "yes" : "no", phase: String(phase), back: `/estimate?${new URLSearchParams({ ...sp, usage_error: "" }).toString().replace(/&?usage_error=/, "")}` }} />}
 
+        {sp.bill != null && !(bill > 0) && <div className="note" style={{ marginTop: 18 }}>Enter your last quarterly bill in dollars (the total on the bill, e.g. 750) and we&apos;ll size a system from it.</div>}
+        {best && earliest === null && <div className="note" style={{ marginTop: 18 }}>We don&apos;t install at {postcode} yet. These prices are for planning; <Link href={`/contact?kind=waitlist&postcode=${postcode}`}>join the waitlist</Link> and we&apos;ll email you when an installer covers your area.</div>}
         {bill > 0 && !best && <div className="note" style={{ marginTop: 18 }}>Nothing in our range fits those answers yet. <Link href="/systems">See every system</Link>, or ask us to call you.</div>}
         {best && <>
           <h2 style={{ marginTop: 28 }}>We recommend</h2>

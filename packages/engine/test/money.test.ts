@@ -130,3 +130,16 @@ describe("End to end from component costs", () => {
     expect(quote({ ...job1002, priorBatteryClaim: true }, { asOf: "2026-11-01" }).rebate.battery_stcs).toBe(0);
   });
 });
+
+describe("labour lines survive a re-price round-trip (review fix, 3 Nov 2026)", () => {
+  it("per-km and per-metre allowances are not subtracted twice", async () => {
+    const { labourLines, requestFromLine } = await import("../src/pricing");
+    const ctx = { kw: 10, panels: 21 };
+    const first = labourLines([{ code: "SVC-TRAVEL", qty: 60 }, { code: "SVC-CABLE-1P", qty: 15 }], ctx);
+    expect(first.map((l) => l.qty)).toEqual([10, 10]);
+    const second = labourLines(first.map(requestFromLine), ctx);
+    expect(second.map((l) => [l.code, l.qty, l.sell_ex_gst])).toEqual(first.map((l) => [l.code, l.qty, l.sell_ex_gst]));
+    const third = labourLines(second.map(requestFromLine), ctx);
+    expect(third).toEqual(second);
+  });
+});

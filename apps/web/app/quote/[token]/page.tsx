@@ -27,7 +27,7 @@ import { financeLink } from "@/lib/jobs";
 import { getSetting } from "@/lib/settings";
 import { installersFor } from "@/lib/installers";
 import { siteUrl } from "@/lib/messages";
-import { todayAEST } from "@/lib/api";
+import { dateAEST, todayAEST } from "@/lib/api";
 import { aud, aud2, longDate } from "@/lib/site";
 import { joinPlan, addAddonAction, removeAddonAction, reportProblem, passRecord, saveHeard, takeEarlierDay, changeMyDay, saveAccess, customerMessage, acceptRevision, keepOriginal, addCode, approveVariation, declineVariation, cancelOrder, payByBank, payOnline, changeHowIPay, payFinance, payVariation, pickDate, signAgreement, submitHome } from "./actions";
 
@@ -104,6 +104,7 @@ export default async function Record({ params, searchParams }: { params: Promise
   const finProv = q.payment_method?.startsWith("finance:") ? (await getSetting("finance")).providers.find((x) => `finance:${x.id}` === q.payment_method) : undefined;
   const picking = state === "awaiting_date" || (["booked", "gear_ordered", "delivered"].includes(state) && q.rebook);
   const choice = picking ? await daysFor(q) : null;
+  const signDays = state === "priced" && q.installer_id ? await daysFor(q, { max: 3 }).catch(() => null) : null;
   const [earlier] = ["booked", "gear_ordered"].includes(state) && !q.rebook && sp.offer && /^[0-9a-f-]{36}$/.test(sp.offer)
     ? await db()`select id, dates::text[] dates from date_offers where id = ${sp.offer} and quote_id = ${q.id} and kind = 'earlier' and status = 'open' and expires_at > now()` : [];
   const threadOpen = ["awaiting_date", "booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed"].includes(state);
@@ -117,7 +118,7 @@ export default async function Record({ params, searchParams }: { params: Promise
   const choices = open && q.site_draft?.address ? await installersFor(q.site_draft.address.postcode ?? q.postcode, needsOf(q)) : [];
   const [fee] = q.design_fee_status === "due" ? await db()`select amount::float8 amount, reference from payments where quote_id = ${q.id} and kind = 'report' and status = 'pending' limit 1` : [];
   const rev = q.revision && REVISABLE.includes(state) ? q.revision : null;
-  const rule = canCancel && q.signed_at ? refundRule(q.signed_at.toISOString().slice(0, 10), todayAEST(), state) : null;
+  const rule = canCancel && q.signed_at ? refundRule(dateAEST(q.signed_at), todayAEST(), state) : null;
 
   return (
     <>
@@ -188,6 +189,14 @@ export default async function Record({ params, searchParams }: { params: Promise
           <ServicePlan q={q} join={joinPlan} />
           <h2 style={{ marginTop: 28 }}>Sign</h2>
           <p className="muted small">One agreement covers the equipment, the installation, and assigning your STCs to us. You have 10 business days after signing to cancel for any reason with a full refund.</p>
+          <table className="incl" style={{ marginBottom: 12 }}><tbody>
+            <tr><td className="k">Your system</td><td>{q.title ?? shown.config.summary}</td></tr>
+            {q.site && <tr><td className="k">Install address</td><td>{[q.site.address.unit ? `Unit ${q.site.address.unit}` : "", q.site.address.line1, q.site.address.suburb, q.site.address.state, q.site.address.postcode].filter(Boolean).join(", ")}</td></tr>}
+            <tr><td className="k">Your price</td><td><strong>{aud2(shown.stack.amount_payable)}</strong> installed, inc GST, rebate of {aud2(shown.stack.less_stcs)} already off</td></tr>
+            <tr><td className="k">Your installer</td><td>{inst ? <>{inst.business_name as string}{inst.licence_no ? ` · electrical licence ${inst.licence_no as string}` : ""}{inst.saa_accreditation ? ` · SAA ${inst.saa_accreditation as string}` : ""}</> : "A licensed, SAA-accredited electrician assigned before your install day"}</td></tr>
+            <tr><td className="k">Install day</td><td>{signDays?.slots.length ? <>You pick after paying. Next free: {signDays.slots.slice(0, 3).map((d) => longDate(d.date)).join(" · ")}</> : "You pick from your installer's free days after paying"}{signDays?.until ? <><br /><span className="small muted">Every day offered is on or before {longDate(signDays.until)}, so your rebate holds.</span></> : null}</td></tr>
+            <tr><td className="k">Price held until</td><td>{longDate(q.lock_until)}</td></tr>
+          </tbody></table>
           <LegalText sections={AGREEMENT} compact />
           <p className="small"><Link href="/agreement" target="_blank">Open the agreement in full</Link> · <Link href="/privacy" target="_blank">Privacy policy</Link></p>
           <form action={signAgreement}>
@@ -210,7 +219,7 @@ export default async function Record({ params, searchParams }: { params: Promise
             <button className="btn ghost block" type="submit">Card, Apple Pay or Google Pay</button></form>}
           {bankOn && <form action={payByBank} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} />
             <button className={online ? "btn ghost block" : "btn block"} type="submit">Bank transfer (save about 1%)</button></form>}
-          {!online && <p><button className="btn ghost block" disabled>Card — available at launch</button></p>}
+          {!online && !bankOn && financeOpts.length === 0 && <div className="note">Our payment page is being set up. Call us on {SELLER.phone} and we&apos;ll take your payment over the phone or email you our bank details, with your reference, straight away. Your signed price is safe.</div>}
           {financeOpts.map((fp) => <form key={fp.id} action={payFinance} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} /><input type="hidden" name="provider" value={fp.id} />
             <button className="btn ghost block" type="submit">Finance with {fp.name}{fp.blurb ? `: ${fp.blurb.toLowerCase()}` : ""}</button></form>)}
           <div className="scam"><strong>We&apos;ll never email you new bank details.</strong> If anyone asks you to pay a different account, don&apos;t pay. Call us on {SELLER.phone} to check.</div>

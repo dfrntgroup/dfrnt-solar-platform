@@ -11,6 +11,8 @@ const aud = (n: number, d = 0) => n.toLocaleString("en-AU", { style: "currency",
 export function Configurator(props: {
   slug: string; postcode: string; panels: number[]; modules: number[]; backupAvailable: boolean; moduleKwh: number; panelW: number;
   start: { panels: number; modules: number }; initial: Price; lockUntil: string;
+  /** false = no installer covers this postcode: show the waitlist instead of Secure. */
+  served?: boolean;
   secure: (f: FormData) => Promise<void>;
 }) {
   const [panels, setPanels] = useState(props.start.panels);
@@ -89,12 +91,18 @@ export function Configurator(props: {
       <form id="secure-form" action={props.secure} onSubmit={() => track("secure_click", { slug: props.slug, panels, modules, backup })}>
         <input type="hidden" name="slug" value={props.slug} /><input type="hidden" name="postcode" value={props.postcode} />
         <input type="hidden" name="panels" value={panels} /><input type="hidden" name="modules" value={modules} /><input type="hidden" name="backup" value={backup} />
-        <button className="btn block" type="submit" disabled={!p.ok || busy}>Secure this price for 14 days</button>
+        {props.served === false
+          ? <a className="btn block" href={`/contact?kind=waitlist&postcode=${props.postcode}`}>Join the waitlist for {props.postcode}</a>
+          : <button className="btn block" type="submit" disabled={!p.ok || busy}>Secure this price for 14 days</button>}
       </form>
-      <p className="small muted">No payment now. Price and rebate locked until {props.lockUntil}.</p>
+      {props.served === false
+        ? <p className="small muted">We don&apos;t install at {props.postcode} yet. This is the price you&apos;d pay once an installer covers your area; we&apos;ll email you when one does.</p>
+        : <p className="small muted">No payment now. Price and rebate locked until {props.lockUntil}.</p>}
       <div className="paybar" style={{ opacity: busy ? 0.6 : 1 }}>
         <div><div className="small muted" style={{ fontSize: 11, letterSpacing: ".12em", textTransform: "uppercase", fontWeight: 700 }}>You pay, installed</div><div className="pay">{aud(p.you_pay)}</div></div>
-        <button className="btn" type="submit" form="secure-form" disabled={!p.ok || busy}>Secure price →</button>
+        {props.served === false
+          ? <a className="btn" href={`/contact?kind=waitlist&postcode=${props.postcode}`}>Join waitlist →</a>
+          : <button className="btn" type="submit" form="secure-form" disabled={!p.ok || busy}>Secure price →</button>}
       </div>
       <div className="paybar-space" style={{ height: 70 }} />
     </div>

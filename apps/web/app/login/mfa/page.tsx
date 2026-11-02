@@ -8,7 +8,7 @@ export default async function Mfa({ searchParams }: { searchParams: Promise<{ ne
     <>
       <Header postcode="4551" />
       <section><div className="wrap" style={{ maxWidth: 380 }}><h1 style={{ fontSize: 28 }}>Enter your code</h1><p className="muted">From your authenticator app.</p>
-        <MfaChallenge next={next && next.startsWith("/") ? next : "/ops"} /></div></section>
+        <MfaChallenge next={next && next.startsWith("/") && !next.startsWith("//") ? next : "/ops"} /></div></section>
       <Footer />
     </>
   );
