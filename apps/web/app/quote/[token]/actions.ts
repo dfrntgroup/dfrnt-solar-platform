@@ -168,6 +168,33 @@ export async function payByBank(f: FormData) {
   await run(token, async () => chooseBank((await getQuote(token))!));
 }
 
+/* S1: PayTo or card. Creates the intent on the server, then the page shows Stripe's form. */
+export async function payOnline(f: FormData) {
+  const token = s(f, "token"), method = s(f, "method");
+  if (method !== "payto" && method !== "card") back(token, "Choose how to pay");
+  await run(token, async () => { const { startOnlinePayment } = await import("@/lib/jobs"); await startOnlinePayment((await getQuote(token))!, method as "payto" | "card"); });
+}
+export async function changeHowIPay(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => { const { changePayment } = await import("@/lib/jobs"); await changePayment((await getQuote(token))!); });
+}
+/* S4: finance with a lender. */
+export async function payFinance(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => { const { chooseFinance } = await import("@/lib/jobs"); await chooseFinance((await getQuote(token))!, s(f, "provider")); });
+}
+/* S3: pay an approved change online. */
+export async function payVariation(f: FormData) {
+  const token = s(f, "token"), method = s(f, "method");
+  let id = "";
+  try {
+    if (method !== "payto" && method !== "card") throw new Error("Choose how to pay");
+    const { payVariationOnline } = await import("@/lib/jobs");
+    id = await payVariationOnline((await getQuote(token))!, s(f, "payment"), method);
+  } catch (e) { back(token, (e as Error).message); }
+  redirect(`/quote/${token}?payv=${id}#pay`);
+}
+
 export async function pickDate(f: FormData) {
   const token = s(f, "token");
   await run(token, async () => {

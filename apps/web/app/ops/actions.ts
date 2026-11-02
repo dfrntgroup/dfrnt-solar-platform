@@ -511,7 +511,7 @@ export async function xeroCodes(f: FormData) {
   await run("/ops/xero", async () => {
     const { getSetting, setSetting } = await import("@/lib/settings");
     const x = await getSetting("xero");
-    const k = ["sales", "stc", "stc_sale", "installer", "bank", "sales_tax", "stc_tax", "stc_sale_tax", "installer_tax"] as const;
+    const k = ["sales", "stc", "stc_sale", "installer", "bank", "stripe", "stripe_fees", "sales_tax", "stc_tax", "stc_sale_tax", "installer_tax"] as const;
     const codes = Object.fromEntries(k.map((n) => [n, s(f, n).slice(0, 30)])) as typeof x.codes;
     await setSetting("xero", { ...x, codes }, me.name);
   });
@@ -555,4 +555,33 @@ export async function energyRepull(f: FormData) {
 export async function energyRevoked(f: FormData) {
   await requireStaff();
   await run("/ops/energy", async () => { await db()`update energy_links set revoke_status = 'revoked' where id = ${s(f, "id")}`; });
+}
+
+/** S2: register this app's own Stripe webhook (signing secret stored sealed, nobody copies it). */
+export async function stripeRegister() {
+  const me = await requireStaff();
+  await run("/ops/payments", async () => {
+    const { registerWebhook } = await import("@/lib/stripe");
+    const { siteUrl } = await import("@/lib/messages");
+    await registerWebhook(`${siteUrl()}/api/v1/stripe/webhook`, me.name);
+  });
+}
+/** S4: finance lenders shown at checkout. */
+export async function financeSave(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/payments", async () => {
+    const { getSetting, setSetting } = await import("@/lib/settings");
+    const cur = await getSetting("finance");
+    const providers = cur.providers.map((p) => {
+      const url = s(f, `url_${p.id}`);
+      if (url && !/^https:\/\//.test(url)) throw new Error(`${p.name}: the link must start with https://`);
+      return { ...p, url, blurb: s(f, `blurb_${p.id}`) || p.blurb, on: f.get(`on_${p.id}`) === "on" && !!url };
+    });
+    await setSetting("finance", { providers }, me.name);
+  });
+}
+/** Daily reconcile on demand. */
+export async function stripeReconcile() {
+  await requireStaff();
+  await run("/ops/payments", async () => { const { reconcileStripe } = await import("@/lib/stripe"); await reconcileStripe(); });
 }

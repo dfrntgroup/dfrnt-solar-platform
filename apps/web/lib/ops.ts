@@ -55,7 +55,7 @@ export async function poStep(poId: string, to: "approved" | "sent" | "delivered"
   }
 }
 
-/* O14: refunds recorded against the job; bank refunds are sent by ops, card refunds by Stripe at go-live */
+/* O14: refunds recorded against the job; bank refunds are sent by ops, card and PayTo refunds go through Stripe */
 export async function recordRefund(quoteId: string, amount: number, note: string, actor: Actor) {
   const q = await getQuoteById(quoteId);
   if (!q) throw new Error("Job not found");
@@ -65,12 +65,18 @@ export async function recordRefund(quoteId: string, amount: number, note: string
   const maxRefund = round2((paid!.paid as number) - (paid!.refunded as number));
   if (!(amount > 0) || amount > maxRefund + 0.001) throw new Error(`Refund must be between $0.01 and ${maxRefund.toFixed(2)}`);
   const rule = q.signed_at ? refundRule(q.signed_at.toISOString().slice(0, 10), todayAEST(), "cancelled") : "full_cooling_off";
-  await write({ actor, action: "refunds.record", rationale: note }, { quoteId, amount }, async (tx) => {
+  const w = await write({ actor, action: "refunds.record", rationale: note }, { quoteId, amount }, async (tx) => {
     const [r] = await tx`insert into payments (quote_id, kind, method, amount, reference, status, refund_rule, note)
       values (${quoteId}, 'refund', ${q.payment_method ?? "bank"}, ${amount}, ${`RF${q.token.slice(0, 6).toUpperCase()}`}, 'pending', ${rule}, ${note}) returning id`;
     await tx`update stc_receivables set status = 'failed' where quote_id = ${quoteId}`;
-    return { entity: "quote", entityId: quoteId, event: "refund.recorded", result: { refund_id: r!.id, amount } };
+    return { entity: "quote", entityId: quoteId, event: "refund.recorded", result: { refund_id: r!.id as string, amount } };
   });
+  // S3: card and PayTo refunds go back through Stripe to the original method; the webhook marks them refunded.
+  const { isOnline, stripeReady, refundOnline } = await import("./stripe");
+  if (isOnline(q.payment_method) && stripeReady()) {
+    try { await refundOnline({ refundRowId: w.result.refund_id, quoteId, amount }); }
+    catch (e) { await db()`update payments set status = 'failed', note = ${`${note} · Stripe: ${(e as Error).message}`.slice(0, 500)} where id = ${w.result.refund_id}`; throw e; }
+  }
 }
 export async function markRefundSent(paymentId: string, actor: Actor) {
   await write({ actor, action: "refunds.sent" }, { paymentId }, async (tx) => {

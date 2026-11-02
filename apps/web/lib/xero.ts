@@ -6,7 +6,7 @@ import { getSetting, setSetting, type XeroSettings } from "./settings";
 import { seal, signState, unseal } from "./secret";
 import { siteUrl } from "./messages";
 
-export const XERO_SCOPES = "openid profile email offline_access accounting.invoices accounting.payments accounting.contacts accounting.settings.read";
+export const XERO_SCOPES = "openid profile email offline_access accounting.invoices accounting.payments accounting.banktransactions accounting.contacts accounting.settings.read";
 export const xeroReady = () => !!(process.env.XERO_CLIENT_ID && process.env.XERO_CLIENT_SECRET);
 const redirectUri = () => `${siteUrl()}/api/v1/xero/callback`;
 const basic = () => `Basic ${Buffer.from(`${process.env.XERO_CLIENT_ID}:${process.env.XERO_CLIENT_SECRET}`).toString("base64")}`;
@@ -70,6 +70,7 @@ async function once(kind: string, ref: string, fn: () => Promise<string>) {
 const date = (d: unknown) => new Date(d as string).toISOString().slice(0, 10);
 
 /** Push everything not yet in Xero. Safe to run repeatedly. */
+const online = (m: unknown) => m === "card" || m === "payto";
 export async function syncXero() {
   if (!xeroReady()) return { skipped: "not set up" };
   const x = await getSetting("xero");
@@ -78,7 +79,7 @@ export async function syncXero() {
   if (!c.sales || !c.stc || !c.bank || !c.installer) return { skipped: "needs account codes" };
   const out = { invoices: 0, bills: 0, stc: 0, failed: 0 };
   // Customer tax invoices (issued when payment is received) and their payments.
-  const paid = await db()`select id, token, invoice_number, customer_name, customer_email, paid_at, snapshot, result, payment_reference from quotes
+  const paid = await db()`select id, token, invoice_number, customer_name, customer_email, paid_at, snapshot, result, payment_reference, payment_method from quotes
     where invoice_number is not null and paid_at is not null and not exists (select 1 from xero_sync s where s.kind = 'invoice' and s.ref_id = quotes.id::text and s.status = 'done') limit 25`;
   for (const q of paid) {
     const st = ((q.snapshot ?? q.result) as { stack: { price_inc_gst: number; less_stcs: number; amount_payable: number } }).stack;
@@ -97,10 +98,24 @@ export async function syncXero() {
     if (r === "done") {
       out.invoices++;
       await once("payment", q.id as string, async () => {
-        const p = await api<{ Payments: { PaymentID: string }[] }>("PUT", "/Payments", { Payments: [{ Invoice: { InvoiceID: invoiceId }, Account: { Code: c.bank }, Date: date(q.paid_at), Amount: st.amount_payable, Reference: q.payment_reference }] });
+        const p = await api<{ Payments: { PaymentID: string }[] }>("PUT", "/Payments", { Payments: [{ Invoice: { InvoiceID: invoiceId }, Account: { Code: online(q.payment_method) ? (c.stripe || c.bank) : c.bank }, Date: date(q.paid_at), Amount: st.amount_payable, Reference: q.payment_reference }] });
         return p.Payments[0]!.PaymentID;
       });
     } else if (r === "failed") out.failed++;
+  }
+  // S5: Stripe fees, one spend line per online payment, out of the Stripe clearing account.
+  if (c.stripe && c.stripe_fees) {
+    const fees = await db()`select p.id, p.fee::float8 fee, p.received_at, p.reference, p.method from payments p where p.fee > 0 and p.status = 'received'
+      and not exists (select 1 from xero_sync s where s.kind = 'stripe_fee' and s.ref_id = p.id::text and s.status = 'done') limit 25`;
+    for (const f0 of fees) {
+      const r = await once("stripe_fee", f0.id as string, async () => {
+        const t = await api<{ BankTransactions: { BankTransactionID: string }[] }>("PUT", "/BankTransactions", { BankTransactions: [{
+          Type: "SPEND", Contact: { Name: "Stripe" }, BankAccount: { Code: c.stripe }, Date: date(f0.received_at ?? new Date()), Reference: `Stripe fee ${f0.reference ?? ""}`.trim(), LineAmountTypes: "Inclusive",
+          LineItems: [{ Description: `Stripe ${f0.method} fee`, Quantity: 1, UnitAmount: f0.fee, AccountCode: c.stripe_fees, TaxType: "INPUT" }] }] });
+        return t.BankTransactions[0]!.BankTransactionID;
+      });
+      if (r === "failed") out.failed++;
+    }
   }
   // Installer pay runs: one bill per paid ledger line.
   const ledger = await db()`select l.id, l.description, l.amount_ex::float8 amount, l.paid_at, i.business_name, i.email, q.id qid from pay_ledger l join installers i on i.id = l.installer_id left join quotes q on q.id = l.quote_id

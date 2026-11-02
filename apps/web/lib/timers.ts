@@ -26,12 +26,13 @@ export async function runDaily() {
   for (const q of expired) await setStatus(q.id as string, "saved", "expired", "Saved quote older than 90 days");
   out.expired = expired.length;
   // Bank transfer: reminders on day 3 and day 6, released on day 7.
-  const pending = await db()`select id, token, customer_email, customer_name, payment_reference, amount_payable::float8 amount, reminders,
+  const pending = await db()`select id, token, customer_email, customer_name, payment_reference, amount_payable::float8 amount, reminders, payment_method,
     extract(day from now() - updated_at)::int age from quotes where status = 'payment_pending'`;
   let reminded = 0, released = 0;
   for (const q of pending) {
     const r = (q.reminders ?? {}) as Record<string, string>;
     if (q.age >= 7) { await setStatus(q.id as string, "payment_pending", "signed", "Bank transfer not received in 7 days; released"); released++; continue; }
+    if (q.payment_method && q.payment_method !== "bank") continue;   // PayTo/card/finance don't get bank-transfer reminders
     for (const day of [3, 6]) if (q.age >= day && !r[`bank_${day}`]) {
       await queueMessage("PAY", q.token as string, q.customer_email as string, { name: q.customer_name as string, amount: q.amount, reference: q.payment_reference as string });
       await db()`update quotes set reminders = reminders || ${db().json({ [`bank_${day}`]: today })} where id = ${q.id}`;
@@ -99,6 +100,7 @@ export async function runDaily() {
   }
   out.service_plan = planMsgs;
   // B1: Xero.
+  try { const { reconcileStripe } = await import("./stripe"); out.stripe = (await reconcileStripe()) as never; } catch { /* shown in Ops → Payments */ }
   try { const { syncXero } = await import("./xero"); out.xero = (await syncXero()) as never; } catch { /* shown in Ops → Xero */ }
   // G4: waitlist alerts where an installer now covers the postcode.
   try { const { notifyWaitlist } = await import("./campaigns"); out.waitlist_alerts = await notifyWaitlist(); } catch { /* reported in messages */ }

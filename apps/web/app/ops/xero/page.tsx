@@ -36,6 +36,7 @@ export default async function Xero({ searchParams }: { searchParams: Promise<{ e
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
           {pick("sales", "System sales", x.codes.sales)}{pick("stc", "STC assignment (rebate line on invoices)", x.codes.stc)}
           {pick("stc_sale", "STC sales income (blank = same as above)", x.codes.stc_sale)}{pick("installer", "Installer costs", x.codes.installer)}{pick("bank", "Bank account payments land in", x.codes.bank)}
+          {pick("stripe", "Stripe clearing account (a bank account in Xero; blank = same as above)", x.codes.stripe)}{pick("stripe_fees", "Stripe fees expense", x.codes.stripe_fees)}
           {tax("sales_tax", "Sales tax type", x.codes.sales_tax, "OUTPUT")}{tax("stc_tax", "STC line tax type", x.codes.stc_tax, "BASEXCLUDED")}
           {tax("stc_sale_tax", "STC sale tax type", x.codes.stc_sale_tax, "OUTPUT")}{tax("installer_tax", "Installer bill tax type", x.codes.installer_tax, "INPUT")}
         </div>

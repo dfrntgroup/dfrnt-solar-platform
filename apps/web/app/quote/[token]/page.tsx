@@ -20,12 +20,15 @@ import { ServicePlan } from "@/components/ServicePlan";
 import { Checkout, stepFor } from "@/components/Checkout";
 import { CallBack } from "@/components/CallBack";
 import { Trust } from "@/components/Trust";
+import { StripePay } from "@/components/StripePay";
+import { stripeReady, publishableKey, clientSecretFor, isOnline } from "@/lib/stripe";
+import { financeLink } from "@/lib/jobs";
 import { getSetting } from "@/lib/settings";
 import { installersFor } from "@/lib/installers";
 import { siteUrl } from "@/lib/messages";
 import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate } from "@/lib/site";
-import { joinPlan, addAddonAction, removeAddonAction, reportProblem, passRecord, saveHeard, takeEarlierDay, changeMyDay, saveAccess, customerMessage, acceptRevision, keepOriginal, addCode, approveVariation, declineVariation, cancelOrder, payByBank, pickDate, signAgreement, submitHome } from "./actions";
+import { joinPlan, addAddonAction, removeAddonAction, reportProblem, passRecord, saveHeard, takeEarlierDay, changeMyDay, saveAccess, customerMessage, acceptRevision, keepOriginal, addCode, approveVariation, declineVariation, cancelOrder, payByBank, payOnline, changeHowIPay, payFinance, payVariation, pickDate, signAgreement, submitHome } from "./actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Your solar record", robots: { index: false } };
@@ -81,6 +84,15 @@ export default async function Record({ params, searchParams }: { params: Promise
   const shown = q.snapshot ?? q.result;
   const state = q.status;
   const step = STEPS.findIndex(([, ss]) => ss.includes(state));
+  const online = stripeReady() && !!publishableKey();
+  const financeOpts = (await getSetting("finance")).providers.filter((x) => x.on && x.url);
+  const sysPay = ["payment_pending", "payment_review"].includes(state)
+    ? (await db()`select id, method, status from payments where quote_id = ${q.id} and kind = 'system' and status in ('pending','review') order by created_at desc limit 1`)[0] : undefined;
+  const paySecret = sysPay && isOnline(sysPay.method as string) && sysPay.status === "pending" && !sp.paid ? await clientSecretFor(sysPay.id as string).catch(() => null) : null;
+  const varPays = await db()`select id, variation_id, amount::float8 amount from payments where quote_id = ${q.id} and kind = 'variation' and status = 'pending'`;
+  const varSecret = sp.payv && /^[0-9a-f-]{36}$/.test(sp.payv) ? await clientSecretFor(sp.payv).catch(() => null) : null;
+  const payReturn = `${siteUrl()}/quote/${token}?paid=1`;
+  const finProv = q.payment_method?.startsWith("finance:") ? (await getSetting("finance")).providers.find((x) => `finance:${x.id}` === q.payment_method) : undefined;
   const picking = state === "awaiting_date" || (["booked", "gear_ordered", "delivered"].includes(state) && q.rebook);
   const choice = picking ? await daysFor(q) : null;
   const [earlier] = ["booked", "gear_ordered"].includes(state) && !q.rebook && sp.offer && /^[0-9a-f-]{36}$/.test(sp.offer)
@@ -176,21 +188,46 @@ export default async function Record({ params, searchParams }: { params: Promise
 
         {state === "signed" && (<>
           <h2 style={{ marginTop: 20 }}>How would you like to pay?</h2>
-          <form action={payByBank}><input type="hidden" name="token" value={token} />
-            <button className="btn block" type="submit">Bank transfer — save about 1%</button></form>
-          <p><button className="btn ghost block" disabled>Card — available at launch</button></p>
+          <p className="muted small">One payment for everything. Paying from your bank (PayTo or transfer) saves about 1%.</p>
+          {online && <form action={payOnline}><input type="hidden" name="token" value={token} /><input type="hidden" name="method" value="payto" />
+            <button className="btn block" type="submit">PayTo: approve in your banking app (save about 1%)</button></form>}
+          {online && <form action={payOnline} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} /><input type="hidden" name="method" value="card" />
+            <button className="btn ghost block" type="submit">Card, Apple Pay or Google Pay</button></form>}
+          <form action={payByBank} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} />
+            <button className={online ? "btn ghost block" : "btn block"} type="submit">Bank transfer (save about 1%)</button></form>
+          {!online && <p><button className="btn ghost block" disabled>Card — available at launch</button></p>}
+          {financeOpts.map((fp) => <form key={fp.id} action={payFinance} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} /><input type="hidden" name="provider" value={fp.id} />
+            <button className="btn ghost block" type="submit">Finance with {fp.name}{fp.blurb ? `: ${fp.blurb.toLowerCase()}` : ""}</button></form>)}
           <Breakdown q={shown} />
         </>)}
 
         {(state === "payment_pending" || state === "payment_review") && (<>
-          <h2 style={{ marginTop: 20 }}>{state === "payment_review" ? "We're checking your payment" : "Pay by bank transfer"}</h2>
+          {isOnline(q.payment_method) ? (state === "payment_review" || sp.paid ? (<>
+            <h2 style={{ marginTop: 20 }}>{state === "payment_review" ? "Your payment is on its way" : "Confirming your payment"}</h2>
+            <div className="ok">{state === "payment_review" ? "Your bank is processing it. We'll email you as soon as it lands, then you pick your install day." : "Thanks. We're confirming it with your bank; this page updates by itself."}</div>
+            {state === "payment_pending" && <meta httpEquiv="refresh" content="5" />}
+          </>) : (<>
+            <h2 id="pay" style={{ marginTop: 20 }}>Pay {aud2(shown.stack.amount_payable)} by {q.payment_method === "payto" ? "PayTo" : "card"}</h2>
+            {paySecret && publishableKey()
+              ? <StripePay publishableKey={publishableKey()} clientSecret={paySecret} returnUrl={payReturn} label={`Pay ${aud2(shown.stack.amount_payable)}`} />
+              : <div className="note">We couldn&apos;t load the payment form. Try again in a minute, or choose another way to pay.</div>}
+            <form action={changeHowIPay} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} /><button className="btn ghost sm" type="submit">Change how I pay</button></form>
+          </>)) : finProv ? (<>
+            <h2 style={{ marginTop: 20 }}>Finish your application with {finProv.name}</h2>
+            <p className="small">Apply for {aud2(shown.stack.amount_payable)} using reference <strong>{q.payment_reference}</strong>. Once {finProv.name} approves and pays us, we&apos;ll email you to pick your install day.</p>
+            <p><a className="btn block" href={financeLink(finProv.url, q.payment_reference ?? "", shown.stack.amount_payable)} target="_blank" rel="noreferrer">Apply with {finProv.name}</a></p>
+            {state === "payment_pending" && <form action={changeHowIPay}><input type="hidden" name="token" value={token} /><button className="btn ghost sm" type="submit">Change how I pay</button></form>}
+          </>) : (<>
+            <h2 style={{ marginTop: 20 }}>{state === "payment_review" ? "We're checking your payment" : "Pay by bank transfer"}</h2>
+            <table className="lines"><tbody>
+              <tr><td>Amount</td><td className="r"><strong>{aud2(shown.stack.amount_payable)}</strong></td></tr>
+              <tr><td>Reference</td><td className="r"><strong>{q.payment_reference}</strong></td></tr>
+              <tr><td>Account name</td><td className="r">DFRNT Solar (bank details at launch)</td></tr>
+            </tbody></table>
+            <p className="muted small">Once your payment lands we&apos;ll email you to pick your install day.</p>
+            {state === "payment_pending" && <form action={changeHowIPay}><input type="hidden" name="token" value={token} /><button className="btn ghost sm" type="submit">Change how I pay</button></form>}
+          </>)}
           <p className="small"><a href={`/quote/${token}/doc/agreement`} target="_blank">Your signed agreement (PDF)</a></p>
-          <table className="lines"><tbody>
-            <tr><td>Amount</td><td className="r"><strong>{aud2(shown.stack.amount_payable)}</strong></td></tr>
-            <tr><td>Reference</td><td className="r"><strong>{q.payment_reference}</strong></td></tr>
-            <tr><td>Account name</td><td className="r">DFRNT Solar (bank details at launch)</td></tr>
-          </tbody></table>
-          <p className="muted small">Once your payment lands we&apos;ll email you to pick your install date.</p>
           <Breakdown q={shown} />
         </>)}
 
@@ -233,7 +270,14 @@ export default async function Record({ params, searchParams }: { params: Promise
                   <input type="hidden" name="token" value={token} /><input type="hidden" name="variation" value={v.id as string} />
                   <button className="btn sm" type="submit">Approve and pay</button>
                   <button className="btn ghost sm" formAction={declineVariation}>Decline</button></form>}
-              </div>))}</>}
+                {online && varPays.filter((vp) => vp.variation_id === v.id).map((vp) => (
+                  <form key={vp.id as string} action={payVariation} style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
+                    <input type="hidden" name="token" value={token} /><input type="hidden" name="payment" value={vp.id as string} />
+                    <span className="small">To pay: <strong>{aud2(vp.amount as number)}</strong></span>
+                    <button className="btn sm" name="method" value="payto" type="submit">Pay by PayTo</button>
+                    <button className="btn ghost sm" name="method" value="card" type="submit">Pay by card</button></form>))}
+              </div>))}
+            {varSecret && publishableKey() && <div id="pay"><StripePay publishableKey={publishableKey()} clientSecret={varSecret} returnUrl={payReturn} label="Pay for this change" /></div>}</>}
           {["installed", "lodged", "settled", "complete"].includes(state) && myCode && <div className="ok" style={{ marginTop: 16 }}>Your referral code: <strong>{myCode}</strong>. Friends get $250 off, and we pay you $250 after their install.</div>}
           {threadOpen && <JobThread quoteId={q.id} action={customerMessage} hidden={<input type="hidden" name="token" value={token} />} me="customer" />}
           <p className="small"><Link href={`/contact?quote=${token}`}>Questions about your system?</Link></p>

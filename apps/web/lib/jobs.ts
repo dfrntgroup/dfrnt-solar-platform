@@ -164,6 +164,74 @@ export async function chooseBank(q: QuoteRow) {
   });
 }
 
+/* S1: PayTo or card through Stripe. Amount comes from the signed snapshot; PayTo gets the bank price. */
+export async function startOnlinePayment(q: QuoteRow, method: "payto" | "card") {
+  if (q.status !== "signed") throw new Error("Sign first");
+  const { stripeReady, createIntent } = await import("./stripe");
+  if (!stripeReady()) throw new Error("Online payment isn't switched on yet. Please pay by bank transfer.");
+  const p = await reprice(q, { bank: method === "payto", extraLabour: extraFromSnapshot(q) });
+  const reference = `DS${q.token.slice(0, 6).toUpperCase()}`;
+  const paymentId = await write({ actor: CUSTOMER, action: "payments.create" }, { token: q.token, method }, async (tx) => {
+    const [pay] = await tx`insert into payments (quote_id, kind, method, amount, reference) values (${q.id}, 'system', ${method}, ${p.stack.amount_payable}, ${reference}) returning id`;
+    const [row] = await tx`update quotes set status = 'payment_pending', payment_method = ${method}, payment_reference = ${reference}, snapshot = ${tx.json(p as never)},
+      amount_payable = ${p.stack.amount_payable}, updated_at = now() where id = ${q.id} and status = 'signed' returning id`;
+    if (!row) throw new Error("Quote changed while you were working; reload and try again");
+    return { entity: "quote", entityId: q.id, event: "quote.payment_pending", result: { payment_id: pay!.id as string, amount: p.stack.amount_payable, method } };
+  }).then((r) => r.result.payment_id);
+  try {
+    await createIntent({ paymentId, amount: p.stack.amount_payable, method, quoteId: q.id, token: q.token, email: q.customer_email, kind: "system",
+      description: `DFRNT Solar ${reference} — ${q.title ?? "solar and battery system"}` });
+  } catch (e) {
+    // Couldn't reach Stripe: put the customer back at "how would you like to pay" rather than a dead form.
+    console.error("stripe intent", (e as Error).message);
+    await db()`update payments set status = 'failed', provider_status = 'create_failed' where id = ${paymentId}`;
+    await db()`update quotes set status = 'signed', payment_method = null, updated_at = now() where id = ${q.id} and status = 'payment_pending'`;
+    throw new Error(`We couldn't start the ${method === "payto" ? "PayTo" : "card"} payment just now. Please try again, or pay by bank transfer.`);
+  }
+}
+
+/* Change how I pay: back to "signed" so the customer can choose again (cancels an unpaid online intent). */
+export async function changePayment(q: QuoteRow) {
+  if (q.status !== "payment_pending") throw new Error("Nothing to change");
+  const { releaseSystemPayment } = await import("./stripe");
+  await releaseSystemPayment(q.id);
+  await db()`update payments set status = 'failed' where quote_id = ${q.id} and kind = 'system' and status = 'pending'`;
+  await move(q, "signed", CUSTOMER, "payments.change", { payment_method: null });
+}
+
+/* S4: finance link-out. The lender pays us; Ops marks it paid when they confirm. */
+export async function chooseFinance(q: QuoteRow, providerId: string) {
+  if (q.status !== "signed") throw new Error("Sign first");
+  const { getSetting } = await import("./settings");
+  const fp = (await getSetting("finance")).providers.find((x) => x.id === providerId && x.on && x.url);
+  if (!fp) throw new Error("That finance option isn't available");
+  const p = await reprice(q, { extraLabour: extraFromSnapshot(q) });
+  const reference = `DS${q.token.slice(0, 6).toUpperCase()}`;
+  await write({ actor: CUSTOMER, action: "payments.create" }, { token: q.token, method: `finance:${fp.id}` }, async (tx) => {
+    await tx`insert into payments (quote_id, kind, method, amount, reference) values (${q.id}, 'system', ${`finance:${fp.id}`}, ${p.stack.amount_payable}, ${reference})`;
+    await tx`update quotes set status = 'payment_pending', payment_method = ${`finance:${fp.id}`}, payment_reference = ${reference}, snapshot = ${tx.json(p as never)},
+      amount_payable = ${p.stack.amount_payable}, updated_at = now() where id = ${q.id} and status = 'signed'`;
+    return { entity: "quote", entityId: q.id, event: "quote.payment_pending", result: { method: fp.id } };
+  });
+}
+export const financeLink = (url: string, ref: string, amount: number) =>
+  url.replaceAll("{ref}", encodeURIComponent(ref)).replaceAll("{amount}", amount.toFixed(2));
+
+/* S3: pay an approved variation or add-on online. */
+export async function payVariationOnline(q: QuoteRow, paymentId: string, method: "payto" | "card") {
+  const [v] = await db()`select id, amount::float8 amount, status, provider_ref, reference from payments where id = ${paymentId} and quote_id = ${q.id} and kind = 'variation'`;
+  if (!v || v.status !== "pending") throw new Error("Nothing to pay");
+  const { stripeReady, createIntent, stripe } = await import("./stripe");
+  if (!stripeReady()) throw new Error("Online payment isn't switched on yet. Please pay by bank transfer.");
+  if (v.provider_ref) await stripe().paymentIntents.cancel(v.provider_ref as string).catch(() => null);
+  const [fresh] = await db()`insert into payments (quote_id, variation_id, kind, method, amount, reference)
+    select quote_id, variation_id, kind, ${method}, amount, reference from payments where id = ${paymentId} returning id`;
+  await db()`update payments set status = 'failed', provider_status = 'replaced' where id = ${paymentId}`;
+  await createIntent({ paymentId: fresh!.id as string, amount: v.amount as number, method, quoteId: q.id, token: q.token, email: q.customer_email, kind: "variation",
+    description: `DFRNT Solar ${v.reference} — change to your install` });
+  return fresh!.id as string;
+}
+
 export const extraLabourOf = (q: QuoteRow) => extraFromSnapshot(q);
 /** Installation lines the installer added at pricing (anything beyond the configuration's own triggers). */
 function extraFromSnapshot(q: QuoteRow): LabourRequest[] {

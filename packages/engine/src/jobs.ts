@@ -17,7 +17,7 @@ export const TRANSITIONS: Record<JobState, JobState[]> = {
   priced: ["signed", "declined", "lapsed", "pricing_installer"],
   signed: ["payment_pending", "cancelled"],
   payment_pending: ["awaiting_date", "payment_review", "signed", "cancelled"],
-  payment_review: ["awaiting_date", "cancelled"],
+  payment_review: ["awaiting_date", "payment_pending", "cancelled"],
   awaiting_date: ["booked", "cancelled"],
   booked: ["gear_ordered", "awaiting_date", "cancelled"],
   gear_ordered: ["delivered", "cancelled"],

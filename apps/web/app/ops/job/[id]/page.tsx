@@ -9,6 +9,7 @@ import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2 } from "@/lib/site";
+import { dashboardUrl as stripeLink } from "@/lib/stripe";
 import { opsAdvance, opsCancel, opsMarkPaid, opsPrice, opsVariation, addStaffNote, techReview, draftPO, poAction, refund, refundSent, photoPublic, formbaySend, formbayLink, formbaySyncNow, opsDesignFeePaid, opsRevise, opsReleaseDay, opsMessage, opsAddDocument, opsPullFormbay, opsWarranty } from "../../actions";
 import { buildFormbayJob } from "@/lib/formbay-job";
 import { formbayConfigured } from "@/lib/formbay";
@@ -33,13 +34,13 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
   const [consent] = await db()`select showcase_consent from quotes where id = ${id}`;
   const audit = await db()`select at, actor_type, actor_id, action, rationale from audit_log where entity = 'quote' and entity_id = ${id} order by id desc limit 50`;
   const msgs = await db()`select template, status, subject, created_at from messages where quote_id = ${id} order by created_at desc`;
-  const pays = await db()`select id, kind, method, amount::float8 amount, reference, status from payments where quote_id = ${id}`;
+  const pays = await db()`select id, kind, method, amount::float8 amount, reference, status, provider_ref, fee::float8 fee from payments where quote_id = ${id}`;
   const [fb] = await db()`select formbay_formid, formbay_bstc_id, formbay_status, formbay_complete, formbay_synced_at, formbay_sent_payload is not null sent from quotes where id = ${id}`;
   const [inst] = q.installer_id ? await db()`select formbay_installer_id, business_name from installers where id = ${q.installer_id}` : [];
   const fbJob = buildFormbayJob(q, (inst as never) ?? null);
   const fbEligible = ["booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed"].includes(q.status);
   const pos = await db()`select id, number, supplier, total_ex::float8 total, status from purchase_orders where quote_id = ${id} and status <> 'cancelled' order by number`;
-  const received = pays.filter((x) => x.kind !== "refund" && x.status === "received").reduce((a, x) => a + (x.amount as number), 0) - pays.filter((x) => x.kind === "refund").reduce((a, x) => a + (x.amount as number), 0);
+  const received = pays.filter((x) => x.kind !== "refund" && x.status === "received").reduce((a, x) => a + (x.amount as number), 0) - pays.filter((x) => x.kind === "refund" && x.status !== "failed").reduce((a, x) => a + (x.amount as number), 0);
   const vars = await db()`select description, sell_inc::float8 sell_inc, status from variations where quote_id = ${id}`;
   const ledger = await db()`select description, amount_ex::float8 amount_ex, status from pay_ledger where quote_id = ${id}`;
   const next = TRANSITIONS[q.status].filter((t) => t !== "cancelled");
@@ -163,7 +164,9 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <input type="hidden" name="id" value={id} /><strong>Refund</strong><span className="small">Paid and not yet refunded: {aud2(received)}</span>
             <input name="amount" defaultValue={received.toFixed(2)} style={input} /><input name="note" placeholder="Reason / deductions" style={input} />
             <button className="btn" type="submit">Record refund</button></form>}
-          {pays.filter((x) => x.kind === "refund" && x.status === "pending").map((x) => <div key={x.id as string} className="card" style={{ marginBottom: 12 }}><strong>Refund {aud2(x.amount as number)} to send</strong><Step action={refundSent} fields={{ id, payment: x.id as string }} label="Bank refund sent" /></div>)}
+          {pays.filter((x) => x.kind === "refund" && x.status === "pending").map((x) => String(x.provider_ref ?? "").startsWith("re_")
+            ? <div key={x.id as string} className="card" style={{ marginBottom: 12 }}><strong>Refund {aud2(x.amount as number)} on its way through Stripe</strong><span className="small muted">Back to the customer&apos;s {x.method === "payto" ? "bank account" : "card"}; this marks itself done.</span></div>
+            : <div key={x.id as string} className="card" style={{ marginBottom: 12 }}><strong>Refund {aud2(x.amount as number)} to send</strong><Step action={refundSent} fields={{ id, payment: x.id as string }} label="Bank refund sent" /></div>)}
           {next.length > 0 && <form action={opsAdvance} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Change stage</strong>
             <select name="to" style={input}>{next.map((t) => <option key={t} value={t}>{t}</option>)}</select>
@@ -194,7 +197,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
                   <span className="small">{b}</span><input name="ref" placeholder="Registration ref" style={{ ...input, width: 150 }} />
                   <label className="small"><input type="checkbox" name="tell" /> email customer</label><button className="btn ghost sm">Mark registered</button></form>)}
           </div>}
-          <div className="card" style={{ marginBottom: 12 }}><strong>Payments</strong>{pays.length ? pays.map((x, i) => <span key={i} className="small">{x.kind as string} · {x.method as string} · {aud2(x.amount as number)} · {x.reference as string} · {x.status as string}</span>) : <span className="small muted">None</span>}</div>
+          <div className="card" style={{ marginBottom: 12 }}><strong>Payments</strong>{pays.length ? pays.map((x, i) => <span key={i} className="small">{x.kind as string} · {x.method as string} · {aud2(x.amount as number)} · {x.reference as string} · {x.status as string}{x.fee != null ? ` · fee ${aud2(x.fee as number)}` : ""}{x.provider_ref ? <> · <a href={stripeLink(x.provider_ref as string)} target="_blank" rel="noreferrer">Stripe</a></> : null}</span>) : <span className="small muted">None</span>}</div>
           <div className="card" style={{ marginBottom: 12 }}><strong>Variations</strong>{vars.length ? vars.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.sell_inc as number)} · {x.status as string}</span>) : <span className="small muted">None</span>}</div>
           <div className="card" style={{ marginBottom: 12 }}><strong>Installer pay</strong>{ledger.length ? ledger.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.amount_ex as number)} · {x.status as string}</span>) : <span className="small muted">None yet</span>}</div>
           <div className="card" style={{ marginBottom: 12 }}><strong>Messages</strong>{msgs.length ? msgs.map((m, i) => <span key={i} className="small">{m.template as string} · {m.subject as string} · {m.status as string}</span>) : <span className="small muted">None</span>}</div>
