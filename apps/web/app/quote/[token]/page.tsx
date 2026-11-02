@@ -21,7 +21,7 @@ import { Checkout, stepFor } from "@/components/Checkout";
 import { CallBack } from "@/components/CallBack";
 import { Trust } from "@/components/Trust";
 import { StripePay } from "@/components/StripePay";
-import { stripeReady, publishableKey, clientSecretFor, isOnline } from "@/lib/stripe";
+import { stripeReady, publishableKey, clientSecretFor, isOnline, PAYTO_MAX } from "@/lib/stripe";
 import { financeLink } from "@/lib/jobs";
 import { getSetting } from "@/lib/settings";
 import { installersFor } from "@/lib/installers";
@@ -188,8 +188,8 @@ export default async function Record({ params, searchParams }: { params: Promise
 
         {state === "signed" && (<>
           <h2 style={{ marginTop: 20 }}>How would you like to pay?</h2>
-          <p className="muted small">One payment for everything. Paying from your bank (PayTo or transfer) saves about 1%.</p>
-          {online && <form action={payOnline}><input type="hidden" name="token" value={token} /><input type="hidden" name="method" value="payto" />
+          <p className="muted small">One payment for everything. Paying from your bank{shown.stack.amount_payable <= PAYTO_MAX ? " (PayTo or transfer)" : " by transfer"} saves about 1%.</p>
+          {online && shown.stack.amount_payable <= PAYTO_MAX && <form action={payOnline}><input type="hidden" name="token" value={token} /><input type="hidden" name="method" value="payto" />
             <button className="btn block" type="submit">PayTo: approve in your banking app (save about 1%)</button></form>}
           {online && <form action={payOnline} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} /><input type="hidden" name="method" value="card" />
             <button className="btn ghost block" type="submit">Card, Apple Pay or Google Pay</button></form>}
@@ -274,7 +274,7 @@ export default async function Record({ params, searchParams }: { params: Promise
                   <form key={vp.id as string} action={payVariation} style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 }}>
                     <input type="hidden" name="token" value={token} /><input type="hidden" name="payment" value={vp.id as string} />
                     <span className="small">To pay: <strong>{aud2(vp.amount as number)}</strong></span>
-                    <button className="btn sm" name="method" value="payto" type="submit">Pay by PayTo</button>
+                    {(vp.amount as number) <= PAYTO_MAX && <button className="btn sm" name="method" value="payto" type="submit">Pay by PayTo</button>}
                     <button className="btn ghost sm" name="method" value="card" type="submit">Pay by card</button></form>))}
               </div>))}
             {varSecret && publishableKey() && <div id="pay"><StripePay publishableKey={publishableKey()} clientSecret={varSecret} returnUrl={payReturn} label="Pay for this change" /></div>}</>}

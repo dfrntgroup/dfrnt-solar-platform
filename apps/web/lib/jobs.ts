@@ -170,6 +170,8 @@ export async function startOnlinePayment(q: QuoteRow, method: "payto" | "card") 
   const { stripeReady, createIntent } = await import("./stripe");
   if (!stripeReady()) throw new Error("Online payment isn't switched on yet. Please pay by bank transfer.");
   const p = await reprice(q, { bank: method === "payto", extraLabour: extraFromSnapshot(q) });
+  const { PAYTO_MAX } = await import("./stripe");
+  if (method === "payto" && p.stack.amount_payable > PAYTO_MAX) throw new Error("PayTo is limited to $10,000 per payment. Please pay by card or bank transfer.");
   const reference = `DS${q.token.slice(0, 6).toUpperCase()}`;
   const paymentId = await write({ actor: CUSTOMER, action: "payments.create" }, { token: q.token, method }, async (tx) => {
     const [pay] = await tx`insert into payments (quote_id, kind, method, amount, reference) values (${q.id}, 'system', ${method}, ${p.stack.amount_payable}, ${reference}) returning id`;
@@ -221,6 +223,7 @@ export const financeLink = (url: string, ref: string, amount: number) =>
 export async function payVariationOnline(q: QuoteRow, paymentId: string, method: "payto" | "card") {
   const [v] = await db()`select id, amount::float8 amount, status, provider_ref, reference from payments where id = ${paymentId} and quote_id = ${q.id} and kind = 'variation'`;
   if (!v || v.status !== "pending") throw new Error("Nothing to pay");
+  if (method === "payto" && (v.amount as number) > 10_000) throw new Error("PayTo is limited to $10,000 per payment. Please pay by card.");
   const { stripeReady, createIntent, stripe } = await import("./stripe");
   if (!stripeReady()) throw new Error("Online payment isn't switched on yet. Please pay by bank transfer.");
   if (v.provider_ref) await stripe().paymentIntents.cancel(v.provider_ref as string).catch(() => null);

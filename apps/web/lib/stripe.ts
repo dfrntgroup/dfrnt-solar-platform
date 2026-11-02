@@ -9,6 +9,8 @@ import { seal, unseal } from "./secret";
 
 export type PayMethod = "payto" | "card";
 export const PAY_METHODS: PayMethod[] = ["payto", "card"];
+/** Stripe caps a single PayTo payment at A$10,000 (Stripe dashboard, Nov 2026). Above that: card, bank or finance. */
+export const PAYTO_MAX = 10_000;
 export const isOnline = (m: string | null | undefined): m is PayMethod => m === "payto" || m === "card";
 export const METHOD_LABEL: Record<string, string> = { payto: "PayTo", card: "Card", bank: "Bank transfer" };
 export const WEBHOOK_EVENTS = [
