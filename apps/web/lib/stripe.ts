@@ -214,6 +214,9 @@ export async function reconcileStripe() {
       await applyIntent(await stripe().paymentIntents.retrieve(p.provider_ref as string)); out.checked++;
     } catch { /* next run */ }
   }
+  // Fees aren't always final when the payment lands; fill them in for the past week.
+  const nofee = await db()`select id, provider_ref from payments where provider_ref like 'pi_%' and status = 'received' and coalesce(fee, 0) = 0 and created_at > now() - interval '7 days' limit 50`;
+  for (const p of nofee) { try { const f = await feeOf(await stripe().paymentIntents.retrieve(p.provider_ref as string)); if (f) await db()`update payments set fee = ${f} where id = ${p.id}`; } catch { /* next run */ } }
   const refunds = await db()`select provider_ref from payments where kind = 'refund' and status = 'pending' and provider_ref like 're_%' limit 50`;
   for (const r of refunds) { try { await applyRefund(await stripe().refunds.retrieve(r.provider_ref as string)); out.refunds++; } catch { /* next run */ } }
   return out;
