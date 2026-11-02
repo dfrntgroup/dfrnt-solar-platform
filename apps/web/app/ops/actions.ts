@@ -72,8 +72,8 @@ export async function saveInstaller(f: FormData) {
     const capacity = { jobsPerDay: num("jobsPerDay", 1), leadDays: num("leadDays", 3), workingDays: f.getAll("workingDays").map(Number), blackouts: s(f, "blackouts").split(/[\s,]+/).filter(Boolean) };
     const ranges = s(f, "ranges").split(/[\s,]+/).filter(Boolean).map((r) => r.split("-").map(Number));
     if (f.get("active") === "on") {
-      const [i] = await db()`select abn, licence_no, insurance_expiry::text ins, is_test from installers where id = ${id}`;
-      if (!i!.is_test && (!i!.abn || !i!.licence_no || !i!.ins || (i!.ins as string) < new Date().toISOString().slice(0, 10))) throw new Error("Can't activate: ABN, licence and current insurance must be on the installer's profile");
+      const [i] = await db()`select abn, licence_no, saa_accreditation, insurance_expiry::text ins, is_test from installers where id = ${id}`;
+      if (!i!.is_test && (!i!.abn || !i!.licence_no || !i!.saa_accreditation || !i!.ins || (i!.ins as string) < new Date().toISOString().slice(0, 10))) throw new Error("Can't activate: ABN, electrical licence, SAA accreditation and current insurance must be on the installer's profile");
     }
     await write({ actor: me.actor, action: "installers.update" }, { id, capacity, ranges }, async (tx) => {
       await tx`update installers set capacity = ${tx.json(capacity)}, active = ${f.get("active") === "on"},
@@ -586,4 +586,18 @@ export async function financeSave(f: FormData) {
 export async function stripeReconcile() {
   await requireStaff();
   await run("/ops/payments", async () => { const { reconcileStripe } = await import("@/lib/stripe"); await reconcileStripe(); });
+}
+
+/** Bank details customers pay by transfer into (shown on the pay screen). */
+export async function bankSave(f: FormData) {
+  const me = await requireStaff();
+  if (!me.roles.includes("owner")) redirect("/ops/payments?error=Owner%20only");
+  await run("/ops/payments", async () => {
+    const bsb = s(f, "bsb").replace(/\D/g, ""), acct = s(f, "account_number").replace(/\D/g, "");
+    if (bsb && bsb.length !== 6) throw new Error("BSB must be 6 digits");
+    if (acct && (acct.length < 6 || acct.length > 10)) throw new Error("Account number must be 6–10 digits");
+    const { setSetting } = await import("@/lib/settings");
+    await setSetting("bank", { account_name: s(f, "account_name").slice(0, 80), bsb: bsb ? `${bsb.slice(0, 3)}-${bsb.slice(3)}` : "", account_number: acct, bank: s(f, "bank").slice(0, 60) }, me.name);
+    await db()`insert into events (type, entity, entity_id, payload) values ('bank.changed', 'settings', null, ${db().json({ by: me.name })})`;
+  });
 }

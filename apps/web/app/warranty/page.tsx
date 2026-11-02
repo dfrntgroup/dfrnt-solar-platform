@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Static } from "@/components/Static";
-export const metadata = { title: "Warranty" };
+export const metadata = { title: "Warranty", description: "Warranties on every DFRNT Solar system: panels, inverter, battery and our workmanship, and who to call." };
 export default function Page() {
   return (
     <Static eyebrow="Warranty" title="What's covered, and for how long.">

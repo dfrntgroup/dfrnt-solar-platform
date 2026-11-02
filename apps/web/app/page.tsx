@@ -6,6 +6,7 @@ import { earliestFor } from "@/lib/capacity";
 import { aud, priced, rebateDate, sitePostcode, windowEnd, longDate } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
+export const metadata = { description: "Solar and home batteries for South East Queensland at one fixed installed price, rebate already taken off. Price it, send photos, pay online and pick your install day.", alternates: { canonical: "/" } };
 
 export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const postcode = await sitePostcode(await searchParams);

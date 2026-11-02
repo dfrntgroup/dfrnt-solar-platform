@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Static } from "@/components/Static";
-export const metadata = { title: "Creators" };
+export const metadata = { title: "Creators", description: "Make content with DFRNT Solar and earn a commission on installs you refer." };
 export default function Page() {
   return (
     <Static eyebrow="Creators" title="Make honest videos about your system. Get paid per install.">

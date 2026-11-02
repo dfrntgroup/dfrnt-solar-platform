@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Static } from "@/components/Static";
-export const metadata = { title: "About us" };
+export const metadata = { title: "About us", description: "DFRNT Solar is a family-owned solar and battery company on the Sunshine Coast, from the team behind InStyle Solar." };
 // Copy from Karl's Pylon "About us" (1 Nov 2026). Accreditation line left out until confirmed current.
 export default function Page() {
   return (

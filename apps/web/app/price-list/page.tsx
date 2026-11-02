@@ -3,7 +3,7 @@ import { Header, Footer } from "@/components/Header";
 import { aud, priced, rebateDate, sitePostcode } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Price list" };
+export const metadata = { title: "Price list", description: "The full DFRNT Solar price list: installed prices for solar and batteries in South East Queensland, rebates included." };
 
 export default async function PriceList({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const postcode = await sitePostcode(await searchParams);

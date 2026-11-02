@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Static } from "@/components/Static";
-export const metadata = { title: "Refer a friend" };
+export const metadata = { title: "Refer a friend", description: "Refer a friend to DFRNT Solar: they get $250 off and you get $250 after their install." };
 export default function Page() {
   return (
     <Static eyebrow="Refer a friend" title="$250 for you, $250 off for them.">

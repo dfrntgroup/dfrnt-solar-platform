@@ -42,6 +42,11 @@ const STEPS: [string, JobState[]][] = [
   ["Done", ["installed", "lodged", "settled", "complete"]],
 ];
 
+function BankRows({ b }: { b: { account_name: string; bsb: string; account_number: string; bank: string } }) {
+  if (!b.bsb || !b.account_number) return <tr><td colSpan={2} className="muted">Bank details are on their way. Call us on 1300 133 768 and we&apos;ll give them to you.</td></tr>;
+  return <><tr><td>Account name</td><td className="r">{b.account_name}</td></tr>{b.bank ? <tr><td>Bank</td><td className="r">{b.bank}</td></tr> : null}
+    <tr><td>BSB</td><td className="r"><strong>{b.bsb}</strong></td></tr><tr><td>Account number</td><td className="r"><strong>{b.account_number}</strong></td></tr></>;
+}
 function Breakdown({ q }: { q: Quote }) {
   const st = q.stack;
   return (
@@ -86,12 +91,15 @@ export default async function Record({ params, searchParams }: { params: Promise
   const step = STEPS.findIndex(([, ss]) => ss.includes(state));
   const online = stripeReady() && !!publishableKey();
   const financeOpts = (await getSetting("finance")).providers.filter((x) => x.on && x.url);
+  const bankAcct = await getSetting("bank");
+  const bankOn = !!(bankAcct.bsb && bankAcct.account_number);
   const sysPay = ["payment_pending", "payment_review"].includes(state)
     ? (await db()`select id, method, status from payments where quote_id = ${q.id} and kind = 'system' and status in ('pending','review') order by created_at desc limit 1`)[0] : undefined;
   const paySecret = sysPay && isOnline(sysPay.method as string) && sysPay.status === "pending" && !sp.paid ? await clientSecretFor(sysPay.id as string).catch(() => null) : null;
   const varPays = await db()`select id, variation_id, amount::float8 amount from payments where quote_id = ${q.id} and kind = 'variation' and status = 'pending'`;
   const varSecret = sp.payv && /^[0-9a-f-]{36}$/.test(sp.payv) ? await clientSecretFor(sp.payv).catch(() => null) : null;
   const payReturn = `${siteUrl()}/quote/${token}?paid=1`;
+  const lapsedSlug = state === "lapsed" ? ((await db()`select system_slug from quotes where id = ${q.id}`)[0]?.system_slug as string | null) : null;
   const finProv = q.payment_method?.startsWith("finance:") ? (await getSetting("finance")).providers.find((x) => `finance:${x.id}` === q.payment_method) : undefined;
   const picking = state === "awaiting_date" || (["booked", "gear_ordered", "delivered"].includes(state) && q.rebook);
   const choice = picking ? await daysFor(q) : null;
@@ -138,7 +146,12 @@ export default async function Record({ params, searchParams }: { params: Promise
           </div>)}
 
         <RecordUsage q={q} sp={sp} />
-        {(state === "saved" || state === "secured" || state === "lapsed") && (<>
+        {state === "lapsed" && (<>
+          <div className="note" style={{ marginTop: 16 }}><strong>This price expired on {longDate(q.lock_until)}.</strong> Prices and the rebate move over time, so we can&apos;t hold it any longer.</div>
+          <p style={{ marginTop: 12 }}><Link className="btn block" href={lapsedSlug ? `/systems/${lapsedSlug}?postcode=${q.postcode}` : `/systems?postcode=${q.postcode}`}>See today&apos;s price for this system</Link></p>
+          <CallBack back={`/quote/${token}`} token={token} state={sp.callback} compact />
+        </>)}
+        {(state === "saved" || state === "secured") && (<>
           <div className="pay" style={{ margin: "16px 0 6px" }}><small>You pay, installed</small>{aud(q.result.stack.amount_payable)}</div>
           <div className="ok">Price and rebate locked until <strong>{longDate(q.lock_until)}</strong>. Keep this link: it&apos;s your record.</div>
           <p style={{ marginTop: 10 }}><Share title="Our solar price" text={`${q.title ?? "Solar and battery"}: ${aud(q.result.stack.amount_payable)} installed, locked until ${longDate(q.lock_until)}.`} label="Send to someone at home" /></p>
@@ -149,7 +162,7 @@ export default async function Record({ params, searchParams }: { params: Promise
               <table className="lines"><tbody>
                 <tr><td>Amount</td><td className="r"><strong>{aud(fee?.amount ?? 99)}</strong></td></tr>
                 <tr><td>Reference</td><td className="r"><strong>{fee?.reference}</strong></td></tr>
-                <tr><td>Account name</td><td className="r">DFRNT Solar (bank details at launch)</td></tr>
+                <BankRows b={bankAcct} />
               </tbody></table>
               <span className="small muted">Once it lands, your installer checks your photos and we email your confirmed price.</span>
               <CallBack back={`/quote/${token}`} token={token} state={sp.callback} compact />
@@ -166,7 +179,7 @@ export default async function Record({ params, searchParams }: { params: Promise
         {["secured", "priced", "pricing_installer"].includes(state) && (q.discount_code
           ? <p className="small ok" style={{ marginTop: 12 }}>Code {q.discount_code} applied: {aud(q.referral_discount ?? 0)} off before GST.</p>
           : <form action={addCode} style={{ display: "flex", gap: 8, marginTop: 12 }}><input type="hidden" name="token" value={token} />
-              <input name="code" placeholder="Referral or creator code" style={{ ...input, width: 220 }} /><button className="btn ghost sm" type="submit">Apply</button></form>)}
+              <input aria-label="Referral or creator code" name="code" placeholder="Referral or creator code" style={{ ...input, width: 220 }} /><button className="btn ghost sm" type="submit">Apply</button></form>)}
         {state === "priced" && (<>
           <h2 style={{ marginTop: 20 }}>Your confirmed price</h2>
           <Breakdown q={shown} />
@@ -193,8 +206,8 @@ export default async function Record({ params, searchParams }: { params: Promise
             <button className="btn block" type="submit">PayTo: approve in your banking app (save about 1%)</button></form>}
           {online && <form action={payOnline} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} /><input type="hidden" name="method" value="card" />
             <button className="btn ghost block" type="submit">Card, Apple Pay or Google Pay</button></form>}
-          <form action={payByBank} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} />
-            <button className={online ? "btn ghost block" : "btn block"} type="submit">Bank transfer (save about 1%)</button></form>
+          {bankOn && <form action={payByBank} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} />
+            <button className={online ? "btn ghost block" : "btn block"} type="submit">Bank transfer (save about 1%)</button></form>}
           {!online && <p><button className="btn ghost block" disabled>Card — available at launch</button></p>}
           {financeOpts.map((fp) => <form key={fp.id} action={payFinance} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} /><input type="hidden" name="provider" value={fp.id} />
             <button className="btn ghost block" type="submit">Finance with {fp.name}{fp.blurb ? `: ${fp.blurb.toLowerCase()}` : ""}</button></form>)}
@@ -222,7 +235,7 @@ export default async function Record({ params, searchParams }: { params: Promise
             <table className="lines"><tbody>
               <tr><td>Amount</td><td className="r"><strong>{aud2(shown.stack.amount_payable)}</strong></td></tr>
               <tr><td>Reference</td><td className="r"><strong>{q.payment_reference}</strong></td></tr>
-              <tr><td>Account name</td><td className="r">DFRNT Solar (bank details at launch)</td></tr>
+              <BankRows b={bankAcct} />
             </tbody></table>
             <p className="muted small">Once your payment lands we&apos;ll email you to pick your install day.</p>
             {state === "payment_pending" && <form action={changeHowIPay}><input type="hidden" name="token" value={token} /><button className="btn ghost sm" type="submit">Change how I pay</button></form>}
@@ -236,7 +249,7 @@ export default async function Record({ params, searchParams }: { params: Promise
             <strong>Quick one: how did you hear about us?</strong>
             <div className="filters">{([["facebook", "Facebook or Instagram"], ["google", "Google"], ["youtube", "YouTube"], ["friend", "A friend or family"], ["saw_install", "Saw one of our installs"], ["other", "Something else"]] as const).map(([v, t]) =>
               <button key={v} className="chip" name="heard" value={v} type="submit">{t}</button>)}</div>
-            <input name="note" placeholder="Anything more? (optional, e.g. which video)" style={{ ...input, marginTop: 6 }} />
+            <input aria-label="Anything more? (optional, e.g. which video)" name="note" placeholder="Anything more? (optional, e.g. which video)" style={{ ...input, marginTop: 6 }} />
           </form>)}
         {picking && choice && (<>
           <h2 style={{ marginTop: 20 }}>{q.rebook ? "Pick your new install day" : "Pick your install day"}</h2>
@@ -302,7 +315,7 @@ export default async function Record({ params, searchParams }: { params: Promise
             <h3>How did we go?</h3>
             <p className="small muted">We publish every review, good or bad. Your first name and suburb show; nothing else.</p>
             <div className="pills" role="radiogroup" aria-label="Rating">{[5, 4, 3, 2, 1].map((n) => <label key={n} style={{ display: "inline-block" }}><input type="radio" name="rating" value={n} required style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">{n} ★</span></label>)}</div>
-            <p><textarea name="body" placeholder="What went well, what didn't" style={{ minHeight: 100 }} required /></p>
+            <p><textarea aria-label="What went well, what didn't" name="body" placeholder="What went well, what didn't" style={{ minHeight: 100 }} required /></p>
             <p className="small"><label style={{ display: "flex", gap: 8, alignItems: "flex-start" }}><input type="checkbox" name="showcase" /> You can show photos of my install (no address or faces) on your real installs page.</label></p>
             <button className="btn">Send review</button>
           </form>)}

@@ -1,3 +1,4 @@
+import { includeTest } from "@/lib/installers";
 import Link from "next/link";
 import { db } from "@dfrnt/db";
 import { Header, Footer } from "@/components/Header";
@@ -6,7 +7,7 @@ import { friendlySummary } from "@/lib/images";
 import { sitePostcode } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Real installs" };
+export const metadata = { title: "Real installs", description: "Real DFRNT Solar installs in South East Queensland, shown with the owners' permission." };
 
 /** A22: real DFRNT Solar installs, shown only with the customer's consent and only the photos ops picked. */
 export default async function Installs({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
@@ -15,7 +16,8 @@ export default async function Installs({ searchParams }: { searchParams: Promise
   try {
     const rows = await db()`select q.id, q.title, q.result->'config'->>'summary' summary, q.site->'address'->>'suburb' suburb, coalesce(q.install_date::text, '') d,
         array(select p.path from quote_photos p where p.quote_id = q.id and p.public order by p.created_at) photos
-      from quotes q where q.showcase_consent and q.status in ('installed','lodged','settled','complete')
+      from quotes q left join installers i on i.id = q.installer_id where q.showcase_consent and q.status in ('installed','lodged','settled','complete')
+        and (i.id is null or not i.is_test or ${includeTest()})
         and exists (select 1 from quote_photos p where p.quote_id = q.id and p.public) order by q.install_date desc nulls last limit 60`;
     jobs = await Promise.all(rows.map(async (r) => ({ id: r.id as string, title: r.title as string | null, summary: (r.summary as string) ?? "", suburb: r.suburb as string | null, d: r.d as string,
       photos: (await Promise.all((r.photos as string[]).slice(0, 3).map(photoUrl))).filter(Boolean) as string[] })));

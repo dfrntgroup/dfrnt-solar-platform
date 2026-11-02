@@ -4,7 +4,7 @@ import { suburbs } from "@/lib/suburbs";
 import { sitePostcode } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Solar and batteries by suburb" };
+export const metadata = { title: "Solar and batteries by suburb", description: "Solar and battery installs by suburb across South East Queensland, with fixed installed prices." };
 
 export default async function Suburbs({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const postcode = await sitePostcode(await searchParams);

@@ -6,7 +6,7 @@ import { pricingData } from "@/lib/pricing-data";
 import { aud, longDate, sitePostcode } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Solar and battery rebate calculator" };
+export const metadata = { title: "Solar and battery rebate calculator", description: "Work out the federal solar and battery rebate (STCs) for your system and postcode, and how it changes on 1 January 2027." };
 
 /** A11: the same rebate maths the prices use, shown openly. */
 export default async function Rebates({ searchParams }: { searchParams: Promise<Record<string, string>> }) {

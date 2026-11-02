@@ -3,7 +3,7 @@ import { Static } from "@/components/Static";
 import { LegalText } from "@/components/Legal";
 import { AGREEMENT, AGREEMENT_VERSION } from "@/lib/legal";
 
-export const metadata = { title: "Installation agreement" };
+export const metadata = { title: "Installation agreement", description: "The DFRNT Solar installation agreement: what you get, how payment works, your 10-business-day change-of-mind refund, warranties and complaints." };
 export default function Page() {
   return (
     <Static eyebrow="Installation agreement" title="The agreement you sign.">

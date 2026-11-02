@@ -4,7 +4,7 @@ import { earliestFor } from "@/lib/capacity";
 import { priced, sitePostcode } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Add a battery to your solar" };
+export const metadata = { title: "Add a battery to your solar", description: "Add a home battery to the solar you already have. Fixed installed prices for South East Queensland, with the federal battery rebate already taken off." };
 
 export default async function Batteries({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const postcode = await sitePostcode(await searchParams);

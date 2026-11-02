@@ -5,7 +5,7 @@ import { requireStaff } from "@/lib/auth";
 import { getSetting } from "@/lib/settings";
 import { dashboardUrl, publishableKey, stripeReady, stripeTestMode } from "@/lib/stripe";
 import { aud2 } from "@/lib/site";
-import { financeSave, stripeReconcile, stripeRegister } from "../actions";
+import { bankSave, financeSave, stripeReconcile, stripeRegister } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,7 @@ export default async function Payments({ searchParams }: { searchParams: Promise
   const sp = await searchParams;
   const st = await getSetting("stripe");
   const fin = await getSetting("finance");
+  const bank = await getSetting("bank");
   const pays = await db()`select p.id, p.kind, p.method, p.amount::float8 amount, p.fee::float8 fee, p.status, p.provider_ref, p.provider_status, p.created_at, q.id qid, q.customer_name, q.title
     from payments p left join quotes q on q.id = p.quote_id where p.method in ('card','payto') or p.method like 'finance:%' order by p.created_at desc limit 80`;
   const [sum] = await db()`select coalesce(sum(amount) filter (where status = 'received' and kind <> 'refund'), 0)::float8 taken, coalesce(sum(fee), 0)::float8 fees,
@@ -38,6 +39,14 @@ export default async function Payments({ searchParams }: { searchParams: Promise
       {disputes.length > 0 && <div className="note"><strong>Open disputes:</strong> {disputes.map((d) => <span key={d.id as string}> <Link href={`/ops/support`}>{d.subject as string}</Link> ·</span>)}</div>}
       {errs.length > 0 && <div className="note"><strong>Webhook events that failed (Stripe will retry):</strong> {errs.map((e) => <span key={e.id as string}> {e.type as string}: {e.error as string} ·</span>)}</div>}
 
+      <form action={bankSave} className="card" style={{ marginBottom: 12 }}>
+        <strong>Bank transfers</strong>
+        <span className="small muted">What customers see on the pay screen. Until this is filled in, bank transfer isn&apos;t offered. Changes are logged. Owner only.</span>
+        <input name="account_name" defaultValue={bank.account_name} placeholder="Account name (e.g. DFRNT Group Pty Ltd)" style={input} />
+        <input name="bank" defaultValue={bank.bank} placeholder="Bank (e.g. CBA)" style={input} />
+        <div style={{ display: "flex", gap: 8 }}><input name="bsb" defaultValue={bank.bsb} placeholder="BSB" style={{ ...input, width: 120 }} /><input name="account_number" defaultValue={bank.account_number} placeholder="Account number" style={input} /></div>
+        <button className="btn sm" type="submit">Save bank details</button>
+      </form>
       <form action={financeSave} className="card" style={{ marginBottom: 12 }}>
         <strong>Finance at checkout</strong>
         <span className="small muted">The customer is sent to the lender&apos;s application. Put {"{ref}"} and {"{amount}"} in the link and they&apos;re filled in. Mark paid on the job when the lender pays you.</span>

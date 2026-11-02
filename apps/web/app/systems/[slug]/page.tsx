@@ -56,7 +56,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "Product", name: `${s.brand} ${s.title}, installed`, brand: { "@type": "Brand", name: s.brand },
-        description: c.summary, offers: { "@type": "Offer", priceCurrency: "AUD", price: st.amount_payable.toFixed(2), availability: "https://schema.org/InStock", url: `/systems/${s.slug}` } }) }} />
+        description: c.summary, offers: { "@type": "Offer", priceCurrency: "AUD", price: st.amount_payable.toFixed(2), availability: "https://schema.org/InStock", url: `${process.env.SITE_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : "")}/systems/${s.slug}` } }) }} />
       <Header postcode={postcode} back={`/systems/${slug}`} />
       <section style={{ paddingTop: 24 }}><div className="wrap">
         <p className="small"><Link href="/systems" className="muted">← All systems</Link></p>
@@ -106,7 +106,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
               <tr><td className="k">Next free days</td><td>{next?.length ? <strong>{next.map((d) => longDate(d)).join(" · ")}</strong> : next === null ? "Not in your area yet — join the waitlist" : "Confirmed when you book"}<br /><span className="small muted">{next?.length ? "From installers' live calendars. You pick your day after paying." : "From your installer's real free days"}</span></td></tr>
               {q.window.window_end && <tr><td className="k">Rebate</td><td>{aud(st.less_stcs)} off now. Locked for installs on or before {longDate(q.window.window_end)}.</td></tr>}
               <tr><td className="k">Installed by</td><td>A licensed, SAA-accredited local electrician, named before you pay.</td></tr>
-              <tr><td className="k">Warranty</td><td>Panels 25 yr · inverter 10 yr · battery 10 yr · our workmanship 10 yr</td></tr>
+              <tr><td className="k">Warranty</td><td>Panels: manufacturer product warranty + 30 yr performance · inverter 10 yr · battery 10 yr · our workmanship 10 yr</td></tr>
             </tbody></table>
             {addons.length > 0 && <p className="small muted" style={{ marginTop: 10 }}>Add at checkout: {addons.map((a) => a.name).join(", ")}.</p>}
             <Trust />
@@ -115,7 +115,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
             {sp.saved === "1" ? <p className="small ok" style={{ marginTop: 10 }}>Saved — we&apos;ve sent the link to your email.</p> : (
               <form action={saveForLater} style={{ display: "flex", gap: 6, marginTop: 10 }}>
                 <input type="hidden" name="slug" value={s.slug} /><input type="hidden" name="postcode" value={postcode} />
-                <input name="email" type="email" placeholder="Email me this price" style={{ flex: 1, padding: 8, border: "1px solid var(--line)", borderRadius: 6, font: "inherit" }} required />
+                <input aria-label="Email me this price" name="email" type="email" placeholder="Email me this price" style={{ flex: 1, padding: 8, border: "1px solid var(--line)", borderRadius: 6, font: "inherit" }} required />
                 <button className="btn ghost sm" type="submit">Save</button></form>)}
           </aside>
         </div>

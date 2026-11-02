@@ -4,7 +4,7 @@ import { aud, priced, sitePostcode } from "@/lib/site";
 import { BRANDS, PAIRS } from "@/lib/brands";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Compare systems" };
+export const metadata = { title: "Compare systems", description: "Compare solar and battery systems side by side: size, battery, warranty and installed price." };
 
 export default async function Compare({ searchParams }: { searchParams: Promise<Record<string, string | string[]>> }) {
   const sp = await searchParams;

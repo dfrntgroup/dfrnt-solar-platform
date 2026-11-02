@@ -4,7 +4,7 @@ import { publishedReviews, MIN_FOR_AVERAGE } from "@/lib/reviews";
 import { sitePostcode } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Customer reviews" };
+export const metadata = { title: "Customer reviews", description: "What DFRNT Solar customers say. Every review is published, good or bad." };
 
 /** A21: every published review, newest first. No average until there are enough reviews to mean something. */
 export default async function Reviews({ searchParams }: { searchParams: Promise<Record<string, string>> }) {

@@ -14,6 +14,8 @@ export interface StripeSettings { webhook_id?: string; webhook_url?: string; web
 /** Finance link-out (S4): each lender's application link. {ref} and {amount} are filled in. */
 export interface FinanceProvider { id: string; name: string; url: string; blurb: string; on: boolean }
 export interface FinanceSettings { providers: FinanceProvider[] }
+/** Where bank transfers go. Entered by staff in Ops → Payments; never hard-coded. */
+export interface BankSettings { account_name: string; bsb: string; account_number: string; bank: string }
 export interface Trust { founder_line: string; founder_video: string; licence: string; insurance: string; accreditations: string; callback_to: string; google_review_url?: string }
 
 const DEFAULTS = {
@@ -24,6 +26,7 @@ const DEFAULTS = {
   xero: { codes: { sales: "", stc: "", installer: "", bank: "" } } as XeroSettings,
   energy: { mode: "preview", yields: DEFAULT_YIELDS, standard: DEFAULT_STANDARD_TARIFF, raw_days: 30 } as EnergySettings,
   stripe: {} as StripeSettings,
+  bank: { account_name: "", bsb: "", account_number: "", bank: "" } as BankSettings,
   finance: { providers: [
     { id: "plenti", name: "Plenti", url: "", blurb: "Green loan for solar and batteries", on: false },
     { id: "handypay", name: "Handypay", url: "", blurb: "Payment plan", on: false },

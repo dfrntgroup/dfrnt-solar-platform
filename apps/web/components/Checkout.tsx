@@ -59,7 +59,7 @@ export async function Checkout({ q, step, sp, have, installers, recordUrl }: {
         <form action={saveContact}>
           <input type="hidden" name="token" value={token} />
           <Field label="Your name"><input name="name" style={input} required defaultValue={q.customer_name ?? ""} autoComplete="name" /></Field>
-          <Field label="Mobile" hint="Only for your install and anything urgent about it."><input name="phone" style={input} required inputMode="tel" autoComplete="tel" defaultValue={q.customer_phone ?? ""} placeholder="0412 345 678" /></Field>
+          <Field label="Mobile" hint="Only for your install and anything urgent about it."><input aria-label="0412 345 678" name="phone" style={input} required inputMode="tel" autoComplete="tel" defaultValue={q.customer_phone ?? ""} placeholder="0412 345 678" /></Field>
           <Field label="Email" hint="We send your record link here, so you can pick up where you left off."><input name="email" type="email" style={input} required autoComplete="email" defaultValue={q.customer_email ?? ""} /></Field>
           <button className="btn block" type="submit">Next: your home →</button>
         </form>)}
@@ -80,8 +80,8 @@ export async function Checkout({ q, step, sp, have, installers, recordUrl }: {
           <Field label="Is that wall shared with a bedroom or living room?"><Sel name="againstHabitableRoom" value={d.againstHabitableRoom ? "yes" : "no"} opts={[["no", "No"], ["yes", "Yes"]]} /></Field>
           <Field label="Could a car bump it there?"><Sel name="vehicleExposure" value={d.vehicleExposure ? "yes" : "no"} opts={[["no", "No"], ["yes", "Yes"]]} /></Field>
           <details style={{ margin: "14px 0" }}><summary className="small" style={{ cursor: "pointer", fontWeight: 600 }}>From your power bill (optional, saves a step later)</summary>
-            <Field label="NMI" hint="10 or 11 letters and numbers on your electricity bill."><input name="nmi" style={input} defaultValue={d.nmi ?? ""} placeholder="e.g. 3120123456" autoComplete="off" /></Field>
-            <Field label="Electricity retailer"><input name="energyRetailer" style={input} defaultValue={d.energyRetailer ?? ""} placeholder="e.g. Origin, AGL" /></Field>
+            <Field label="NMI" hint="10 or 11 letters and numbers on your electricity bill."><input aria-label="e.g. 3120123456" name="nmi" style={input} defaultValue={d.nmi ?? ""} placeholder="e.g. 3120123456" autoComplete="off" /></Field>
+            <Field label="Electricity retailer"><input aria-label="e.g. Origin, AGL" name="energyRetailer" style={input} defaultValue={d.energyRetailer ?? ""} placeholder="e.g. Origin, AGL" /></Field>
             <Field label="Has this home already claimed a battery rebate?"><Sel name="priorBatteryClaim" value={d.priorBatteryClaim ? "yes" : "no"} opts={[["no", "No"], ["yes", "Yes"]]} /></Field>
           </details>
           <button className="btn block" type="submit">Next: photos →</button>
@@ -106,7 +106,7 @@ export async function Checkout({ q, step, sp, have, installers, recordUrl }: {
                 <span><strong>{i.business_name}</strong><br />
                   <span className="small">{i.earliest ? <>Earliest install <strong>{longDate(i.earliest)}</strong></> : "Dates confirmed after pricing"}
                     {i.average ? ` · ${i.average} ★ from ${i.reviews} reviews` : i.reviews ? ` · ${i.reviews} review${i.reviews > 1 ? "s" : ""}` : ""}{i.installs ? ` · ${i.installs} installs with us` : ""}</span><br />
-                  <span className="small muted">{i.licence_no ? `Licence ${i.licence_no}` : "Licensed electrician"}{i.saa_accreditation ? ` · SAA ${i.saa_accreditation}` : ""} · <Link href={`/installers/${i.id}`} target="_blank">Profile</Link></span></span>
+                  <span className="small muted">{i.licence_no ? `Licence ${i.licence_no} · ` : ""}{i.saa_accreditation ? `SAA ${i.saa_accreditation} · ` : ""}<Link href={`/installers/${i.id}`} target="_blank">Profile</Link></span></span>
               </label>))}
           </>)}
           {installers.length === 1 && <p className="small muted">Your installer: <Link href={`/installers/${installers[0]!.id}`} target="_blank">{installers[0]!.business_name}</Link>{installers[0]!.earliest ? `, earliest install ${longDate(installers[0]!.earliest)}` : ""}.</p>}

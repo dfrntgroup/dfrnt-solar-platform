@@ -12,6 +12,11 @@ import { sitePostcode } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const [a] = await db()`select title, summary from content_items where slug = ${slug} and status = 'published'`.catch(() => []);
+  return a ? { title: a.title as string, description: ((a.summary as string) ?? "").slice(0, 160), alternates: { canonical: `/learn/${slug}` }, openGraph: { type: "article" } } : {};
+}
 export default async function Article({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<Record<string, string>> }) {
   const { slug } = await params;
   const postcode = await sitePostcode(await searchParams);

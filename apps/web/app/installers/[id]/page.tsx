@@ -38,9 +38,9 @@ export default async function InstallerProfile({ params, searchParams }: { param
         <h1>{r.business_name}</h1>
         <p className="lead">{first} and the team install DFRNT Solar systems as our licensed subcontractor. We check their paperwork before they get a job, and again every time it renews.</p>
         <table className="incl"><tbody>
-          <tr><td className="k">Electrical licence</td><td>{r.licence_no ? `Checked by us · ${r.licence_no}` : "Checked by us"}</td></tr>
-          <tr><td className="k">Accreditation</td><td>{r.saa_accreditation ? `SAA accredited · ${r.saa_accreditation}` : "SAA accredited"}</td></tr>
-          <tr><td className="k">Insurance</td><td>{insured ? "Current public liability, checked by us" : "Checked by us"}</td></tr>
+          <tr><td className="k">Electrical licence</td><td>{r.licence_no ? `${r.licence_no} · checked by us` : "Being checked"}</td></tr>
+          <tr><td className="k">Accreditation</td><td>{r.saa_accreditation ? `SAA accredited · ${r.saa_accreditation}` : "Being checked"}</td></tr>
+          <tr><td className="k">Insurance</td><td>{insured ? `Current public liability to ${new Date(r.insurance_expiry!).toLocaleDateString("en-AU", { month: "long", year: "numeric" })}, checked by us` : "Being checked"}</td></tr>
           <tr><td className="k">Installs with us</td><td>{r.completed > 0 ? `${r.completed} completed` : "New to DFRNT Solar"}</td></tr>
           <tr><td className="k">Covers postcodes</td><td>{r.ranges.length ? r.ranges.map((x) => x.replace(/^(\d+)–\1$/, "$1")).join(", ") : "On request"}</td></tr>
           <tr><td className="k">Working with us since</td><td>{new Date(r.since).toLocaleDateString("en-AU", { month: "long", year: "numeric" })}</td></tr>

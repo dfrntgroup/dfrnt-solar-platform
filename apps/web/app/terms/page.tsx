@@ -3,7 +3,7 @@ import { Static } from "@/components/Static";
 import { LegalText } from "@/components/Legal";
 import { TERMS, AGREEMENT_VERSION } from "@/lib/legal";
 
-export const metadata = { title: "Website terms" };
+export const metadata = { title: "Website terms", description: "Terms of use for the DFRNT Solar website." };
 export default function Page() {
   return (
     <Static eyebrow="Website terms" title="What a price on this website means.">

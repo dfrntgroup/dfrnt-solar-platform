@@ -10,6 +10,10 @@ export const dynamic = "force-dynamic";
 
 const brands = BRANDS;
 
+export async function generateMetadata({ params }: { params: Promise<{ brand: string }> }) {
+  const b = BRANDS[(await params).brand];
+  return b ? { title: `${b.name} solar and batteries, installed`, description: `${b.name} systems installed in South East Queensland at fixed prices, rebate already taken off. See every ${b.name} system and its price for your postcode.`, alternates: { canonical: `/brands/${(await params).brand}` } } : {};
+}
 export default async function Brand({ params, searchParams }: { params: Promise<{ brand: string }>; searchParams: Promise<Record<string, string>> }) {
   const { brand } = await params;
   const b = brands[brand];

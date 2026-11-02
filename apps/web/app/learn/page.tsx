@@ -4,7 +4,7 @@ import { Header, Footer } from "@/components/Header";
 import { sitePostcode } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Learn" };
+export const metadata = { title: "Learn", description: "Plain-English guides to solar, home batteries and rebates in Queensland." };
 
 export default async function Learn({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const postcode = await sitePostcode(await searchParams);

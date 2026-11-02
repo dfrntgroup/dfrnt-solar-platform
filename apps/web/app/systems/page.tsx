@@ -5,7 +5,7 @@ import { earliestFor } from "@/lib/capacity";
 import { priced, rebateDate, sitePostcode } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Solar + battery systems" };
+export const metadata = { title: "Solar + battery systems", description: "Every DFRNT Solar system with its fixed installed price for your postcode, rebate already taken off. SolaX, Sungrow and GoodWe." };
 
 const bands: Record<string, [number, number]> = { "10-15": [0, 15.5], "15-25": [15.5, 25], "25+": [25, 999] };
 

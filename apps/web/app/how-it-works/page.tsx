@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Static } from "@/components/Static";
-export const metadata = { title: "How it works" };
+export const metadata = { title: "How it works", description: "How buying solar online with DFRNT Solar works: price, photos, sign, pay, pick your install day, and your system record for life." };
 export default function Page() {
   return (
     <Static eyebrow="How it works" title="One price, one contract, one payment.">

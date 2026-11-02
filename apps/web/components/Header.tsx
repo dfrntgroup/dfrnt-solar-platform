@@ -1,5 +1,18 @@
 import Link from "next/link";
 import { setPostcode } from "@/app/actions";
+import { db } from "@dfrnt/db";
+
+/** Reviews and Real installs only appear in the menus once there's something real to show. */
+async function proof() {
+  try {
+    const { includeTest } = await import("@/lib/installers");
+    const [r] = await db()`select
+      (select count(*)::int from reviews v left join installers i on i.id = v.installer_id where v.status = 'published' and (i.id is null or not i.is_test or ${includeTest()})) reviews,
+      (select count(*)::int from quotes q left join installers i on i.id = q.installer_id where q.showcase_consent and q.status in ('installed','lodged','settled','complete')
+        and (i.id is null or not i.is_test or ${includeTest()}) and exists (select 1 from quote_photos p where p.quote_id = q.id and p.public)) installs`;
+    return { reviews: (r?.reviews as number) > 0, installs: (r?.installs as number) > 0 };
+  } catch { return { reviews: false, installs: false }; }
+}
 
 const links = [["/systems", "All systems"], ["/batteries", "Battery only"], ["/estimate", "Find my system"], ["/price-list", "Price list"], ["/learn", "Learn"], ["/how-it-works", "How it works"]];
 
@@ -7,13 +20,14 @@ export function Wordmark({ size = 30 }: { size?: number }) {
   return <Link href="/" className="wm" style={{ fontSize: size }} aria-label="DFRNT Solar"><b>DF<i>R</i>NT</b><small>Solar</small></Link>;
 }
 
-export function Header({ postcode, back = "/" }: { postcode: string; back?: string }) {
+export async function Header({ postcode, back = "/" }: { postcode: string; back?: string }) {
+  const pr = await proof();
   return (
     <header className="hdr">
       <div className="wrap">
         <div className="left">
           <details className="menu"><summary aria-label="Menu">☰</summary>
-            <div className="drawer">{links.map(([h, t]) => <Link key={h} href={h!}>{t}</Link>)}<Link href="/rebates">Rebate calculator</Link><Link href="/beat-my-quote">Beat my quote</Link><Link href="/reviews">Reviews</Link><Link href="/installs">Real installs</Link><Link href="/contact">Talk to us</Link></div>
+            <div className="drawer">{links.map(([h, t]) => <Link key={h} href={h!}>{t}</Link>)}<Link href="/rebates">Rebate calculator</Link><Link href="/beat-my-quote">Beat my quote</Link>{pr.reviews && <Link href="/reviews">Reviews</Link>}{pr.installs && <Link href="/installs">Real installs</Link>}<Link href="/contact">Talk to us</Link></div>
           </details>
         </div>
         <div className="center"><Wordmark /></div>
@@ -34,12 +48,13 @@ export function Header({ postcode, back = "/" }: { postcode: string; back?: stri
   );
 }
 
-export function Footer() {
+export async function Footer() {
+  const pr = await proof();
   return (
     <footer>
       <div className="wrap cols">
         <div><Wordmark size={26} /><p>Solar and home batteries for South East Queensland. One price, installed, after rebates.</p></div>
-        <div><Link href="/systems">All systems</Link><br /><Link href="/batteries">Battery only</Link><br /><Link href="/estimate">Find my system</Link><br /><Link href="/price-list">Price list</Link><br /><Link href="/price-index">Price Index</Link><br /><Link href="/rebates">Rebate calculator</Link><br /><Link href="/beat-my-quote">Beat my quote</Link><br /><Link href="/reviews">Reviews</Link><br /><Link href="/installs">Real installs</Link></div>
+        <div><Link href="/systems">All systems</Link><br /><Link href="/batteries">Battery only</Link><br /><Link href="/estimate">Find my system</Link><br /><Link href="/price-list">Price list</Link><br /><Link href="/price-index">Price Index</Link><br /><Link href="/rebates">Rebate calculator</Link><br /><Link href="/beat-my-quote">Beat my quote</Link>{pr.reviews && <><br /><Link href="/reviews">Reviews</Link></>}{pr.installs && <><br /><Link href="/installs">Real installs</Link></>}</div>
         <div><Link href="/how-it-works">How it works</Link><br /><Link href="/about">About</Link><br /><Link href="/warranty">Warranty</Link><br /><Link href="/learn">Learn</Link><br /><Link href="/refer">Refer a friend</Link><br /><Link href="/creators">Creators</Link></div>
         <div><Link href="/brands/solax">SolaX</Link><br /><Link href="/brands/sungrow">Sungrow</Link><br /><Link href="/brands/goodwe">GoodWe</Link><br /><Link href="/installers/apply">For installers</Link><br /><Link href="/contact">Talk to us</Link><br /><Link href="/agreement">Agreement</Link><br /><Link href="/terms">Terms</Link><br /><Link href="/privacy">Privacy</Link></div>
       </div>

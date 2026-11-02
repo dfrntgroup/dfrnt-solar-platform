@@ -3,7 +3,7 @@ import { sitePostcode } from "@/lib/site";
 import { contactUs } from "./actions";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Talk to us" };
+export const metadata = { title: "Talk to us", description: "Talk to DFRNT Solar: ask a question or book a call-back with a real person." };
 
 /** The next five business days in Brisbane time. */
 function days() {
@@ -32,15 +32,15 @@ export default async function Contact({ searchParams }: { searchParams: Promise<
             <input type="hidden" name="quote" value={sp.quote ?? ""} />
             <p><select name="kind" aria-label="What is this about" style={input} defaultValue={sp.kind ?? "question"}><option value="question">A question</option><option value="callback">Please call me</option><option value="fault">Something isn&apos;t working</option><option value="complaint">A complaint</option><option value="waitlist">Tell me when you cover my area</option></select></p>
             <p><input name="postcode" defaultValue={postcode} inputMode="numeric" maxLength={4} placeholder="Your postcode" aria-label="Your postcode" style={input} /></p>
-            <p><input name="name" placeholder="Name" style={input} required /></p>
-            <p><input name="email" type="email" placeholder="Email" style={input} required /></p>
-            <p><input name="phone" placeholder="Mobile (for a call back)" style={input} /></p>
+            <p><input aria-label="Name" name="name" placeholder="Name" style={input} required /></p>
+            <p><input aria-label="Email" name="email" type="email" placeholder="Email" style={input} required /></p>
+            <p><input aria-label="Mobile (for a call back)" name="phone" placeholder="Mobile (for a call back)" style={input} /></p>
             <fieldset style={{ border: "1px solid var(--line)", borderRadius: 7, padding: 12, margin: "0 0 14px" }}>
               <legend className="small muted" style={{ padding: "0 6px" }}>Want a call? Pick a time (optional)</legend>
               <div className="pills" role="radiogroup" aria-label="Day">{days().map((d) => <label key={d.v}><input type="radio" name="day" value={d.v} style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">{d.label}</span></label>)}</div>
               <div className="pills" role="radiogroup" aria-label="Time">{["Morning (8–12)", "Afternoon (12–5)"].map((t) => <label key={t}><input type="radio" name="slot" value={t} style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">{t}</span></label>)}</div>
             </fieldset>
-            <p><textarea name="body" placeholder="How can we help?" style={{ ...input, minHeight: 120 }} required /></p>
+            <p><textarea aria-label="How can we help?" name="body" placeholder="How can we help?" style={{ ...input, minHeight: 120 }} required /></p>
             <p style={{ position: "absolute", left: -9999 }} aria-hidden><input name="website" tabIndex={-1} autoComplete="off" /></p>
             <button className="btn block" type="submit">Send</button>
           </form>)}

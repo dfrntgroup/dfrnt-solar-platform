@@ -4,7 +4,7 @@ import { sitePostcode } from "@/lib/site";
 import { beatQuote } from "./actions";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Beat my quote" };
+export const metadata = { title: "Beat my quote", description: "Send us another company's solar or battery quote and we'll show you our fixed price for the same system." };
 
 /** A12: send another company's quote; we show the like-for-like price from our engine. */
 export default async function Beat({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
@@ -20,10 +20,10 @@ export default async function Beat({ searchParams }: { searchParams: Promise<Rec
         <p className="lead">Send us a photo of it. We&apos;ll match the system like for like and show you our installed price, line by line. If theirs is better value, we&apos;ll tell you.</p>
         {sp.sent ? <div className="ok">Got it. A real person will reply within one business day.</div> : (
           <form action={beatQuote}>
-            <p><input name="name" placeholder="Name" style={input} required /></p>
-            <p><input name="email" type="email" placeholder="Email" style={input} required /></p>
-            <p><input name="price" placeholder="Their price after rebates ($)" style={input} /></p>
-            <p><textarea name="details" placeholder="What's in it (panels, inverter, battery size)" style={{ ...input, minHeight: 90 }} /></p>
+            <p><input aria-label="Name" name="name" placeholder="Name" style={input} required /></p>
+            <p><input aria-label="Email" name="email" type="email" placeholder="Email" style={input} required /></p>
+            <p><input aria-label="Their price after rebates ($)" name="price" placeholder="Their price after rebates ($)" style={input} /></p>
+            <p><textarea aria-label="What's in it (panels, inverter, battery size)" name="details" placeholder="What's in it (panels, inverter, battery size)" style={{ ...input, minHeight: 90 }} /></p>
             <p><label className="small muted">Photo of the quote<br /><PhotoInput name="quote" /></label></p>
             <button className="btn block">Send for comparison</button>
           </form>)}
