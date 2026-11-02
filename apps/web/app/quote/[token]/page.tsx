@@ -2,7 +2,7 @@ import { friendlySummary } from "@/lib/images";
 import { leaveReview } from "./actions";
 import { Share } from "@/components/Share";
 import { LegalText } from "@/components/Legal";
-import { AGREEMENT } from "@/lib/legal";
+import { AGREEMENT, SELLER } from "@/lib/legal";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
@@ -10,6 +10,7 @@ import { BOARD, refundRule, type JobState, type Quote } from "@dfrnt/engine";
 import { Header, Footer } from "@/components/Header";
 import { PhotoInput } from "@/components/PhotoInput";
 import { getQuote, REVISABLE } from "@/lib/jobs";
+import { plainLine } from "@/lib/plain-lines";
 import { daysFor, needsOf } from "@/lib/schedule";
 import { DayPicker, dayLabel } from "@/components/DayPicker";
 import { JobThread } from "@/components/JobThread";
@@ -52,9 +53,9 @@ function Breakdown({ q }: { q: Quote }) {
   return (
     <table className="lines"><tbody>
       {st.lines.filter((l) => l.kind !== "hardware" && l.kind !== "bos").map((l) => (
-        <tr key={l.code}><td>{l.description}{l.qty > 1 ? ` × ${l.qty}` : ""}</td><td className="r">{l.sell_ex_gst != null ? aud2(l.sell_ex_gst) : "pending"}</td></tr>
+        <tr key={l.code}><td>{plainLine(l.code, l.description, l.qty, q.config?.panel_kw)}</td><td className="r">{l.sell_ex_gst != null ? aud2(l.sell_ex_gst) : "pending"}</td></tr>
       ))}
-      <tr><td>Equipment (panels, inverter, battery, racking and parts)</td><td className="r">{aud2(st.hardware_ex_gst)}</td></tr>
+      <tr><td>Equipment: panels, inverter, battery, racking and cabling</td><td className="r">{aud2(st.hardware_ex_gst)}</td></tr>
       {st.discounts.map((d) => <tr key={d.code}><td>Discount: {d.code.replace("_", " ")}</td><td className="r">−{aud2(d.amount_inc_gst)} inc GST</td></tr>)}
       <tr><td>GST</td><td className="r">{aud2(st.gst)}</td></tr>
       <tr><td><strong>Total inc GST</strong></td><td className="r"><strong>{aud2(st.price_inc_gst)}</strong></td></tr>
@@ -202,6 +203,7 @@ export default async function Record({ params, searchParams }: { params: Promise
         {state === "signed" && (<>
           <h2 style={{ marginTop: 20 }}>How would you like to pay?</h2>
           <p className="muted small">One payment for everything. Paying from your bank{shown.stack.amount_payable <= PAYTO_MAX ? " (PayTo or transfer)" : " by transfer"} saves about 1%.</p>
+          <ul className="guar small" style={{ margin: "4px 0 12px" }}><li>10 business days to change your mind, full refund</li><li>Paid straight to {SELLER.name}, never to an installer</li></ul>
           {online && shown.stack.amount_payable <= PAYTO_MAX && <form action={payOnline}><input type="hidden" name="token" value={token} /><input type="hidden" name="method" value="payto" />
             <button className="btn block" type="submit">PayTo: approve in your banking app (save about 1%)</button></form>}
           {online && <form action={payOnline} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} /><input type="hidden" name="method" value="card" />
@@ -211,6 +213,7 @@ export default async function Record({ params, searchParams }: { params: Promise
           {!online && <p><button className="btn ghost block" disabled>Card — available at launch</button></p>}
           {financeOpts.map((fp) => <form key={fp.id} action={payFinance} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} /><input type="hidden" name="provider" value={fp.id} />
             <button className="btn ghost block" type="submit">Finance with {fp.name}{fp.blurb ? `: ${fp.blurb.toLowerCase()}` : ""}</button></form>)}
+          <div className="scam"><strong>We&apos;ll never email you new bank details.</strong> If anyone asks you to pay a different account, don&apos;t pay. Call us on {SELLER.phone} to check.</div>
           <Breakdown q={shown} />
         </>)}
 
@@ -238,6 +241,7 @@ export default async function Record({ params, searchParams }: { params: Promise
               <BankRows b={bankAcct} />
             </tbody></table>
             <p className="muted small">Once your payment lands we&apos;ll email you to pick your install day.</p>
+            <div className="scam"><strong>We&apos;ll never email you new bank details.</strong> If anyone asks you to pay a different account, don&apos;t pay. Call us on {SELLER.phone} to check.</div>
             {state === "payment_pending" && <form action={changeHowIPay}><input type="hidden" name="token" value={token} /><button className="btn ghost sm" type="submit">Change how I pay</button></form>}
           </>)}
           <p className="small"><a href={`/quote/${token}/doc/agreement`} target="_blank">Your signed agreement (PDF)</a></p>

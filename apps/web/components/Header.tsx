@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { setPostcode } from "@/app/actions";
 import { db } from "@dfrnt/db";
+import { SELLER } from "@/lib/legal";
+import { getSetting } from "@/lib/settings";
 
 /** Reviews and Real installs only appear in the menus once there's something real to show. */
 async function proof() {
@@ -27,7 +29,7 @@ export async function Header({ postcode, back = "/" }: { postcode: string; back?
       <div className="wrap">
         <div className="left">
           <details className="menu"><summary aria-label="Menu">☰</summary>
-            <div className="drawer">{links.map(([h, t]) => <Link key={h} href={h!}>{t}</Link>)}<Link href="/rebates">Rebate calculator</Link><Link href="/beat-my-quote">Beat my quote</Link>{pr.reviews && <Link href="/reviews">Reviews</Link>}{pr.installs && <Link href="/installs">Real installs</Link>}<Link href="/contact">Talk to us</Link></div>
+            <div className="drawer">{links.map(([h, t]) => <Link key={h} href={h!}>{t}</Link>)}<Link href="/rebates">Rebate calculator</Link><Link href="/faq">Questions</Link><Link href="/beat-my-quote">Beat my quote</Link>{pr.reviews && <Link href="/reviews">Reviews</Link>}{pr.installs && <Link href="/installs">Real installs</Link>}<Link href="/contact">Talk to us</Link></div>
           </details>
         </div>
         <div className="center"><Wordmark /></div>
@@ -50,15 +52,21 @@ export async function Header({ postcode, back = "/" }: { postcode: string; back?
 
 export async function Footer() {
   const pr = await proof();
+  const t = await getSetting("trust");
+  const tel = SELLER.phone.replace(/\s/g, "");
   return (
     <footer>
       <div className="wrap cols">
         <div><Wordmark size={26} /><p>Solar and home batteries for South East Queensland. One price, installed, after rebates.</p></div>
         <div><Link href="/systems">All systems</Link><br /><Link href="/batteries">Battery only</Link><br /><Link href="/estimate">Find my system</Link><br /><Link href="/price-list">Price list</Link><br /><Link href="/price-index">Price Index</Link><br /><Link href="/rebates">Rebate calculator</Link><br /><Link href="/beat-my-quote">Beat my quote</Link>{pr.reviews && <><br /><Link href="/reviews">Reviews</Link></>}{pr.installs && <><br /><Link href="/installs">Real installs</Link></>}</div>
-        <div><Link href="/how-it-works">How it works</Link><br /><Link href="/about">About</Link><br /><Link href="/warranty">Warranty</Link><br /><Link href="/learn">Learn</Link><br /><Link href="/refer">Refer a friend</Link><br /><Link href="/creators">Creators</Link></div>
+        <div><Link href="/how-it-works">How it works</Link><br /><Link href="/faq">Questions</Link><br /><Link href="/about">About</Link><br /><Link href="/warranty">Warranty</Link><br /><Link href="/learn">Learn</Link><br /><Link href="/refer">Refer a friend</Link><br /><Link href="/creators">Creators</Link></div>
         <div><Link href="/brands/solax">SolaX</Link><br /><Link href="/brands/sungrow">Sungrow</Link><br /><Link href="/brands/goodwe">GoodWe</Link><br /><Link href="/installers/apply">For installers</Link><br /><Link href="/contact">Talk to us</Link><br /><Link href="/agreement">Agreement</Link><br /><Link href="/terms">Terms</Link><br /><Link href="/privacy">Privacy</Link></div>
       </div>
-      <div className="wrap small" style={{ marginTop: 24, opacity: .8 }}>Prices include GST and installation. Rebates are Small-scale Technology Certificates under the Small-scale Renewable Energy Scheme, including the Cheaper Home Batteries Program, assigned to us and taken off your price.</div>
+      <div className="wrap small biz" style={{ marginTop: 24 }}>
+        <strong>{SELLER.name}</strong> trading as {SELLER.trading} · ABN {SELLER.abn}{t.licence ? ` · ${t.licence}` : ""}{t.insurance ? ` · ${t.insurance}` : ""}<br />
+        {t.address ? `${t.address} · ` : ""}<a href={`tel:${tel}`}>{SELLER.phone}</a> · <a href={`mailto:${SELLER.email}`}>{SELLER.email}</a>{t.hours ? ` · Calls answered ${t.hours}` : ""}
+      </div>
+      <div className="wrap small" style={{ marginTop: 12, opacity: .8 }}>Installs by licensed electricians accredited with Solar Accreditation Australia. Prices include GST and installation. Rebates are Small-scale Technology Certificates under the Small-scale Renewable Energy Scheme, including the Cheaper Home Batteries Program, assigned to us and taken off your price.</div>
     </footer>
   );
 }

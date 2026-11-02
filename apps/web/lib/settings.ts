@@ -16,7 +16,11 @@ export interface FinanceProvider { id: string; name: string; url: string; blurb:
 export interface FinanceSettings { providers: FinanceProvider[] }
 /** Where bank transfers go. Entered by staff in Ops → Payments; never hard-coded. */
 export interface BankSettings { account_name: string; bsb: string; account_number: string; bank: string }
-export interface Trust { founder_line: string; founder_video: string; licence: string; insurance: string; accreditations: string; callback_to: string; google_review_url?: string }
+export interface Trust { founder_line: string; founder_video: string; licence: string; insurance: string; accreditations: string; callback_to: string; google_review_url?: string;
+  /** Launch copy (3 Nov 2026). Blank = hidden on the site. */
+  founder_quote?: string; address?: string; hours?: string; callback_minutes?: string;
+  /** About page team, one per line: Name | Role | One line. A line with no role is hidden. */
+  team?: string }
 
 const DEFAULTS = {
   design_check: { fee_on: false, amount: 99 } as DesignCheck,
@@ -31,7 +35,10 @@ const DEFAULTS = {
     { id: "plenti", name: "Plenti", url: "", blurb: "Green loan for solar and batteries", on: false },
     { id: "handypay", name: "Handypay", url: "", blurb: "Payment plan", on: false },
   ] } as FinanceSettings,
-  trust: { founder_line: "Built by the team that grew InStyle Solar to 29,000+ installs.", founder_video: "", licence: "", insurance: "", accreditations: "", callback_to: "hello@dfrntsolar.com.au" } as Trust,
+  trust: { founder_line: "Built by the team that grew InStyle Solar to 29,000+ installs.", founder_video: "", licence: "", insurance: "", accreditations: "", callback_to: "hello@dfrntsolar.com.au",
+    founder_quote: "I spent ten years selling solar the old way: sales visits, a price on the night, pressure to sign. DFRNT Solar is the opposite. Every price is published, every installer is checked, and you decide in your own time.",
+    address: "", hours: "", callback_minutes: "",
+    team: "Karl Brown | Founder | Founded InStyle Solar, which installed 29,000+ systems and ranked #3 on the AFR Fast 100.\nMel | Operations and accounts | Makes sure every job, payment and document is right.\nJeremy | Customer care | The person who answers when you call.\nJayden |  | " } as Trust,
 };
 type Key = keyof typeof DEFAULTS;
 

@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { configured } from "@/lib/configure";
-import { yieldFor } from "@dfrnt/engine";
+import { yieldFor, batteryFactor, deemingYears } from "@dfrnt/engine";
+import { estimateSaving } from "@/lib/saving";
 import { energySettings } from "@/lib/energy";
 import { configOptions, findSystem, priceSystem, type ConfigInput } from "@dfrnt/engine";
 import { Share } from "@/components/Share";
@@ -52,6 +53,14 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const next = await nextDays(postcode, jobNeeds, 3);
   const earliest = next === null ? null : next?.[0];
   const rulesPanel = data.rules.panels[s.config.panelSku]?.model;
+  const saving = await estimateSaving({ postcode, panelKw: c.panel_kw ?? 0, batteryKwh: c.usable_kwh ?? 0, price: st.amount_payable }).catch(() => null);
+  const today = todayAEST();
+  const changes = [...new Set([...data.rebates.battery_factor.map((x) => x.from), ...data.rebates.solar_deeming.map((x) => x.from)])].filter((d) => d > today).sort().slice(0, 3)
+    .map((d) => ({ d, bf: batteryFactor(d, data.rebates), dy: deemingYears(d, data.rebates) }));
+  const nextStep = q.window.window_end ? new Date(Date.parse(`${q.window.window_end}T00:00:00Z`) + 86400_000).toISOString().slice(0, 10) : null;
+  const rebateLine = !q.window.window_end ? `This price is held until ${longDate(q.window.lock_until)}.`
+    : q.window.lock_until < q.window.window_end ? `This price is held until ${longDate(q.window.lock_until)}. The rebate steps down on ${longDate(nextStep!)}, so it applies to installs done by ${longDate(q.window.window_end)}. You see your install dates before you pay.`
+    : `This price is held until ${longDate(q.window.window_end)}, the last day of this rebate step. Installs must be done by then, and you see your dates before you pay.`;
   const parts = c.bom.filter((b) => !b.included && !b.sku.startsWith("BOS") && !b.sku.startsWith("MNT"));
   return (
     <>
@@ -91,7 +100,12 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
               {r.battery_stcs > 0 && <tr><td>Less assignment of STCs, battery ({r.battery_stcs} certificates)</td><td className="r">−{aud2(r.battery_rebate)}</td></tr>}
               <tr className="total"><td>You pay</td><td className="r">{aud2(st.amount_payable)}</td></tr>
             </tbody></table>
-            <p className="muted small">Rebates for postcode {postcode} (zone {r.zone}) and an install on or before {longDate(q.window.lock_until)}. GST is charged on the full price before rebates, as the law requires.</p>
+            <p className="muted small">Rebates for postcode {postcode} (zone {r.zone}) at today&apos;s rates. {rebateLine} GST is charged on the full price before rebates, as the law requires.</p>
+            {saving && <div className="card" style={{ marginTop: 18 }}>
+              <h3 style={{ marginTop: 0 }}>What it could save you</h3>
+              <p style={{ margin: 0 }}>About <strong>{aud(saving.saving)} a year</strong> for a typical home in {postcode}{saving.payback_years ? <>, paying for itself in about <strong>{saving.payback_years} years</strong></> : null}.</p>
+              <p className="small muted" style={{ margin: "8px 0 0" }}>Estimate only. Assumes a home using {saving.day_kwh} kWh a day{saving.existing_kw ? `, ${saving.existing_kw} kW of existing solar` : ""}, panels making {saving.yield} kWh per kW a day ({saving.city} average), {saving.usage_c}c per kWh to buy and {saving.fit_c}c to sell, less {saving.allowance_pct}% for cloudy spells, and no change in prices. Your bills will differ. <Link href="/estimate">Use your own bill</Link> for a closer figure.</p>
+            </div>}
           </div>
           <aside className="buybox">
             <p className="eyebrow" style={{ marginBottom: 6 }}>Size it to your home</p>
@@ -104,11 +118,21 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
                 solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message) }} />
             <table className="incl" style={{ marginTop: 6 }}><tbody>
               <tr><td className="k">Next free days</td><td>{next?.length ? <strong>{next.map((d) => longDate(d)).join(" · ")}</strong> : next === null ? "Not in your area yet — join the waitlist" : "Confirmed when you book"}<br /><span className="small muted">{next?.length ? "From installers' live calendars. You pick your day after paying." : "From your installer's real free days"}</span></td></tr>
-              {q.window.window_end && <tr><td className="k">Rebate</td><td>{aud(st.less_stcs)} off now. Locked for installs on or before {longDate(q.window.window_end)}.</td></tr>}
+              <tr><td className="k">Rebate</td><td>{aud(st.less_stcs)} off now. {rebateLine}
+                {changes.length > 0 && <details className="small" style={{ marginTop: 4 }}><summary>How the rebate changes</summary>
+                  {changes.map((x) => <div key={x.d}>From {longDate(x.d)}: {c.usable_kwh ? `battery factor ${x.bf}` : ""}{c.usable_kwh && c.panel_kw ? " · " : ""}{c.panel_kw ? `solar deeming ${x.dy} years` : ""}</div>)}
+                  <span className="muted">Set by the Clean Energy Regulator. A lower number means a smaller rebate.</span></details>}</td></tr>
               <tr><td className="k">Installed by</td><td>A licensed, SAA-accredited local electrician, named before you pay.</td></tr>
               <tr><td className="k">Warranty</td><td>Panels: manufacturer product warranty + 30 yr performance · inverter 10 yr · battery 10 yr · our workmanship 10 yr</td></tr>
             </tbody></table>
             {addons.length > 0 && <p className="small muted" style={{ marginTop: 10 }}>Add at checkout: {addons.map((a) => a.name).join(", ")}.</p>}
+            <ul className="guar card small" style={{ marginTop: 14, padding: 14 }}>
+              <li>Your installer confirms the price from your photos before you pay anything</li>
+              <li>Change your mind within 10 business days of signing: full refund</li>
+              {q.window.window_end && <li>If we cause a delay past the rebate date, your price stays the same</li>}
+              <li>Nothing is added on the day without your written OK</li>
+              <li style={{ listStyle: "none" }} className="nock"><Link href="/faq">Read the straight answers</Link></li>
+            </ul>
             <Trust />
             <CallBack back={`/systems/${slug}`} state={sp.callback} />
           <p style={{ marginTop: 12 }}><Share title={s.title} text={`${s.brand} ${s.title}: ${aud(q.stack.amount_payable)} installed after rebates.`} /></p>

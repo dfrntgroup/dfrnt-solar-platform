@@ -19,6 +19,17 @@ type Row = Awaited<ReturnType<typeof priced>>[number];
 const closest = (rows: Row[], kwh: number, kw: number) => [...rows].sort((x, y) =>
   Math.abs(x.q.config.usable_kwh - kwh) + Math.abs((x.q.config.panel_kw ?? 0) - kw) - (Math.abs(y.q.config.usable_kwh - kwh) + Math.abs((y.q.config.panel_kw ?? 0) - kw)))[0];
 
+/** The like-for-like pair: closest to each other first, then to the target size. */
+function matched(a: Row[], b: Row[], kwh: number, kw: number): [Row | undefined, Row | undefined] {
+  const d = (x: Row, y: Row) => Math.abs(x.q.config.usable_kwh - y.q.config.usable_kwh) + Math.abs((x.q.config.panel_kw ?? 0) - (y.q.config.panel_kw ?? 0));
+  let best: [Row, Row] | null = null, score = Infinity;
+  for (const x of a) for (const y of b) {
+    const sc = d(x, y) * 3 + Math.abs(x.q.config.usable_kwh - kwh) + Math.abs((x.q.config.panel_kw ?? 0) - kw);
+    if (sc < score) { score = sc; best = [x, y]; }
+  }
+  return best ?? [closest(a, kwh, kw), closest(b, kwh, kw)];
+}
+
 /** A23: brand-vs-brand pages built only from our own catalogue and live prices. No claims we can't back. */
 export default async function Pair({ params, searchParams }: { params: Promise<{ pair: string }>; searchParams: Promise<Record<string, string>> }) {
   const { pair } = await params;
@@ -27,8 +38,8 @@ export default async function Pair({ params, searchParams }: { params: Promise<{
   const postcode = await sitePostcode(await searchParams);
   const all = await priced(postcode, (s) => [ka, kb].includes(s.brand.toLowerCase()));
   const of = (k: string) => all.filter((r) => r.s.brand.toLowerCase() === k);
-  const complete = [ka, kb].map((k) => closest(of(k).filter((r) => (r.q.config.panel_kw ?? 0) > 0), 15, 10));
-  const battery = [ka, kb].map((k) => closest(of(k).filter((r) => !(r.q.config.panel_kw ?? 0)), 15, 0));
+  const complete = matched(of(ka).filter((r) => (r.q.config.panel_kw ?? 0) > 0), of(kb).filter((r) => (r.q.config.panel_kw ?? 0) > 0), 15, 10);
+  const battery = matched(of(ka).filter((r) => !(r.q.config.panel_kw ?? 0)), of(kb).filter((r) => !(r.q.config.panel_kw ?? 0)), 15, 0);
   const attr: [string, (r: Row) => string][] = [
     ["You pay, installed", (r) => aud(r.q.stack.amount_payable)],
     ["Rebates taken off", (r) => aud(r.q.stack.less_stcs)],

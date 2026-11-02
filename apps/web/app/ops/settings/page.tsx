@@ -36,6 +36,11 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <F name="insurance" label="Insurance" value={t.insurance} hint="e.g. $20m public liability" />
           <F name="callback_to" label="Call-back requests go to" value={t.callback_to} />
           <F name="google_review_url" label="Google review link" value={t.google_review_url ?? ""} hint="From your Google Business Profile: Ask for reviews → copy link. Customers who give 4–5 stars are offered it." />
+          <F name="address" label="Office address to publish" value={t.address ?? ""} hint="Shown in the footer and on Talk to us. Hidden until filled." />
+          <F name="hours" label="Call hours" value={t.hours ?? ""} hint="e.g. 8 am – 6 pm Mon–Fri, 9 am – 1 pm Sat. Hidden until filled." />
+          <F name="callback_minutes" label="Call-back promise (minutes)" value={t.callback_minutes ?? ""} hint="e.g. 15. Shown only when call hours are filled in. Only promise what the phone roster can keep." />
+          <label className="small" style={{ display: "block", marginTop: 10 }}>Founder quote (home page)<textarea name="founder_quote" defaultValue={t.founder_quote ?? ""} style={{ ...input, minHeight: 80 }} /><span className="small muted">Blank hides the quote.</span></label>
+          <label className="small" style={{ display: "block", marginTop: 10 }}>Team on the About page<textarea name="team" defaultValue={t.team ?? ""} style={{ ...input, minHeight: 100 }} /><span className="small muted">One person per line: Name | Role | One line about them. A person with no role is hidden.</span></label>
           <button className="btn">Save</button>
         </form>
       </div>

@@ -327,7 +327,8 @@ export async function saveTrust(f: FormData) {
     if (v("callback_to") && !/^\S+@\S+\.\S+$/.test(v("callback_to"))) throw new Error("Call-back email isn't valid");
     const g = v("google_review_url");
     if (g && !/^https:\/\//.test(g)) throw new Error("The Google review link must start with https://");
-    await setSetting("trust", { founder_line: v("founder_line"), founder_video: video, licence: v("licence"), insurance: v("insurance"), accreditations: v("accreditations"), callback_to: v("callback_to"), google_review_url: g }, me.name);
+    await setSetting("trust", { founder_line: v("founder_line"), founder_video: video, licence: v("licence"), insurance: v("insurance"), accreditations: v("accreditations"), callback_to: v("callback_to"), google_review_url: g,
+      founder_quote: s(f, "founder_quote").slice(0, 600), address: v("address"), hours: v("hours"), callback_minutes: v("callback_minutes").replace(/\D/g, "").slice(0, 3), team: s(f, "team").slice(0, 2000) }, me.name);
   });
 }
 export async function opsDesignFeePaid(f: FormData) {

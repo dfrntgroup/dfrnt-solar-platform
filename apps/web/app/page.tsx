@@ -3,6 +3,7 @@ import { publishedReviews } from "@/lib/reviews";
 import { Header, Footer } from "@/components/Header";
 import { SystemCard } from "@/components/SystemCard";
 import { earliestFor } from "@/lib/capacity";
+import { getSetting } from "@/lib/settings";
 import { aud, priced, rebateDate, sitePostcode, windowEnd, longDate } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,8 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const top = all.filter(({ s }) => ["solax-10kw-15kwh", "goodwe-10kw-16kwh", "sungrow-10kw-20kwh"].includes(s.slug));
   const from = Math.min(...all.map(({ q }) => q.stack.amount_payable));
   const end = await windowEnd();
+  const t = await getSetting("trust");
+  const anchor = all.find(({ s }) => s.slug === "solax-10kw-15kwh") ?? top[0];
   return (
     <>
       <Header postcode={postcode} />
@@ -39,8 +42,23 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
       </div></div>
 
       <div className="checks"><div className="wrap"><ul>
-        <li>Price shown is the price you pay, installed</li><li>Rebates taken off for you, line by line</li><li>Your home checked from photos before you pay</li><li>One contract and one payment</li>
+        <li>Licensed electricians, SAA-accredited</li><li>10 business days to change your mind, full refund</li><li>One price, nothing added later without your OK</li><li>Sunshine Coast family business</li>
       </ul></div></div>
+
+      <section className="shade"><div className="wrap"><div className="grid g2">
+        {anchor && <div className="card">
+          <p className="eyebrow" style={{ marginBottom: 4 }}>Most homes choose</p>
+          <h3 style={{ margin: "0 0 6px" }}>{anchor.s.brand} {anchor.s.title}</h3>
+          <div className="pay" style={{ margin: "4px 0" }}>{aud(anchor.q.stack.amount_payable)}</div>
+          <p className="small muted" style={{ margin: "0 0 12px" }}>Installed, inc GST, rebate of {aud(anchor.q.stack.less_stcs)} already off · postcode {postcode}</p>
+          <Link className="btn" href={`/systems/${anchor.s.slug}`}>See this system</Link>
+        </div>}
+        <div className="card founder">
+          <div className="face"><span className="avatar" aria-hidden>KB</span><div><strong>Karl Brown, founder</strong><br /><span className="small muted">Founded InStyle Solar: 29,000+ installs, AFR Fast 100 #3</span></div></div>
+          {t.founder_quote && <p style={{ margin: "12px 0 0" }}>&ldquo;{t.founder_quote}&rdquo;</p>}
+          <p className="small" style={{ margin: "10px 0 0" }}>{t.founder_video ? <a className="link" href={t.founder_video} target="_blank" rel="noreferrer">Watch: why we built this</a> : <Link className="link" href="/about">Our story</Link>}</p>
+        </div>
+      </div></div></section>
 
       <section><div className="wrap">
         <p className="eyebrow">Where to start</p>

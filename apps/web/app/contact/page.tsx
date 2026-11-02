@@ -1,5 +1,7 @@
 import { Header, Footer } from "@/components/Header";
 import { sitePostcode } from "@/lib/site";
+import { getSetting } from "@/lib/settings";
+import { SELLER } from "@/lib/legal";
 import { contactUs } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +22,7 @@ function days() {
 export default async function Contact({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
   const sp = await searchParams;
   const postcode = await sitePostcode(sp);
+  const t = await getSetting("trust");
   const input = { width: "100%", padding: 10, border: "1px solid var(--line)", borderRadius: 6, font: "inherit" } as const;
   return (
     <>
@@ -27,6 +30,11 @@ export default async function Contact({ searchParams }: { searchParams: Promise<
       <section><div className="wrap" style={{ maxWidth: 560 }}>
         <p className="eyebrow">Talk to us</p><h1>Ask us anything, or book a call.</h1>
         <p className="lead">A real person replies within one business day. No salespeople: we&apos;ll answer the question, not chase a sale.</p>
+        <div className="card" style={{ marginBottom: 18 }}>
+          <strong>Talk to a real person</strong>
+          <p style={{ margin: "6px 0 0" }}><a href={`tel:${SELLER.phone.replace(/\s/g, "")}`}><strong>{SELLER.phone}</strong></a>{t.hours ? ` · ${t.hours}` : ""}{t.address ? <><br /><span className="small muted">{t.address}</span></> : null}</p>
+          <p className="small" style={{ margin: "6px 0 0" }}>{t.hours && t.callback_minutes ? `Ask for a call-back and we'll ring you within ${t.callback_minutes} minutes in those hours. ` : ""}Nobody will call you unless you ask.</p>
+        </div>
         {sp.sent ? <div className="ok">Thanks — a real person will get back to you within one business day.</div> : (
           <form action={contactUs}>
             <input type="hidden" name="quote" value={sp.quote ?? ""} />
