@@ -143,3 +143,23 @@ describe("labour lines survive a re-price round-trip (review fix, 3 Nov 2026)", 
     expect(third).toEqual(second);
   });
 });
+
+describe("GoodWe ESA default module is the Lynx D G2 9.0 (3 Nov 2026)", () => {
+  it("3 modules = 26.55 kWh usable, 146 battery STCs at factor 6.8, 4.5 kW per module capped by the inverter", async () => {
+    const { findSystem, priceSystem } = await import("../src");
+    const s = findSystem("goodwe-10kw-18kwh")!;
+    const q = priceSystem({ ...s, config: { ...s.config, batteryModules: 3 } }, { postcode: "4012", asOf: "2026-11-03" });
+    expect(q.config.usable_kwh).toBeCloseTo(26.55, 2);
+    expect(q.rebate.battery_stcs).toBe(146);
+    expect(q.config.bom.some((b) => b.sku === "PRT-GW-LX-D-9.0-G20" && b.qty === 3)).toBe(true);
+    expect(q.config.stacks?.power_kw).toBe(10);
+  });
+  it("the archived 2026-11-01.1 rules still price the 8.3 module (secured quotes keep their price)", async () => {
+    const { ARCHIVED_RULES, ARCHIVED_CATALOGUES, findSystem, priceSystem } = await import("../src");
+    const rules = ARCHIVED_RULES["2026-11-01.1"]!, cat = ARCHIVED_CATALOGUES["2026-11-01.1"]!;
+    const s = findSystem("goodwe-10kw-16kwh", cat)!;
+    const q = priceSystem(s, { postcode: "4012", asOf: "2026-11-03" }, { rules, catalogue: cat });
+    expect(q.config.usable_kwh).toBe(16);
+    expect(q.config.bom.some((b) => b.sku === "PRT-GW-LX-D-8.3-G20")).toBe(true);
+  });
+});

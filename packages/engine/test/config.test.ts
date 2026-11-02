@@ -16,7 +16,7 @@ describe("config engine", () => {
     const o = run({ familyKey: "goodwe_esa_1p", panelCount: 0, panelSku: "", batteryModules });
     expect(o.ok).toBe(true);
     expect(o.stacks?.modules).toEqual([batteryModules]);
-    expect(o.usable_kwh).toBe(batteryModules * 8);
+    expect(o.usable_kwh).toBeCloseTo(batteryModules * 8.85, 2); // GW9.0-BAT-D-G20, 8.85 kWh CEC usable
   });
 
   it("battery power never exceeds what the inverter can deliver", () => {
@@ -175,7 +175,7 @@ describe("config engine", () => {
   it("GoodWe ESA 1P, 21 panels, 2 modules, whole-home: 10K, kit included", () => {
     const o = run({ familyKey: "goodwe_esa_1p", panelCount: 21, batteryModules: 2, backup: "whole_home" });
     expect(o.inverter?.sku).toBe("INV-GW-EHA-10K");
-    expect(o.usable_kwh).toBe(16);
+    expect(o.usable_kwh).toBeCloseTo(17.7, 2); // 2 × GW9.0-BAT-D-G20 at 8.85 usable (default from 3 Nov 2026)
     expect(o.blockers).toEqual([]);
     expect(skus(o)).toEqual(skus(run({ familyKey: "goodwe_esa_1p", panelCount: 21, batteryModules: 2 })));
   });

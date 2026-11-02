@@ -1,5 +1,5 @@
 {
-  "version": "2026-11-01.1",
+  "version": "2026-11-03.1",
   "notes": "Ported from Solar Ops config-rules.default.json 2026-10-30.1 (Lovable commit 6bff73a). Changes: Anker XE removed (dropped by decision); SVC-BAT-MODULE trigger retired (battery labour is per stack). Items in verify[] need manufacturer confirmation before go-live.",
   "design_limits": { "domestic_max_dc_v": 600, "cell_temp_min_c": -10, "cell_temp_max_c": 75, "isc_design_factor": 1.25, "no_battery_array_ratio_max": 1.33, "preferred_max_oversize": 1.33, "with_battery_array_rule": "manufacturer_max_dc_w" },
   "panels": {
@@ -76,10 +76,10 @@
       "expansion_window_months": 0, "warranty": "10 yr / 70% / 26.68 MWh (BAT 10.0)", "status": "pending_cec"
     },
     "goodwe_lynx_d_g2": {
-      "module": { "sku": "PRT-GW-LX-D-8.3-G20", "model": "GW8.3-BAT-D-G20", "kwh_nominal": 8.32, "kwh_usable_cec": 8.0, "kw": 8.3, "kg": 80, "h_mm": 240, "w_mm": 650, "d_mm": 380, "osw_sku": "GW-GW8.3-BAT-D-G20" },
+      "module": { "sku": "PRT-GW-LX-D-9.0-G20", "model": "GW9.0-BAT-D-G20", "kwh_nominal": 9.0, "kwh_usable_cec": 8.85, "kw": 4.5, "c_rate": 0.5, "kg": 77, "h_mm": 326, "w_mm": 800, "d_mm": 270, "osw_sku": "GW-GW9.0-BAT-D-G20", "cec_until": "2027-12-31", "note": "Default from 3 Nov 2026: in stock at OSW ($2,100, $237/usable kWh), CEC-listed 8.85 kWh usable (9 Jul 2026), same module competitors quote. 0.5C → 4.5 kW per module." },
       "alt_modules": {
         "PRT-GW-LX-D-5.1-G20": { "model": "GW5.1-BAT-D-G20", "kwh_nominal": 5.12, "kwh_usable_cec": 5.0, "kw": 5.1 },
-        "PRT-GW-LX-D-9.0-G20": { "model": "GW9.0-BAT-D-G20", "kwh_nominal": 9.0, "kwh_usable_cec": 8.85, "kw": 9.0 }
+        "PRT-GW-LX-D-8.3-G20": { "model": "GW8.3-BAT-D-G20", "kwh_nominal": 8.32, "kwh_usable_cec": 8.0, "kw": 8.3, "note": "Default until 3 Nov 2026 (OSW on request). Terry Meany job." }
       },
       "stack_parts": { "first": [], "additional": ["PRT-GW-ESA-EXPANSION-KIT"] },
       "rules": {
@@ -109,7 +109,7 @@
     "PRT-GW-DC-BREAKER-100A": "DC breaker 100 A", "PRT-GW-DC-BREAKER-125A": "DC breaker 125 A",
     "PRT-SIGEN-BAT-10.0": "Sigen BAT 10.0", "PRT-SIGEN-BAT-8.0": "Sigen BAT 8.0", "PRT-SIGEN-GATEWAY-HOME-SP": "Gateway Home SP AU", "PRT-SIGEN-GATEWAY-HOME-TP": "Gateway Home TP AU",
     "PRT-BARRIER-CFC-6MM": "Non-combustible barrier sheet, 6 mm CFC, per m2", "PRT-BOLLARD-PAIR": "Impact bollards, pair",
-    "PRT-GW-LX-D-8.3-G20": "GoodWe Lynx D G2 8.3 kWh module", "PRT-GW-ESA-EXPANSION-KIT": "GoodWe ESA expansion kit",
+    "PRT-GW-LX-D-8.3-G20": "GoodWe Lynx D G2 8.3 kWh module", "PRT-GW-LX-D-9.0-G20": "GoodWe Lynx D G2 9.0 kWh module", "PRT-GW-ESA-EXPANSION-KIT": "GoodWe ESA expansion kit",
     "PRT-DC-ISOLATOR": "DC isolator (extra string)", "BOS-KIT": "Balance of system kit",
     "MNT-TIN-PP": "Racking, tin roof, per panel", "MNT-TILE-PP": "Racking, tile roof, per panel", "MNT-KLIPLOK-PP": "Racking, Klip-Lok roof, per panel"
   }

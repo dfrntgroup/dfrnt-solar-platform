@@ -13,5 +13,10 @@ const config: NextConfig = {
   transpilePackages: ["@dfrnt/engine", "@dfrnt/db"],
   experimental: { serverActions: { bodySizeLimit: "40mb" } },
   async headers() { return [{ source: "/:path*", headers: security }]; },
+  // GoodWe default module moved to the 9.0 kWh Lynx D G2 (3 Nov 2026): old system links keep working.
+  async redirects() {
+    return [["goodwe-10kw-16kwh", "goodwe-10kw-18kwh"], ["goodwe-10kw-32kwh", "goodwe-10kw-35kwh"], ["goodwe-3p-14kw-24kwh", "goodwe-3p-14kw-27kwh"], ["goodwe-battery-16kwh", "goodwe-battery-18kwh"]]
+      .map(([a, b]) => ({ source: `/systems/${a}`, destination: `/systems/${b}`, permanent: true }));
+  },
 };
 export default config;

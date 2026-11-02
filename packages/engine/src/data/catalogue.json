@@ -1,5 +1,5 @@
 {
-  "version": "2026-11-01.1",
+  "version": "2026-11-03.1",
   "notes": "Launch catalogue (O12). Each system is a saved configuration; price, rebate and you-pay are computed live by the engine for the visitor's postcode and date. Sigenergy is held until CEC listing. Edit this file to add, retire or reorder systems.",
   "systems": [
     { "slug": "solax-10kw-15kwh", "title": "10 kW solar + 15.3 kWh battery", "brand": "SolaX", "tier": "core", "badge": "Most chosen", "kind": "solar_battery",
@@ -14,19 +14,19 @@
       "config": { "familyKey": "sungrow_shrs", "panelSku": "PNL-RISEN-475", "panelCount": 21, "batteryModules": 4, "stacks": 1, "phases": 1, "inverterSku": "INV-SGR-SH10RS", "inverterMeterIntegration": true } },
     { "slug": "sungrow-6kw-15kwh", "title": "6.2 kW solar + 15 kWh battery", "brand": "Sungrow", "tier": "brand", "kind": "solar_battery",
       "config": { "familyKey": "sungrow_shrs", "panelSku": "PNL-RISEN-475", "panelCount": 13, "batteryModules": 3, "stacks": 1, "phases": 1, "inverterMeterIntegration": true } },
-    { "slug": "goodwe-10kw-16kwh", "title": "10 kW solar + 16 kWh battery", "brand": "GoodWe", "tier": "value", "kind": "solar_battery",
+    { "slug": "goodwe-10kw-18kwh", "title": "10 kW solar + 17.7 kWh battery", "brand": "GoodWe", "tier": "value", "kind": "solar_battery",
       "config": { "familyKey": "goodwe_esa_1p", "panelSku": "PNL-TRINA-475", "panelCount": 21, "batteryModules": 2, "stacks": 1, "phases": 1, "inverterMeterIntegration": true } },
-    { "slug": "goodwe-10kw-32kwh", "title": "10 kW solar + 32 kWh battery", "brand": "GoodWe", "tier": "value", "kind": "solar_battery",
+    { "slug": "goodwe-10kw-35kwh", "title": "10 kW solar + 35.4 kWh battery", "brand": "GoodWe", "tier": "value", "kind": "solar_battery",
       "config": { "familyKey": "goodwe_esa_1p", "panelSku": "PNL-TRINA-475", "panelCount": 21, "batteryModules": 4, "stacks": 1, "phases": 1, "inverterMeterIntegration": true } },
     { "slug": "solax-3p-12kw-30kwh", "title": "12.4 kW solar + 30.6 kWh battery, three phase", "brand": "SolaX", "tier": "core", "kind": "solar_battery",
       "config": { "familyKey": "solax_x3hybrid_g4", "panelSku": "PNL-LONGI-475", "panelCount": 26, "batteryModules": 6, "stacks": 1, "phases": 3, "inverterSku": "INV-SOLAX-HYB-15K", "inverterMeterIntegration": true } },
-    { "slug": "goodwe-3p-14kw-24kwh", "title": "14.3 kW solar + 24 kWh battery, three phase", "brand": "GoodWe", "tier": "value", "kind": "solar_battery",
+    { "slug": "goodwe-3p-14kw-27kwh", "title": "14.3 kW solar + 26.6 kWh battery, three phase", "brand": "GoodWe", "tier": "value", "kind": "solar_battery",
       "config": { "familyKey": "goodwe_esa_3p", "panelSku": "PNL-TRINA-475", "panelCount": 30, "batteryModules": 3, "stacks": 1, "phases": 3, "inverterSku": "INV-GW-ETA-15K", "inverterMeterIntegration": true } },
     { "slug": "solax-battery-15kwh", "title": "15.3 kWh battery, add to your solar", "brand": "SolaX", "tier": "core", "kind": "battery_only",
       "config": { "familyKey": "solax_x1vast", "panelSku": "", "panelCount": 0, "batteryModules": 3, "stacks": 1, "phases": 1, "inverterSku": "INV-SOLAX-VAST-5K", "inverterMeterIntegration": true } },
     { "slug": "sungrow-battery-15kwh", "title": "15 kWh battery, add to your solar", "brand": "Sungrow", "tier": "brand", "kind": "battery_only",
       "config": { "familyKey": "sungrow_shrs", "panelSku": "", "panelCount": 0, "batteryModules": 3, "stacks": 1, "phases": 1, "inverterSku": "INV-SGR-SH5.0RS", "inverterMeterIntegration": true } },
-    { "slug": "goodwe-battery-16kwh", "title": "16 kWh battery, add to your solar", "brand": "GoodWe", "tier": "value", "kind": "battery_only",
+    { "slug": "goodwe-battery-18kwh", "title": "17.7 kWh battery, add to your solar", "brand": "GoodWe", "tier": "value", "kind": "battery_only",
       "config": { "familyKey": "goodwe_esa_1p", "panelSku": "", "panelCount": 0, "batteryModules": 2, "stacks": 1, "phases": 1, "inverterSku": "INV-GW-EHA-5K", "inverterMeterIntegration": true } }
   ]
 }

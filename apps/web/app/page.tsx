@@ -14,7 +14,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const earliest = await earliestFor(postcode);
   const reviews = await publishedReviews(3);
   const all = await priced(postcode);
-  const top = all.filter(({ s }) => ["solax-10kw-15kwh", "goodwe-10kw-16kwh", "sungrow-10kw-20kwh"].includes(s.slug));
+  const top = all.filter(({ s }) => ["solax-10kw-15kwh", "goodwe-10kw-18kwh", "sungrow-10kw-20kwh"].includes(s.slug));
   const from = Math.min(...all.map(({ q }) => q.stack.amount_payable));
   const end = await windowEnd();
   const t = await getSetting("trust");

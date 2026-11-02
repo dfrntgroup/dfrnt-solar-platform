@@ -16,6 +16,6 @@ describe("configurator options", () => {
     expect(o.modules).not.toContain(7);
     console.log("sungrow modules", o.modules.join(","));
   });
-  it("GoodWe ESA allows 2–6 modules", () => expect(configOptions(base("goodwe-10kw-16kwh")).modules).toEqual([2, 3, 4, 5, 6]));
+  it("GoodWe ESA allows 2–6 modules", () => expect(configOptions(base("goodwe-10kw-18kwh")).modules).toEqual([2, 3, 4, 5, 6]));
   it("auto stacks splits 10 HS51 modules into two towers", () => expect(autoStacks({ ...base("solax-10kw-15kwh"), batteryModules: 10 })).toBe(2));
 });
