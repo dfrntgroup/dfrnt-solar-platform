@@ -1,5 +1,5 @@
 {
-  "version": "2026-11-03.1",
+  "version": "2026-11-03.2",
   "notes": "Ported from Solar Ops config-rules.default.json 2026-10-30.1 (Lovable commit 6bff73a). Changes: Anker XE removed (dropped by decision); SVC-BAT-MODULE trigger retired (battery labour is per stack). Items in verify[] need manufacturer confirmation before go-live.",
   "design_limits": { "domestic_max_dc_v": 600, "cell_temp_min_c": -10, "cell_temp_max_c": 75, "isc_design_factor": 1.25, "no_battery_array_ratio_max": 1.33, "preferred_max_oversize": 1.33, "with_battery_array_rule": "manufacturer_max_dc_w" },
   "panels": {
@@ -15,8 +15,8 @@
     "goodwe_ehb": { "brand": "GoodWe", "grammar": "tower", "phases": 1, "battery_family": "goodwe_lynx_f_g2", "launch": "value_pending_price", "default_panel": "PNL-RISEN-475" },
     "sigen_sp": { "brand": "Sigenergy", "grammar": "integrated", "phases": 1, "battery_family": "sigen_bat", "launch": "premium_pending_cec", "default_panel": "PNL-LONGI-475" },
     "sigen_tp": { "brand": "Sigenergy", "grammar": "integrated", "phases": 3, "battery_family": "sigen_bat", "launch": "premium_pending_cec", "default_panel": "PNL-LONGI-475" },
-    "goodwe_esa_1p": { "brand": "GoodWe", "grammar": "column", "phases": 1, "battery_family": "goodwe_lynx_d_g2", "launch": "value", "default_panel": "PNL-TRINA-475" },
-    "goodwe_esa_3p": { "brand": "GoodWe", "grammar": "column", "phases": 3, "battery_family": "goodwe_lynx_d_g2", "launch": "value", "default_panel": "PNL-TRINA-475" }
+    "goodwe_esa_1p": { "brand": "GoodWe", "grammar": "column", "phases": 1, "battery_family": "goodwe_lynx_d_g2", "launch": "value", "default_panel": "PNL-RISEN-475" },
+    "goodwe_esa_3p": { "brand": "GoodWe", "grammar": "column", "phases": 3, "battery_family": "goodwe_lynx_d_g2", "launch": "value", "default_panel": "PNL-RISEN-475" }
   },
   "inverters": {
     "INV-SOLAX-VAST-5K": { "family": "solax_x1vast", "model": "X1-VAST-5K", "ac_w": 4999, "max_dc_w": 10000, "max_dc_v": 600, "fault_v": 570, "mppt_v": [40, 560], "mppts": 3, "strings_per_mppt": 1, "a_per_mppt": 20, "isc_per_mppt": 25, "bat_v": [80, 480], "bat_ports": 2, "bat_a_one_tower": 30, "bat_a_two_towers": 25, "bat_a_splitter": 50, "backup_w": 4999, "backup": { "whole_home": { "parts": ["PRT-SOLAX-CHANGEOVER"], "labour": "SVC-EPS-WH-1P" } }, "cec_until": "2028-05-16", "battery_only": true },
