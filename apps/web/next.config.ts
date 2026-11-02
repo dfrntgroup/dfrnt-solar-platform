@@ -1,3 +1,4 @@
+// Deployed 2 Nov 2026: CRON_SECRET set.
 import type { NextConfig } from "next";
 
 const security = [
