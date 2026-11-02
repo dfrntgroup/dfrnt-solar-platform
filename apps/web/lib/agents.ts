@@ -7,13 +7,18 @@ export async function propose(agentId: string, action: string, payload: unknown,
   return { approval_id: a!.id as string, status: "pending" };
 }
 
-export async function executeProposal(id: string, approve: boolean, staffId: string, note?: string) {
+export async function executeProposal(id: string, approve: boolean, staffId: string, note?: string, edited?: Record<string, unknown>) {
   const [p] = await db()`select * from approvals where id = ${id} and status = 'pending'`;
   if (!p) throw new Error("Already decided");
   if (new Date(p.created_at as string).getTime() < Date.now() - 24 * 3600_000) {
     await db()`update approvals set status = 'expired', decided_by = ${staffId}, decided_at = now() where id = ${id}`;
+    if (p.agent_action_id) await db()`update agent_actions set outcome = 'expired' where id = ${p.agent_action_id}`;
     throw new Error("Proposal expired (24 h)");
   }
-  if (approve) await runOperation(p.action as string, p.payload, { type: "agent", id: p.proposer_id as string }, `Approved proposal ${id}${note ? `: ${note}` : ""}`);
+  if (p.proposer_id && String(p.proposer_id) === staffId) throw new Error("You can't approve your own proposal");
+  if (String(p.action).startsWith("agent.")) {
+    const { executeAgentProposal } = await import("./agent-runtime");
+    await executeAgentProposal({ id, proposer_id: p.proposer_id as string, payload: p.payload as never, agent_action_id: (p.agent_action_id as string) ?? null }, approve, edited);
+  } else if (approve) await runOperation(p.action as string, p.payload, { type: "agent", id: p.proposer_id as string }, `Approved proposal ${id}${note ? `: ${note}` : ""}`);
   await db()`update approvals set status = ${approve ? "approved" : "rejected"}, decided_by = ${staffId}, decided_at = now(), decision_note = ${note ?? null} where id = ${id}`;
 }

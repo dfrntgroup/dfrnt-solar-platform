@@ -100,6 +100,7 @@ export async function runDaily() {
   }
   out.service_plan = planMsgs;
   // B1: Xero.
+  try { const { runAgentsDaily } = await import("./agent-runtime"); out.agents = (await runAgentsDaily()) as never; } catch { /* shown in Ops → Agents */ }
   try { const { reconcileStripe } = await import("./stripe"); out.stripe = (await reconcileStripe()) as never; } catch { /* shown in Ops → Payments */ }
   try { const { syncXero } = await import("./xero"); out.xero = (await syncXero()) as never; } catch { /* shown in Ops → Xero */ }
   // G4: waitlist alerts where an installer now covers the postcode.
@@ -160,6 +161,7 @@ export async function runJobSheets() {
 export async function runCutoff() {
   const followups = await runCheckoutFollowups();
   const sheets = await runJobSheets();
+  try { const { processAgentQueue } = await import("./agent-runtime"); await processAgentQueue(); } catch { /* shown in Ops → Agents */ }
   const dow = new Date(Date.now() + 10 * 3600_000).getUTCDay();
   if (dow === 0 || dow === 6) return { followups, sheets, reassigned: 0, to_ops: 0, weekend: true };
   const waiting = await db()`select id, installer_id, postcode, pricing_reasons from quotes

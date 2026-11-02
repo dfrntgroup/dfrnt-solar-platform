@@ -60,7 +60,9 @@ async function decideApproval(f: FormData, approve: boolean) {
   await run("/ops/approvals", async () => {
     const id = s(f, "id");
     const { executeProposal } = await import("@/lib/agents");
-    await executeProposal(id, approve, me.id, s(f, "note"));
+    const edited: Record<string, string> = {};
+    for (const [k, v] of f.entries()) if (k.startsWith("edit_")) edited[k.slice(5)] = String(v).trim();
+    await executeProposal(id, approve, me.id, s(f, "note"), Object.keys(edited).length ? edited : undefined);
   });
 }
 export async function saveInstaller(f: FormData) {

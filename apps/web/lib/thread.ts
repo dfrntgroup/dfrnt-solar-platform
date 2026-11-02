@@ -13,5 +13,6 @@ export async function postMessage(token: string, author: "customer" | "installer
   const [inst] = q.installer_id ? await db()`select business_name, email from installers where id = ${q.installer_id}` : [];
   const preview = text.length > 300 ? `${text.slice(0, 300)}…` : text;
   if (author !== "customer") await queueMessage("M21", q.token, q.customer_email, { name: q.customer_name, from: author === "installer" ? (inst?.business_name as string) ?? "Your installer" : "DFRNT Solar", preview });
+  if (author === "customer") { const { enqueueAgent } = await import("./agent-runtime"); await enqueueAgent("support", "job.message", q.id).catch(() => null); }
   if (author !== "installer" && inst?.email) await queueMessage("I3", q.token, inst.email as string, { name: inst.business_name as string, from: author === "customer" ? q.customer_name ?? "The customer" : "DFRNT Solar", preview, jobId: q.id });
 }

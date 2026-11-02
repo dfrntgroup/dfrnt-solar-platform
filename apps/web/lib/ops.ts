@@ -102,6 +102,10 @@ export async function openTicket(t: { kind: string; name?: string; email?: strin
   const [row] = await db()`insert into tickets (kind, name, email, phone, subject, body, quote_id, postcode)
     values (${t.kind}, ${t.name ?? null}, ${t.email ?? null}, ${t.phone ?? null}, ${t.subject}, ${t.body}, ${t.quoteId ?? null}, ${t.postcode ?? null}) returning id`;
   await db()`insert into events (type, entity, entity_id, payload) values ('ticket.opened', 'ticket', ${row!.id}, ${db().json({ kind: t.kind })})`;
+  if (["question", "callback", "fault", "complaint"].includes(t.kind)) {
+    const { enqueueAgent } = await import("./agent-runtime");
+    await enqueueAgent("support", "ticket.opened", row!.id as string).catch(() => null);
+  }
   return row!.id as string;
 }
 export async function replyTicket(id: string, author: string, body: string, internal: boolean, close: boolean) {
