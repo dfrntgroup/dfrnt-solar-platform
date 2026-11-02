@@ -36,7 +36,16 @@ export async function AdminShell({ who, area, children }: { who: string; area: "
     <>
       <header className="hdr admin"><div className="wrap">
         <Link href={ops ? "/ops" : "/installer"} className="logo">DFRNT <span>{ops ? "Ops" : "Installer"}</span></Link>
-        <nav className="adesk">{links.map(([h, t]) => <Link key={h} href={h}>{t}</Link>)}</nav>
+        {ops ? (
+          <nav className="adesk ogroups" aria-label="Ops menu">
+            {groups.map(([g, ls]) => (
+              <div key={g} className="ogrp" tabIndex={0}>
+                <span className="ogrp-h">{g}{g === "Today" && c.approvals + c.support > 0 ? <Badge n={c.approvals + c.support} /> : null} ▾</span>
+                <div className="ogrp-p">{ls.map(([h, t]) => <Link key={h} href={h}>{t}{h === "/ops/approvals" ? <Badge n={c.approvals} /> : h === "/ops/support" ? <Badge n={c.support} /> : null}</Link>)}</div>
+              </div>))}
+            <form action="/ops/find" className="ofind-d"><input name="q" placeholder="Find…" aria-label="Find a page or a customer" /></form>
+          </nav>
+        ) : <nav className="adesk">{links.map(([h, t]) => <Link key={h} href={h}>{t}</Link>)}</nav>}
         <span className="small muted who adesk">{who} · {ops && <><a href="/account/security">Security</a> · </>}<a href="/logout">Sign out</a></span>
         <details className="omenu" id="omenu">
           <summary>☰ Menu</summary>

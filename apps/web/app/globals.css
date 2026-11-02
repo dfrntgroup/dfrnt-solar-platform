@@ -187,6 +187,19 @@ input:focus-visible + .pill-r { outline: 2px solid var(--teal); }
 .hdr.admin nav a { text-decoration: none; }
 .hdr.admin nav a:hover { color: var(--teal); }
 .hdr.admin .who { white-space: nowrap; }
+/* Ops desktop menu: four groups with drop-downs (same groups as the phone menu) */
+.hdr.admin nav.ogroups { flex-wrap: nowrap; align-items: center; gap: 4px; }
+.ogrp { position: relative; }
+.ogrp-h { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border-radius: 6px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.ogrp:hover .ogrp-h, .ogrp:focus-within .ogrp-h { background: var(--mint, #eaf4f0); color: var(--teal); }
+.ogrp-p { display: none; position: absolute; left: 0; top: 100%; min-width: 200px; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,.08); padding: 6px; z-index: 50; }
+.ogrp:hover .ogrp-p, .ogrp:focus-within .ogrp-p { display: grid; }
+.ogrp-p a { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; font-weight: 400; }
+.ogrp-p a:hover { background: var(--mint, #eaf4f0); }
+.hdr.admin .ofind-d { flex: 0 0 auto; }
+.hdr.admin .ofind-d input { max-width: 170px; height: 34px; box-sizing: border-box; min-height: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 14px; width: 170px; margin-left: 8px; }
+.hdr.admin .ogrp .obadge { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 9px; background: #d93a1f; color: #fff; font-size: 10px; font-weight: 700; line-height: 17px; text-align: center; }
+
 @media (min-width: 900px) { .buybox .pills { flex-wrap: wrap; overflow: visible; } }
 
 /* C1 checkout progress */
