@@ -5,6 +5,19 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: t
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # A throwaway database for the web tests (payments, booking, refunds, ledger).
+      TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/t
+      DB_SSL: disable
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -13,5 +26,6 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: POSTGRES_URL=$TEST_POSTGRES_URL node packages/db/migrate.mjs
       - run: pnpm typecheck
       - run: pnpm test

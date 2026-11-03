@@ -5,7 +5,14 @@ import { SELLER } from "@/lib/legal";
 import { getSetting } from "@/lib/settings";
 
 /** Reviews and Real installs only appear in the menus once there's something real to show. */
+let proofCache: { at: number; v: { reviews: boolean; installs: boolean } } | null = null;
 async function proof() {
+  if (proofCache && Date.now() - proofCache.at < 300_000) return proofCache.v;
+  const v = await proofFresh();
+  proofCache = { at: Date.now(), v };
+  return v;
+}
+async function proofFresh() {
   try {
     const { includeTest } = await import("@/lib/installers");
     const [r] = await db()`select

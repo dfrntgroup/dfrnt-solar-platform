@@ -77,7 +77,7 @@ export async function syncXero() {
   if (!x.refresh_token_enc) return { skipped: "not connected" };
   const c = x.codes;
   if (!c.sales || !c.stc || !c.bank || !c.installer) return { skipped: "needs account codes" };
-  const out = { invoices: 0, bills: 0, stc: 0, failed: 0 };
+  const out = { invoices: 0, bills: 0, stc: 0, refunds: 0, failed: 0 };
   // Customer tax invoices (issued when payment is received) and their payments.
   const paid = await db()`select id, token, invoice_number, customer_name, customer_email, paid_at, snapshot, result, payment_reference, payment_method from quotes
     where invoice_number is not null and paid_at is not null and not exists (select 1 from xero_sync s where s.kind = 'invoice' and s.ref_id = quotes.id::text and s.status = 'done') limit 25`;
@@ -99,6 +99,51 @@ export async function syncXero() {
       out.invoices++;
       await once("payment", q.id as string, async () => {
         const p = await api<{ Payments: { PaymentID: string }[] }>("PUT", "/Payments", { Payments: [{ Invoice: { InvoiceID: invoiceId }, Account: { Code: online(q.payment_method) ? (c.stripe || c.bank) : c.bank }, Date: date(q.paid_at), Amount: st.amount_payable, Reference: q.payment_reference }] });
+        return p.Payments[0]!.PaymentID;
+      });
+    } else if (r === "failed") out.failed++;
+  }
+  // Variations and add-ons paid after the main invoice: their own tax invoice and payment.
+  const vpaid = await db()`select p.id, p.amount::float8 amount, p.received_at, p.reference, p.method, v.description, q.id qid, q.customer_name, q.customer_email, q.invoice_number
+    from payments p join quotes q on q.id = p.quote_id left join variations v on v.id = p.variation_id
+    where p.kind = 'variation' and p.status = 'received' and p.amount > 0
+      and not exists (select 1 from xero_sync s where s.kind = 'var_invoice' and s.ref_id = p.id::text and s.status = 'done') limit 25`;
+  for (const v of vpaid) {
+    let invId = "";
+    const r = await once("var_invoice", v.id as string, async () => {
+      const inv = await api<{ Invoices: { InvoiceID: string }[] }>("PUT", "/Invoices", { Invoices: [{
+        Type: "ACCREC", Contact: { Name: v.customer_name ?? v.customer_email, EmailAddress: v.customer_email }, Date: date(v.received_at ?? new Date()), DueDate: date(v.received_at ?? new Date()),
+        Reference: `${v.invoice_number ?? ""} variation ${v.reference ?? ""} ${siteUrl()}/ops/job/${v.qid}`.trim().slice(0, 255), Status: "AUTHORISED", LineAmountTypes: "Inclusive",
+        LineItems: [{ Description: String(v.description ?? "Approved change to your installation").slice(0, 400), Quantity: 1, UnitAmount: v.amount, AccountCode: c.sales, TaxType: c.sales_tax || "OUTPUT" }] }] });
+      invId = inv.Invoices[0]!.InvoiceID; return invId;
+    });
+    if (r === "done") {
+      out.invoices++;
+      await once("var_payment", v.id as string, async () => {
+        const p = await api<{ Payments: { PaymentID: string }[] }>("PUT", "/Payments", { Payments: [{ Invoice: { InvoiceID: invId }, Account: { Code: online(v.method) ? (c.stripe || c.bank) : c.bank }, Date: date(v.received_at ?? new Date()), Amount: v.amount, Reference: v.reference }] });
+        return p.Payments[0]!.PaymentID;
+      });
+    } else if (r === "failed") out.failed++;
+  }
+  // Refunds once sent: a credit note against sales and a refund payment out of the account it went back through.
+  // One line at the refunded amount, GST-inclusive; the accountant can split it if a refund covers STC-related amounts.
+  const refunds = await db()`select p.id, p.amount::float8 amount, p.received_at, p.reference, p.method, p.note, q.id qid, q.customer_name, q.customer_email, q.invoice_number
+    from payments p join quotes q on q.id = p.quote_id
+    where p.kind = 'refund' and p.status = 'refunded' and p.amount > 0
+      and not exists (select 1 from xero_sync s where s.kind = 'credit_note' and s.ref_id = p.id::text and s.status = 'done') limit 25`;
+  for (const f0 of refunds) {
+    let cnId = "";
+    const r = await once("credit_note", f0.id as string, async () => {
+      const cn = await api<{ CreditNotes: { CreditNoteID: string }[] }>("PUT", "/CreditNotes", { CreditNotes: [{
+        Type: "ACCRECCREDIT", Contact: { Name: f0.customer_name ?? f0.customer_email, EmailAddress: f0.customer_email }, Date: date(f0.received_at ?? new Date()),
+        Reference: `Refund ${f0.reference ?? ""} on ${f0.invoice_number ?? ""}`.trim().slice(0, 255), Status: "AUTHORISED", LineAmountTypes: "Inclusive",
+        LineItems: [{ Description: `Refund${f0.note ? `: ${String(f0.note).slice(0, 300)}` : ""}`, Quantity: 1, UnitAmount: f0.amount, AccountCode: c.sales, TaxType: c.sales_tax || "OUTPUT" }] }] });
+      cnId = cn.CreditNotes[0]!.CreditNoteID; return cnId;
+    });
+    if (r === "done") {
+      out.refunds++;
+      await once("refund_payment", f0.id as string, async () => {
+        const p = await api<{ Payments: { PaymentID: string }[] }>("PUT", "/Payments", { Payments: [{ CreditNote: { CreditNoteID: cnId }, Account: { Code: online(f0.method) ? (c.stripe || c.bank) : c.bank }, Date: date(f0.received_at ?? new Date()), Amount: f0.amount, Reference: f0.reference }] });
         return p.Payments[0]!.PaymentID;
       });
     } else if (r === "failed") out.failed++;

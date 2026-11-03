@@ -42,14 +42,26 @@ const DEFAULTS = {
 };
 type Key = keyof typeof DEFAULTS;
 
+// Settings change rarely and are read on almost every page: cache each key for 20 s per server instance.
+// A save clears this instance's copy at once; other instances catch up within 20 s.
+const cache = new Map<string, { at: number; v: unknown }>();
+const TTL = 20_000;
+// Never cached: Xero rotates its refresh token on every use, and Stripe's webhook secret must be current.
+const LIVE = new Set<string>(["xero", "stripe"]);
+
 export async function getSetting<K extends Key>(key: K): Promise<(typeof DEFAULTS)[K]> {
+  const hit = LIVE.has(key) ? undefined : cache.get(key);
+  if (hit && Date.now() - hit.at < TTL) return hit.v as (typeof DEFAULTS)[K];
   try {
     const [r] = await db()`select value from settings where key = ${key}`;
-    return { ...DEFAULTS[key], ...((r?.value ?? {}) as object) } as (typeof DEFAULTS)[K];
+    const v = { ...DEFAULTS[key], ...((r?.value ?? {}) as object) } as (typeof DEFAULTS)[K];
+    if (!LIVE.has(key)) cache.set(key, { at: Date.now(), v });
+    return v;
   } catch { return DEFAULTS[key]; }
 }
 
 export async function setSetting<K extends Key>(key: K, value: (typeof DEFAULTS)[K], by: string) {
+  cache.delete(key);
   await db()`insert into settings (key, value, updated_by) values (${key}, ${db().json(value as never)}, ${by})
     on conflict (key) do update set value = excluded.value, updated_at = now(), updated_by = excluded.updated_by`;
 }

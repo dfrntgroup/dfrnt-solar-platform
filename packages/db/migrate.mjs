@@ -7,6 +7,10 @@ import postgres from "postgres";
 
 const url = process.env.POSTGRES_URL_NON_POOLING || process.env.POSTGRES_URL;
 if (!url) { console.log("[migrate] no database URL; skipped"); process.exit(0); }
+// Only production builds change the database. A preview build could hold the live URL; it must never migrate it.
+if (process.env.VERCEL && process.env.VERCEL_ENV !== "production" && process.env.MIGRATE_PREVIEW !== "1") {
+  console.log(`[migrate] ${process.env.VERCEL_ENV} build; skipped (set MIGRATE_PREVIEW=1 for a preview database)`); process.exit(0);
+}
 
 const dir = join(dirname(fileURLToPath(import.meta.url)), "migrations");
 const sql = postgres(url, { ssl: process.env.DB_SSL === "disable" ? false : "require", max: 1, onnotice: () => {} });

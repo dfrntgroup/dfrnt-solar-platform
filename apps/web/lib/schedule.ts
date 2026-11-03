@@ -203,6 +203,11 @@ export async function bookDay(q: QuoteRow, date: string, actor: Actor, via: "cus
     decline_until: new Date(Date.now() + decline_hours * 3600_000), rebook: false, slot_hold_until: null };
   const oldDate = q.install_date, oldCrew = q.crew_id;
   await write({ actor, action: rebooking ? "jobs.rebook" : "jobs.book" }, { token: q.token, date, via }, async (tx) => {
+    // One booking at a time per crew (or installer): the second of two simultaneous taps waits here, then
+    // re-checks the calendar and finds the day gone. The lock ends with this transaction.
+    await tx`select pg_advisory_xact_lock(hashtext(${`book:${slot.crewId || q.installer_id || "none"}`}))`;
+    const still = (await daysFor(q, { fresh: true, max: 40 })).slots.some((x) => x.date === date && (x.crewId || "") === (slot.crewId || ""));
+    if (!still) throw new Error("That day has just gone. Pick another.");
     const [row] = await tx`update quotes set ${tx({ ...fields, ...(rebooking ? {} : { status: "booked" }), updated_at: new Date() } as never)}
       where id = ${q.id} and status = ${q.status} returning id`;
     if (!row) throw new Error("Job changed while you were booking; reload and try again");
