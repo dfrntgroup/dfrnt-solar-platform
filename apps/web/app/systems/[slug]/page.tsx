@@ -14,6 +14,7 @@ import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate, sitePostcode } from "@/lib/site";
 import { Media } from "@/components/SystemCard";
 import { buildHref } from "@/lib/builder";
+import { rebateLine as rebateLineFor } from "@/lib/rebate-line";
 import { friendlyInverter, friendlyPanel, imageFor } from "@/lib/images";
 import { nextDays, outcome } from "@/lib/capacity";
 import { Trust } from "@/components/Trust";
@@ -60,12 +61,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const today = todayAEST();
   const changes = [...new Set([...data.rebates.battery_factor.map((x) => x.from), ...data.rebates.solar_deeming.map((x) => x.from)])].filter((d) => d > today).sort().slice(0, 3)
     .map((d) => ({ d, bf: batteryFactor(d, data.rebates), dy: deemingYears(d, data.rebates) }));
-  const nextStep = q.window.window_end ? new Date(Date.parse(`${q.window.window_end}T00:00:00Z`) + 86400_000).toISOString().slice(0, 10) : null;
-  const forwardEnd = site.rebateFrom ? new Date(Date.parse(`${site.rebateFrom}T00:00:00Z`) - 86400_000).toISOString().slice(0, 10) : null;
-  const rebateLine = site.rebateFrom ? `Installs up to ${longDate(forwardEnd!)} are fully booked in your area, so this price includes the rebate for installs from ${longDate(site.rebateFrom)}. It is held until ${longDate(q.window.lock_until)}.`
-    : !q.window.window_end ? `This price is held until ${longDate(q.window.lock_until)}.`
-    : q.window.lock_until < q.window.window_end ? `This price is held until ${longDate(q.window.lock_until)}. The rebate steps down on ${longDate(nextStep!)}, so it applies to installs done by ${longDate(q.window.window_end)}. You see your install dates before you pay.`
-    : `This price is held until ${longDate(q.window.window_end)}, the last day of this rebate step. Installs must be done by then, and you see your dates before you pay.`;
+  const rebateLine = rebateLineFor(q.window, site.rebateFrom);
   const parts = c.bom.filter((b) => !b.included && !b.sku.startsWith("BOS") && !b.sku.startsWith("MNT"));
   return (
     <>

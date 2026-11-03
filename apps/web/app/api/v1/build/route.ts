@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { rebateWindow, yieldFor } from "@dfrnt/engine";
+import { rebateWindow } from "@dfrnt/engine";
 import { json, problem, todayAEST } from "@/lib/api";
 import { buildOptions } from "@/lib/builder";
 import { pricingData } from "@/lib/pricing-data";
@@ -24,7 +24,6 @@ export async function POST(req: Request) {
   const rd = rebateWindow(todayAEST(), data.rebates, site.rebateFrom).rebate_date;
   const { postcode, ...choice } = b.data;
   const o = buildOptions(choice, postcode, rd, data, site);
-  const { energySettings } = await import("@/lib/energy");
-  const loc = yieldFor(postcode, (await energySettings()).yields);
-  return json({ ...o, dayKwhPerKw: loc.kwh_per_kw, lockUntil: rebateWindow(todayAEST(), data.rebates, site.rebateFrom).lock_until });
+  const { buildExtras } = await import("@/lib/builder-extras");
+  return json({ ...o, ...(await buildExtras(o, postcode, site.rebateFrom)) });
 }

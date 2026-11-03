@@ -44,6 +44,8 @@ export interface BuildOptions {
   panelRange: number[];
   backupAvailable: boolean;
   choice: BuildChoice;
+  /** Closest ready-made system of the same brand family, when the build isn't exactly one of them. */
+  nearest: null | { slug: string; title: string; you_pay: number; diff: string[] };
   price: null | { ok: boolean; you_pay: number; before: number; rebates: number; stcs: number; kw: number; kwh: number; powerKw: number | null; inverter: string; parts: { qty: number; name: string }[]; warnings: string[]; blockers: string[]; title: string; moduleLabel: string; batteryRebate: number; backupDelta: number | null; equipment: number; installation: number; gst: number };
 }
 
@@ -131,7 +133,8 @@ export function buildOptions(raw: BuildChoice, postcode: string, rebateDate: str
       title: buildTitle(fam!.brand, rules.inverters[c.inverterSku]!.ac_w, cfg.usable_kwh, cfg.panel_kw, c.panelSku ?? null, !!c.backup),
     };
   }
-  return { brands, inverters, modules, moduleName: bf?.module.model ?? "", moduleKwh, panels, panelRange, backupAvailable, choice: c, price };
+  const nearest = price ? nearestSystem(c, price.you_pay, data, site, rules) : null;
+  return { nearest, brands, inverters, modules, moduleName: bf?.module.model ?? "", moduleKwh, panels, panelRange, backupAvailable, choice: c, price };
 }
 
 export function buildTitle(brand: string, acW: number, kwh: number, kw: number, panelSku: string | null, backup: boolean) {
@@ -165,4 +168,29 @@ export function choiceFromQuery(sp: Record<string, string | string[] | undefined
 export function buildConfig(c: BuildChoice, postcode: string, rebateDate: string, rules: ConfigRules): ConfigInput {
   const i = input({ ...c, family: c.family!, inverterSku: c.inverterSku! }, postcode, rebateDate);
   return { ...i, stacks: autoStacks(i, rules) ?? 1 };
+}
+
+/** The ready-made system closest to a build, and what's different, so customers can see a standard option and its price. */
+function nearestSystem(c: BuildChoice, youPay: number, data: FullData, site: { postcode: string; asOf: string; rebateFrom?: string | null }, rules: ConfigRules): BuildOptions["nearest"] {
+  const panels = c.panelSku ? c.panels ?? 0 : 0;
+  const pool = data.catalogue.systems.filter((s) => s.config.familyKey === c.family && (s.config.panelCount > 0) === (panels > 0));
+  let best: { s: CatalogueSystem; q: Quote; d: number } | null = null;
+  for (const s of pool) {
+    const q = priceSystem(s, site, data);
+    const d = Math.abs(s.config.batteryModules - (c.modules ?? 0)) * 3 + Math.abs(s.config.panelCount - panels) + (q.config.inverter?.sku === c.inverterSku ? 0 : 4);
+    if (!best || d < best.d) best = { s, q, d };
+  }
+  if (!best) return null;
+  const { s, q } = best;
+  const diff: string[] = [];
+  const kwh = rules.battery_families[rules.families[c.family!]!.battery_family]!.module.kwh_usable_cec;
+  const dm = s.config.batteryModules - (c.modules ?? 0);
+  if (dm) diff.push(`${Math.abs(dm)} battery module${Math.abs(dm) === 1 ? "" : "s"} ${dm > 0 ? "more" : "fewer"} (${Math.round(s.config.batteryModules * kwh * 10) / 10} kWh)`);
+  const dp = s.config.panelCount - panels;
+  if (dp) diff.push(`${Math.abs(dp)} panel${Math.abs(dp) === 1 ? "" : "s"} ${dp > 0 ? "more" : "fewer"}`);
+  if (panels && s.config.panelSku !== c.panelSku) diff.push(s.config.panelSku.includes("LONGI") ? "LONGi panels" : "Risen panels");
+  if (q.config.inverter && q.config.inverter.sku !== c.inverterSku) diff.push(`${Math.round(q.config.inverter.ac_w / 100) / 10} kW inverter`);
+  if (c.backup) diff.push("no whole-home backup");
+  if (!diff.length) return null;
+  return { slug: s.slug, title: `${s.brand} ${s.title}`, you_pay: q.stack.amount_payable, diff };
 }
