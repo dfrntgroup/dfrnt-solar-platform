@@ -1,7 +1,7 @@
 import { db } from "@dfrnt/db";
 import { allow } from "@/lib/ratelimit";
 
-const ALLOWED = new Set(["page_view", "configure", "secure_click", "compare", "estimate", "save_quote", "contact"]);
+const ALLOWED = new Set(["page_view", "configure", "secure_click", "compare", "estimate", "save_quote", "contact", "build_step", "build_secure"]);
 
 export async function POST(req: Request) {
   if (!(await allow("events", 120, 1))) return new Response(null, { status: 204 });

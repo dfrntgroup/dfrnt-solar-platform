@@ -28,6 +28,10 @@ export default async function Analytics() {
   const label: Record<string, string> = { facebook: "Facebook or Instagram", google: "Google", youtube: "YouTube", friend: "A friend or family", saw_install: "Saw an install", other: "Something else" };
   const pct = (a: number, b: number) => b ? `${Math.round((a / b) * 100)}%` : "–";
   const pages = await db()`select path, count(*)::int n from analytics_events where name = 'page_view' and at > now() - interval '30 days' group by 1 order by 2 desc limit 15`;
+  // Build your own: which combinations people build, so the best sellers can become catalogue systems.
+  const [bs] = await db()`select count(distinct session)::int started from analytics_events where name = 'build_step' and at > now() - interval '30 days'`;
+  const builds = await db()`select title, count(*)::int n, count(*) filter (where paid_at is not null)::int paid, coalesce(sum(amount_payable) filter (where paid_at is not null), 0)::float8 rev
+    from quotes where title like 'Custom ·%' and status <> 'saved' and created_at > now() - interval '90 days' group by 1 order by 2 desc, 3 desc limit 15`;
   const steps: [string, number][] = [["Sessions", v!.sessions as number], ["Quotes created", f!.created as number], ["Secured", f!.secured as number], ["Priced", f!.priced as number], ["Signed", f!.signed as number], ["Paid", f!.paid as number]];
   return (
     <AdminShell who={me.name} area="ops">
@@ -52,6 +56,9 @@ export default async function Analytics() {
         <div><p className="small muted">Tracking said (secured prices → paid)</p>
           <table className="lines small"><tbody>{tracked.map((t) => <tr key={t.src as string}><td>{t.src as string}</td><td className="r">{t.n as number} → {t.paid as number}</td><td className="r">{aud(t.rev as number)}</td></tr>)}</tbody></table></div>
       </div>
+      <h3 style={{ marginTop: 20 }}>Custom builds</h3>
+      <p className="small muted">{bs!.started as number} people used Build your own in the last 30 days. Secured builds by combination (90 days):</p>
+      <table className="lines small"><tbody>{builds.length ? builds.map((b) => <tr key={b.title as string}><td>{(b.title as string).replace(/^Custom · /, "")}</td><td className="r">{b.n as number} secured → {b.paid as number} paid</td><td className="r">{aud(b.rev as number)}</td></tr>) : <tr><td className="muted">No custom builds secured yet.</td></tr>}</tbody></table>
       <h3 style={{ marginTop: 20 }}>Ad platforms</h3>
       <p className="small">Meta Conversions API: {metaReady() ? <strong>on</strong> : "off (add META_PIXEL_ID and META_CAPI_TOKEN in Vercel)"}. Meta pixel: {process.env.NEXT_PUBLIC_META_PIXEL_ID ? "on" : "off"}. Google tag: {process.env.NEXT_PUBLIC_GOOGLE_ADS_ID ? "on" : "off"}. Clarity: {process.env.NEXT_PUBLIC_CLARITY_ID ? "on" : "off"}.</p>
       <p className="small">Google Ads scheduled upload URL (Goals → Conversions → Uploads → Schedules → HTTPS, every 24 hours; conversion actions named DFRNT Lead, DFRNT Checkout complete, DFRNT Signed, DFRNT Paid): <code style={{ wordBreak: "break-all" }}>{siteUrl()}/api/v1/conversions/google?key={googleFeedKey()}</code></p>

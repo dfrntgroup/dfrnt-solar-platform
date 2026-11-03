@@ -102,7 +102,9 @@ export default async function Record({ params, searchParams }: { params: Promise
   const varPays = await db()`select id, variation_id, amount::float8 amount from payments where quote_id = ${q.id} and kind = 'variation' and status = 'pending'`;
   const varSecret = sp.payv && /^[0-9a-f-]{36}$/.test(sp.payv) ? await clientSecretFor(sp.payv).catch(() => null) : null;
   const payReturn = `${siteUrl()}/quote/${token}?paid=1`;
-  const lapsedSlug = state === "lapsed" ? ((await db()`select system_slug from quotes where id = ${q.id}`)[0]?.system_slug as string | null) : null;
+  const lapsedRow = state === "lapsed" ? (await db()`select system_slug, input from quotes where id = ${q.id}`)[0] : undefined;
+  const lapsedSlug = (lapsedRow?.system_slug as string | null) ?? null;
+  const lapsedBuild = lapsedRow && !lapsedSlug && String(q.title ?? "").startsWith("Custom") ? (await import("@/lib/builder")).buildHref(lapsedRow.input as never, q.postcode as string) : null;
   const finProv = q.payment_method?.startsWith("finance:") ? (await getSetting("finance")).providers.find((x) => `finance:${x.id}` === q.payment_method) : undefined;
   const picking = state === "awaiting_date" || (["booked", "gear_ordered", "delivered"].includes(state) && q.rebook);
   const choice = picking ? await daysFor(q) : null;
@@ -163,7 +165,7 @@ export default async function Record({ params, searchParams }: { params: Promise
         {stuck && <div className="note" style={{ marginTop: 16 }}><strong>Installs up to {longDate(addDay(stuck, -1))} are fully booked in your area.</strong> We&apos;ll call you today to sort your install date. Nothing is lost: your payment is safe.</div>}
         {state === "lapsed" && (<>
           <div className="note" style={{ marginTop: 16 }}><strong>This price expired on {longDate(q.lock_until)}.</strong> Prices and the rebate move over time, so we can&apos;t hold it any longer.</div>
-          <p style={{ marginTop: 12 }}><Link className="btn block" href={lapsedSlug ? `/systems/${lapsedSlug}?postcode=${q.postcode}` : `/systems?postcode=${q.postcode}`}>See today&apos;s price for this system</Link></p>
+          <p style={{ marginTop: 12 }}><Link className="btn block" href={lapsedSlug ? `/systems/${lapsedSlug}?postcode=${q.postcode}` : lapsedBuild ?? `/systems?postcode=${q.postcode}`}>See today&apos;s price for this system</Link></p>
           <CallBack back={`/quote/${token}`} token={token} state={sp.callback} compact />
         </>)}
         {(state === "saved" || state === "secured") && (<>

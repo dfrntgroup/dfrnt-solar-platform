@@ -52,6 +52,32 @@ export async function secureSystem(form: FormData) {
   redirect(`/quote/${out.result.token}`);
 }
 
+/** Build your own: secure a custom build. The engine re-checks every choice; anything it changed sends the customer back to see it. */
+export async function secureBuild(form: FormData) {
+  if (!(await allow("secure", 20))) redirect("/contact?kind=question");
+  const { buildOptions, buildHref, choiceFromQuery } = await import("@/lib/builder");
+  const sp = Object.fromEntries([...form.entries()].map(([k, v]) => [k, String(v)]));
+  const postcode = String(form.get("postcode") ?? "");
+  const asked = choiceFromQuery(sp);
+  if (!/^\d{4}$/.test(postcode)) redirect("/build");
+  { const { earliestFor } = await import("@/lib/capacity"); if ((await earliestFor(postcode)) === null) redirect(`/contact?kind=waitlist&postcode=${postcode}`); }
+  const data = await pricingData();
+  const { siteFor } = await import("@/lib/rebate-from");
+  const site = await siteFor(postcode);
+  const rd = rebateWindow(todayAEST(), data.rebates, site.rebateFrom).rebate_date;
+  const o = buildOptions(asked, postcode, rd, data, site);
+  const c = o.choice;
+  const back = () => redirect(buildHref({ phases: c.phases, familyKey: c.family, inverterSku: c.inverterSku, batteryModules: c.modules, panelSku: c.panelSku, panelCount: c.panels, backup: c.backup ? "whole_home" : "none" }, postcode) + "&changed=1");
+  if (!o.price?.ok || !c.family || !c.inverterSku || !c.modules) back();
+  const same = c.family === asked.family && c.inverterSku === asked.inverterSku && c.modules === asked.modules && (c.panelSku ?? null) === (asked.panelSku ?? null)
+    && (c.panelSku ? c.panels === asked.panels : true) && !!c.backup === !!asked.backup;
+  if (!same) back();
+  const { buildConfig } = await import("@/lib/builder");
+  const out = await createQuote({ type: "customer", id: "anonymous" }, { config: buildConfig(c, postcode, rd, data.rules), title: o.price!.title } as never, { status: "secured" });
+  await saveAttribution(out.result.id);
+  redirect(`/quote/${out.result.token}`);
+}
+
 /** B5: save a system's price and email the link (the price is not locked until it's secured). */
 export async function saveForLater(form: FormData) {
   if (!(await allow("save", 10))) redirect("/systems");

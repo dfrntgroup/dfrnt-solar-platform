@@ -30,6 +30,7 @@ export default async function Brand({ params, searchParams }: { params: Promise<
         <p className="muted">{b.line}</p>
         <p className="small">Compare: {PAIRS.filter((p) => p.split("-vs-").includes(brand)).map((p, i) => <span key={p}>{i ? " · " : ""}<Link href={`/compare/${p}`}>{p.split("-vs-").map((x) => BRANDS[x]!.name).join(" vs ")}</Link></span>)}</p>
         <div className="grid">{rows.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} earliest={earliest} />)}</div>
+        {rows[0] && <p style={{ marginTop: 18 }}><Link className="btn ghost" href={`/build?ph=${rows[0].s.config.phases === 3 ? 3 : 1}&f=${rows[0].s.config.familyKey}`}>Build a {b.name} system →</Link></p>}
       </div></section>
       <Footer />
     </>

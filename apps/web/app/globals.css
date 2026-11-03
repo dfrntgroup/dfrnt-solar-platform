@@ -315,3 +315,16 @@ details.menu[open] > summary { font-size: 0; }
 details.menu[open] > summary::after { content: "✕"; font-size: 22px; }
 .photo-thumb { display: block; width: 96px; height: 96px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); margin-bottom: 6px; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Build your own (3 Nov 2026) */
+.bstep { border-top: 2px solid var(--ink); padding: 18px 0 8px; }
+.bstep h3 { margin: 0 0 10px; }
+.bstep h3 .n { color: var(--teal); font-family: "IBM Plex Mono", monospace; font-size: 13px; letter-spacing: .1em; margin-right: 8px; }
+.bopts { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+.bopt { text-align: left; padding: 14px; border: 1px solid var(--line); border-radius: var(--r); background: #fff; font: inherit; color: var(--ink); cursor: pointer; min-height: 44px; }
+.bopt strong { display: block; font-size: 16px; }
+.bopt span { display: block; font-size: 13px; color: var(--muted); margin-top: 3px; }
+.bopt.on { border: 2px solid var(--teal); background: var(--mint); }
+.bopt:disabled { opacity: .45; cursor: not-allowed; }
+.bopt:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.pills button:disabled { opacity: .4; cursor: not-allowed; }

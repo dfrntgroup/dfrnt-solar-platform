@@ -32,6 +32,7 @@ export default async function Systems({ searchParams }: { searchParams: Promise<
           <Link href="/batteries"><strong>Battery only</strong><span>Add to existing solar</span></Link>
           <Link href="/brands/solax"><strong>Shop by brand</strong><span>SolaX · Sungrow · GoodWe</span></Link>
         </div>
+        <p className="small" style={{ marginTop: -6 }}>Know exactly what you want? <Link href={`/build?ph=${phase}`}><strong>Build your own →</strong></Link></p>
         <div className="panel" style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "center", justifyContent: "space-between" }}>
           <span><strong>Prices for {postcode}</strong><br /><span className="small muted">Rebates as at {rebateDate()} · change postcode with 📍 at the top</span></span>
           <div className="seg"><Link href={setP("phase", null)} className={phase === 1 ? "on" : ""}>Single phase</Link><Link href={setP("phase", "3")} className={phase === 3 ? "on" : ""}>Three phase</Link></div>

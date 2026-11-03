@@ -13,6 +13,7 @@ import { saveForLater, secureSystem } from "@/app/actions";
 import { todayAEST } from "@/lib/api";
 import { aud, aud2, longDate, sitePostcode } from "@/lib/site";
 import { Media } from "@/components/SystemCard";
+import { buildHref } from "@/lib/builder";
 import { friendlyInverter, friendlyPanel, imageFor } from "@/lib/images";
 import { nextDays, outcome } from "@/lib/capacity";
 import { Trust } from "@/components/Trust";
@@ -120,6 +121,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
               initial={{ ok: q.config.ok, summary: c.summary, solar_kw: c.panel_kw, usable_kwh: c.usable_kwh, inverter: c.inverter?.model, towers: c.stacks?.physical_towers ?? 0,
                 you_pay: st.amount_payable, before_rebates: st.price_inc_gst, rebates: st.less_stcs, gst: st.gst, equipment: st.hardware_ex_gst, installation: st.installation_ex_gst,
                 solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message) }} />
+            <p className="small" style={{ margin: "4px 0 8px" }}>Want a different inverter or panel? <Link href={buildHref({ ...s.config, inverterSku: c.inverter?.sku, batteryModules: useModules, panelCount: usePanels }, postcode)}>Build your own</Link></p>
             <table className="incl" style={{ marginTop: 6 }}><tbody>
               <tr><td className="k">Next free days</td><td>{next?.length ? <strong>{next.map((d) => longDate(d)).join(" · ")}</strong> : next === null ? "Not in your area yet — join the waitlist" : "Confirmed when you book"}<br /><span className="small muted">{next?.length ? "From installers' live calendars. You pick your day after paying." : "From your installer's real free days"}</span></td></tr>
               <tr><td className="k">Rebate</td><td>{aud(st.less_stcs)} off now. {rebateLine}

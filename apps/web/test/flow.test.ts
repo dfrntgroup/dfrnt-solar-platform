@@ -59,6 +59,27 @@ run("job lifecycle (real database)", () => {
     await db().end?.();
   });
 
+  it("a custom build (no catalogue system) goes through pricing, signing and payment", async () => {
+    const { createQuote } = await import("@/lib/quotes");
+    const { pricingData } = await import("@/lib/pricing-data");
+    const { rebateWindow } = await import("@dfrnt/engine");
+    const B = await import("@/lib/builder");
+    const data = await pricingData();
+    const site = { postcode: PC, asOf: new Date().toISOString().slice(0, 10) };
+    const rd = rebateWindow(site.asOf, data.rebates).rebate_date;
+    const o = B.buildOptions({ phases: 1, family: "goodwe_esa_1p", inverterSku: "INV-GW-EHA-10K", modules: 3, panelSku: "PNL-RISEN-475", panels: 22, backup: true }, PC, rd, data, site);
+    expect(o.price?.ok).toBe(true);
+    const out = await createQuote({ type: "customer", id: "anonymous" }, { config: B.buildConfig(o.choice, PC, rd, data.rules), title: o.price!.title } as never, { status: "secured" });
+    tokens.push(out.result.token);
+    expect(out.result.amount_payable).toBeCloseTo(o.price!.you_pay, 2);
+    let q = (await J.getQuote(out.result.token))!;
+    expect(q.title).toMatch(/^Custom · GoodWe 10 kW/);
+    await J.submitSite(q, SITE, { name: "Custom", email: "custom@example.test", phone: "0400000000" });
+    q = (await J.getQuote(out.result.token))!; expect(q.status).toBe("priced");
+    await J.sign(q, "Custom"); q = (await J.getQuote(out.result.token))!;
+    await J.chooseBank(q); q = (await J.getQuote(out.result.token))!; expect(q.status).toBe("payment_pending");
+  });
+
   it("re-pricing with the installer's extra km and metres reproduces the frozen price exactly", async () => {
     const q = await newPaidJob("Roundtrip");
     const p1 = await J.reprice(q, { extraLabour: [{ code: "SVC-TRAVEL", qty: 60 }, { code: "SVC-CABLE-1P", qty: 15 }] });
