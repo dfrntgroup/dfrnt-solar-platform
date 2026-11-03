@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { configured } from "@/lib/configure";
 import { yieldFor, batteryFactor, deemingYears } from "@dfrnt/engine";
 import { estimateSaving } from "@/lib/saving";
-import { warrantyFor } from "@/lib/warranties";
 import { energySettings } from "@/lib/energy";
 import { configOptions, findSystem, priceSystem, type ConfigInput } from "@dfrnt/engine";
 import { Share } from "@/components/Share";
@@ -20,7 +19,6 @@ import { Trust } from "@/components/Trust";
 import { CallBack } from "@/components/CallBack";
 
 export const dynamic = "force-dynamic";
-const addDay = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400_000).toISOString().slice(0, 10);
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -50,9 +48,6 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const useModules = Number.isInteger(wantM) && opts.modules.includes(wantM) ? wantM : s.config.batteryModules;
   const custom = usePanels !== s.config.panelCount || useModules !== s.config.batteryModules;
   const q = custom ? priceSystem(configured(s, { panels: usePanels, modules: useModules, backup: "none" }, postcode, data, site.rebateFrom), site, data) : q0;
-  // What whole-home backup adds for these counts (shown on the switch, so nobody has to flip it to find out).
-  const qb = opts.backup ? priceSystem(configured(s, { panels: usePanels, modules: useModules, backup: "whole_home" }, postcode, data, site.rebateFrom), site, data) : null;
-  const backupDelta = qb && qb.config.ok ? Math.round(qb.stack.amount_payable - q.stack.amount_payable) : undefined;
   const st = q.stack, c = q.config, r = q.rebate;
   const { activeAddons } = await import("@/lib/addons");
   const addons = await activeAddons().catch(() => []);
@@ -62,15 +57,11 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const rulesPanel = data.rules.panels[s.config.panelSku]?.model;
   const saving = await estimateSaving({ postcode, panelKw: c.panel_kw ?? 0, batteryKwh: c.usable_kwh ?? 0, price: st.amount_payable }).catch(() => null);
   const today = todayAEST();
-  const ref = q.window.rebate_date;
-  const bfNow = batteryFactor(ref, data.rebates), dyNow = deemingYears(ref, data.rebates);
-  const pct = (a: number, b: number) => (b > 0 ? Math.round((1 - a / b) * 100) : 0);
-  const changes = [...new Set([...data.rebates.battery_factor.map((x) => x.from), ...data.rebates.solar_deeming.map((x) => x.from)])].filter((d) => d > ref).sort().slice(0, 3)
-    .map((d) => ({ d, bf: batteryFactor(d, data.rebates), dy: deemingYears(d, data.rebates) }))
-    .map((x) => ({ ...x, bPct: pct(x.bf, bfNow), sPct: pct(x.dy, dyNow) }));
-  const forward = !!site.rebateFrom;
+  const changes = [...new Set([...data.rebates.battery_factor.map((x) => x.from), ...data.rebates.solar_deeming.map((x) => x.from)])].filter((d) => d > today).sort().slice(0, 3)
+    .map((d) => ({ d, bf: batteryFactor(d, data.rebates), dy: deemingYears(d, data.rebates) }));
   const nextStep = q.window.window_end ? new Date(Date.parse(`${q.window.window_end}T00:00:00Z`) + 86400_000).toISOString().slice(0, 10) : null;
-  const rebateLine = forward ? `Installs up to ${longDate(addDay(site.rebateFrom!, -1))} are fully booked in your area, so this price includes the rebate for installs from ${longDate(site.rebateFrom!)}. It is held until ${longDate(q.window.lock_until)}.`
+  const forwardEnd = site.rebateFrom ? new Date(Date.parse(`${site.rebateFrom}T00:00:00Z`) - 86400_000).toISOString().slice(0, 10) : null;
+  const rebateLine = site.rebateFrom ? `Installs up to ${longDate(forwardEnd!)} are fully booked in your area, so this price includes the rebate for installs from ${longDate(site.rebateFrom)}. It is held until ${longDate(q.window.lock_until)}.`
     : !q.window.window_end ? `This price is held until ${longDate(q.window.lock_until)}.`
     : q.window.lock_until < q.window.window_end ? `This price is held until ${longDate(q.window.lock_until)}. The rebate steps down on ${longDate(nextStep!)}, so it applies to installs done by ${longDate(q.window.window_end)}. You see your install dates before you pay.`
     : `This price is held until ${longDate(q.window.window_end)}, the last day of this rebate step. Installs must be done by then, and you see your dates before you pay.`;
@@ -105,17 +96,15 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
             </tbody></table></details>
             <h2 style={{ marginTop: 28 }}>How the price is made <span className="small muted">(as listed)</span></h2>
             <table className="lines"><tbody>
-              <tr><td>Equipment</td><td className="r">{aud(st.hardware_ex_gst)}</td></tr>
-              <tr><td>Installation</td><td className="r">{aud(st.installation_ex_gst)}</td></tr>
-              <tr><td>GST</td><td className="r">{aud(st.gst)}</td></tr>
-              <tr><td><strong>Price before rebates</strong></td><td className="r"><strong>{aud(st.price_inc_gst)}</strong></td></tr>
-              {r.solar_stcs > 0 && <tr><td>Government solar rebate<br /><span className="small muted">{r.solar_stcs} certificates, assigned to us</span></td><td className="r">−{aud(r.solar_rebate)}</td></tr>}
-              {r.battery_stcs > 0 && <tr><td>Government battery rebate<br /><span className="small muted">{r.battery_stcs} certificates, assigned to us</span></td><td className="r">−{aud(r.battery_rebate)}</td></tr>}
-              <tr className="total"><td>You pay</td><td className="r">{aud(st.amount_payable)}</td></tr>
+              <tr><td>Equipment</td><td className="r">{aud2(st.hardware_ex_gst)}</td></tr>
+              <tr><td>Installation</td><td className="r">{aud2(st.installation_ex_gst)}</td></tr>
+              <tr><td>GST</td><td className="r">{aud2(st.gst)}</td></tr>
+              <tr><td><strong>Price before rebates</strong></td><td className="r"><strong>{aud2(st.price_inc_gst)}</strong></td></tr>
+              {r.solar_stcs > 0 && <tr><td>Less assignment of STCs, solar ({r.solar_stcs} certificates)</td><td className="r">−{aud2(r.solar_rebate)}</td></tr>}
+              {r.battery_stcs > 0 && <tr><td>Less assignment of STCs, battery ({r.battery_stcs} certificates)</td><td className="r">−{aud2(r.battery_rebate)}</td></tr>}
+              <tr className="total"><td>You pay</td><td className="r">{aud2(st.amount_payable)}</td></tr>
             </tbody></table>
-            <p className="muted small">Rebates for postcode {postcode}{forward ? ` for installs from ${longDate(site.rebateFrom!)}` : " at today's rates"}. {rebateLine} GST is charged on the full price before rebates, as the law requires.</p>
-            <details className="small muted"><summary>Show the maths</summary>
-              <p style={{ margin: "6px 0 0" }}>Solar: {c.panel_kw} kW × zone {r.zone} rating × {r.deeming_years} years = {r.solar_stcs} certificates.{c.usable_kwh ? ` Battery: ${c.usable_kwh} kWh usable, tiered, × factor ${r.battery_factor} = ${r.battery_stcs} certificates.` : ""} We credit each certificate at a fixed rate and claim them for you. Factors are set by the Clean Energy Regulator.</p></details>
+            <p className="muted small">Rebates for postcode {postcode} (zone {r.zone}) at today&apos;s rates. {rebateLine} GST is charged on the full price before rebates, as the law requires.</p>
             {saving && <div className="card" style={{ marginTop: 18 }}>
               <h3 style={{ marginTop: 0 }}>What it could save you</h3>
               <p style={{ margin: 0 }}>About <strong>{aud(saving.saving)} a year</strong> for a typical home in {postcode}{saving.payback_years ? <>, paying for itself in about <strong>{saving.payback_years} years</strong></> : null}.</p>
@@ -128,7 +117,6 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
             <p className="small muted" style={{ marginTop: 0 }}>Change the counts. The inverter, parts, rebates and installation follow, and every change shows on the price.</p>
             <Configurator slug={s.slug} postcode={postcode} panels={opts.panels} modules={opts.modules} backupAvailable={opts.backup} moduleKwh={opts.moduleKwh} panelW={opts.panelW}
               start={{ panels: usePanels, modules: useModules }} lockUntil={longDate(q.window.lock_until)} secure={secureSystem} served={next !== null}
-              yieldKwhPerKw={s.kind === "battery_only" ? undefined : yieldFor(postcode, (await energySettings()).yields).kwh_per_kw} backupDelta={backupDelta}
               initial={{ ok: q.config.ok, summary: c.summary, solar_kw: c.panel_kw, usable_kwh: c.usable_kwh, inverter: c.inverter?.model, towers: c.stacks?.physical_towers ?? 0,
                 you_pay: st.amount_payable, before_rebates: st.price_inc_gst, rebates: st.less_stcs, gst: st.gst, equipment: st.hardware_ex_gst, installation: st.installation_ex_gst,
                 solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message) }} />
@@ -136,11 +124,10 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
               <tr><td className="k">Next free days</td><td>{next?.length ? <strong>{next.map((d) => longDate(d)).join(" · ")}</strong> : next === null ? "Not in your area yet — join the waitlist" : "Confirmed when you book"}<br /><span className="small muted">{next?.length ? "From installers' live calendars. You pick your day after paying." : "From your installer's real free days"}</span></td></tr>
               <tr><td className="k">Rebate</td><td>{aud(st.less_stcs)} off now. {rebateLine}
                 {changes.length > 0 && <details className="small" style={{ marginTop: 4 }}><summary>How the rebate changes</summary>
-                  {changes.map((x) => <div key={x.d}>From {longDate(x.d)}: {[c.usable_kwh && x.bPct > 0 ? `the battery rebate drops about ${x.bPct}%` : "", c.panel_kw && x.sPct > 0 ? `the solar rebate drops about ${x.sPct}%` : ""].filter(Boolean).join(" and ") || "no change for this system"}.</div>)}
-                  <span className="muted">Set by the Clean Energy Regulator. Compared with the rebate in this price.</span></details>}</td></tr>
+                  {changes.map((x) => <div key={x.d}>From {longDate(x.d)}: {c.usable_kwh ? `battery factor ${x.bf}` : ""}{c.usable_kwh && c.panel_kw ? " · " : ""}{c.panel_kw ? `solar deeming ${x.dy} years` : ""}</div>)}
+                  <span className="muted">Set by the Clean Energy Regulator. A lower number means a smaller rebate.</span></details>}</td></tr>
               <tr><td className="k">Installed by</td><td>A licensed, SAA-accredited local electrician, named before you pay.</td></tr>
-              <tr><td className="k">Warranty</td><td>{[...new Map(c.bom.map((b) => warrantyFor(b.sku)).filter((w): w is NonNullable<typeof w> => !!w).map((w) => [w.part, w])).values()]
-                .map((w) => `${w.part === "Panels" ? "Panels" : w.part === "Inverter" ? "inverter" : "battery"} ${w.years ? `${w.years} yr` : "(confirmed before you sign)"}${w.performance ? ` + ${w.performance.replace("-year power warranty", " yr performance")}` : ""}`).join(" · ")} · our workmanship 10 yr <Link href="/warranty" className="small">details</Link></td></tr>
+              <tr><td className="k">Warranty</td><td>Panels: manufacturer product warranty + 30 yr performance · inverter 10 yr · battery 10 yr · our workmanship 10 yr</td></tr>
             </tbody></table>
             {addons.length > 0 && <p className="small muted" style={{ marginTop: 10 }}>Add at checkout: {addons.map((a) => a.name).join(", ")}.</p>}
             <ul className="guar card small" style={{ marginTop: 14, padding: 14 }}>

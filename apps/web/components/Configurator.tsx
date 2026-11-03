@@ -13,10 +13,6 @@ export function Configurator(props: {
   start: { panels: number; modules: number }; initial: Price; lockUntil: string;
   /** false = no installer covers this postcode: show the waitlist instead of Secure. */
   served?: boolean;
-  /** kWh a kW of panels makes on an average day here: battery sizes stop where the panels can still refill them. */
-  yieldKwhPerKw?: number;
-  /** What whole-home backup adds, inc GST, for the starting counts. */
-  backupDelta?: number;
   secure: (f: FormData) => Promise<void>;
 }) {
   const [panels, setPanels] = useState(props.start.panels);
@@ -53,11 +49,6 @@ export function Configurator(props: {
     if (o) o.textContent = outcome(p.usable_kwh, p.solar_kw);
   }, [p, panels, modules, props.start.panels, props.start.modules]);
 
-  // Battery sizes the panels can refill on an average day (always keeping the size the page started on).
-  const refill = panels > 0 && props.yieldKwhPerKw ? (panels * props.panelW / 1000) * props.yieldKwhPerKw : Infinity;
-  const moduleList = props.modules.filter((m) => m * props.moduleKwh <= refill + 1e-9 || m === props.start.modules || m === modules);
-  const capped = moduleList.length < props.modules.length;
-  useEffect(() => { if (!moduleList.includes(modules) && moduleList.length) setModules(moduleList[moduleList.length - 1]!); }, [moduleList, modules]);
   const step = (list: number[], v: number, dir: 1 | -1) => { const i = list.indexOf(v); return list[Math.min(list.length - 1, Math.max(0, (i < 0 ? 0 : i) + dir))] ?? v; };
   const Stepper = ({ label, value, sub, list, set }: { label: string; value: number; sub: string; list: number[]; set: (n: number) => void }) => (
     <div className="cfg-row">
@@ -72,12 +63,16 @@ export function Configurator(props: {
   return (
     <div>
       {props.panels.length > 0 && <Stepper label="Solar panels" value={panels} sub={`${(panels * props.panelW / 1000).toFixed(2)} kW`} list={props.panels} set={setPanels} />}
-      {moduleList.length > 0 && <Stepper label="Battery modules" value={modules} sub={`${Math.round(modules * props.moduleKwh * 10) / 10} kWh usable${p.towers > 1 ? ` · ${p.towers} towers` : ""}`} list={moduleList} set={setModules} />}
-      {moduleList.length > 0 && <p className="small muted" style={{ margin: "-6px 0 8px" }}>Most homes use 8–12 kWh overnight.{capped ? " Sizes stop where your panels can still refill the battery on an average day; bigger is a phone call away." : ""}</p>}
+      {props.modules.length > 0 && (
+        <div className="cfg-row" style={{ display: "block" }}>
+          <div><strong>Battery size</strong><div className="small muted">{modules} module{modules === 1 ? "" : "s"} · usable capacity{p.towers > 1 ? ` · ${p.towers} towers` : ""}</div></div>
+          <div className="pills" role="group" aria-label="Battery size">{props.modules.map((m) => (
+            <button key={m} type="button" className={m === modules ? "on" : ""} onClick={() => setModules(m)} aria-pressed={m === modules}>{Math.round(m * props.moduleKwh * 10) / 10}<small>kWh</small></button>))}</div>
+        </div>)}
       {props.backupAvailable && (
-        <label className="toggle-row">
-          <span><strong>Whole-home backup</strong><span className="small muted" style={{ display: "block" }}>Keeps every circuit on in a blackout{props.backupDelta ? ` · +${aud(props.backupDelta)}` : ""}</span></span>
-          <input type="checkbox" role="switch" className="switch" checked={backup === "whole_home"} onChange={(e) => setBackup(e.target.checked ? "whole_home" : "none")} />
+        <label style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--line)", cursor: "pointer" }}>
+          <span><strong>Whole-home backup</strong><div className="small muted">Keeps the house running in a blackout</div></span>
+          <input type="checkbox" checked={backup === "whole_home"} onChange={(e) => setBackup(e.target.checked ? "whole_home" : "none")} />
         </label>)}
       <div style={{ borderTop: "2px solid var(--ink)", paddingTop: 12, opacity: busy ? 0.5 : 1, transition: "opacity .15s" }}>
         <div className="pay"><small>You pay, installed</small>{aud(p.you_pay)}</div>
@@ -87,10 +82,10 @@ export function Configurator(props: {
         {!p.ok && <div className="note small">{p.blockers.join(" · ")}</div>}
         <details className="small" style={{ margin: "8px 0" }}><summary>How the price is made</summary>
           <table className="lines"><tbody>
-            <tr><td>Equipment</td><td className="r">{aud(p.equipment)}</td></tr>
-            <tr><td>Installation</td><td className="r">{aud(p.installation)}</td></tr>
-            <tr><td>GST (on the full price before rebates)</td><td className="r">{aud(p.gst)}</td></tr>
-            <tr><td>Government rebates<br /><span className="small muted">{p.solar_stcs + p.battery_stcs} certificates, assigned to us</span></td><td className="r">−{aud(p.rebates)}</td></tr>
+            <tr><td>Equipment</td><td className="r">{aud(p.equipment, 2)}</td></tr>
+            <tr><td>Installation</td><td className="r">{aud(p.installation, 2)}</td></tr>
+            <tr><td>GST (on the full price before rebates)</td><td className="r">{aud(p.gst, 2)}</td></tr>
+            <tr><td>Less assignment of STCs ({p.solar_stcs + p.battery_stcs})</td><td className="r">−{aud(p.rebates, 2)}</td></tr>
           </tbody></table></details>
       </div>
       <form id="secure-form" action={props.secure} onSubmit={() => track("secure_click", { slug: props.slug, panels, modules, backup })}>
