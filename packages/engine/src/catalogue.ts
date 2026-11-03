@@ -12,17 +12,19 @@ export interface CatalogueSystem {
 export interface Catalogue { version: string; systems: CatalogueSystem[] }
 export const DEFAULT_CATALOGUE = catalogueJson as unknown as Catalogue;
 
-export interface Site { postcode: string; asOf: string; roofType?: ConfigInput["roofType"]; storeys?: number }
+export interface Site { postcode: string; asOf: string; roofType?: ConfigInput["roofType"]; storeys?: number;
+  /** Price for the rebate window starting here (set when the current window is fully booked in this area). */
+  rebateFrom?: string | null }
 
 /** Everything pricing reads. The web app loads the active versions from the database; tests use the file defaults. */
 export type PricingData = Pick<QuoteContext, "rules" | "costs" | "menu" | "margins" | "rebates"> & { catalogue?: Catalogue };
 
 export function priceSystem(s: CatalogueSystem, site: Site, data: PricingData = {}): Quote {
-  const installDate = rebateWindow(site.asOf, data.rebates).lock_until;
+  const installDate = rebateWindow(site.asOf, data.rebates, site.rebateFrom).rebate_date;
   return quote({
     backup: "none", roofType: site.roofType ?? "tin", storeys: site.storeys ?? 1, tilt: false, batteryLocation: "other",
     vehicleExposure: false, ...s.config, postcode: site.postcode, installDate,
-  } as ConfigInput, { ...data, asOf: site.asOf });
+  } as ConfigInput, { ...data, asOf: site.asOf, rebateFrom: site.rebateFrom });
 }
 
 export const findSystem = (slug: string, c: Catalogue = DEFAULT_CATALOGUE) => c.systems.find((s) => s.slug === slug);

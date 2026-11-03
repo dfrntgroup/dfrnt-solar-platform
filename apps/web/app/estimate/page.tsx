@@ -53,7 +53,11 @@ export default async function FindMySystem({ searchParams }: { searchParams: Pro
         <h1>The right system for your home, priced.</h1>
         <form method="get" className="card" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))", gap: 12, alignItems: "end", padding: 16 }}>
           <input type="hidden" name="postcode" value={postcode} />
-          <label className="small"><strong>1. Do you have solar panels already?</strong><select name="solar" defaultValue={hasSolar ? "yes" : "no"} style={box}><option value="no">No, I need panels and a battery</option><option value="yes">Yes, I just want a battery</option></select></label>
+          <div className="small"><strong>1. Do you have solar panels already?</strong>
+            <div className="pills" role="radiogroup" aria-label="Do you have solar panels already?">
+              <label><input type="radio" name="solar" value="no" defaultChecked={!hasSolar} style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">No: panels + battery</span></label>
+              <label><input type="radio" name="solar" value="yes" defaultChecked={hasSolar} style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">Yes: battery only</span></label>
+            </div></div>
           <label className="small"><strong>2. Your last power bill, for 3 months ($)</strong><input aria-label="e.g. 750" name="bill" type="number" inputMode="numeric" defaultValue={bill || ""} style={box} placeholder="e.g. 750" required /></label>
           <label className="small"><strong>3. When is someone usually home?</strong><select name="home" defaultValue={home} style={box}><option value="evenings">Mostly mornings and evenings</option><option value="day">Some of the day</option><option value="allday">Home all day</option></select></label>
           <details className="small" style={{ gridColumn: "1 / -1" }}><summary style={{ cursor: "pointer" }}>Three-phase power? (most homes aren&apos;t)</summary>

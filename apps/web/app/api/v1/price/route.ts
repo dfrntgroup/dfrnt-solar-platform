@@ -12,7 +12,8 @@ export async function POST(req: Request) {
   if (!(await allow("price", 300))) return problem(429, "Slow down");
   const b = Body.safeParse(await req.json().catch(() => null));
   if (!b.success) return problem(400, "Invalid", b.error.flatten());
-  const r = priceChoice(b.data.slug, b.data, b.data.postcode, await pricingData());
+  const { rebateFromFor } = await import("@/lib/rebate-from");
+  const r = priceChoice(b.data.slug, b.data, b.data.postcode, await pricingData(), await rebateFromFor(b.data.postcode));
   if (!r) return problem(404, "Unknown system");
   const { q } = r;
   return json({

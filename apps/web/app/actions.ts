@@ -43,7 +43,7 @@ export async function secureSystem(form: FormData) {
     config: {
       backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false,
       ...s.config, panelSku: s.config.panelSku ?? "", stacks: s.config.stacks ?? 1, postcode,
-      installDate: rebateWindow(todayAEST(), data.rebates).lock_until,
+      installDate: rebateWindow(todayAEST(), data.rebates).rebate_date,
     },
     title: changed ? `${s.brand} · ${s.config.panelCount ? `${(s.config.panelCount * 0.475).toFixed(2)} kW solar + ` : ""}${Math.round(s.config.batteryModules * kwhPerModule(s.config.familyKey) * 10) / 10} kWh battery${backup === "whole_home" ? " + whole-home backup" : ""}` : `${s.brand} · ${s.title}`,
     systemSlug: s.slug,

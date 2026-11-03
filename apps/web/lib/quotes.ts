@@ -11,8 +11,9 @@ export async function createQuote(actor: Actor, req: QuoteRequest, opts: { idemp
   const data = await pricingData();
   // The rebate date is ours to set, never the caller's: it is the end of the price lock. Staff may pass one for
   // testing; anyone else (the public API, the site) gets today's window. (Review fix, 3 Nov 2026.)
-  const window = rebateWindow(asOf, data.rebates);
-  const installDate = actor.type === "staff" && config.installDate && installDateAllowed(config.installDate, asOf, data.rebates) ? config.installDate : window.lock_until;
+  const { rebateFromFor } = await import("./rebate-from");
+  const window = rebateWindow(asOf, data.rebates, await rebateFromFor(config.postcode));
+  const installDate = actor.type === "staff" && config.installDate && installDateAllowed(config.installDate, asOf, data.rebates) ? config.installDate : window.rebate_date;
   const q = quote({ ...config, installDate } as Parameters<typeof quote>[0], { ...data, asOf, discounts });
   const { status: _s, ...wopts } = opts;
   return write({ actor, action: "quotes.create", ...wopts }, req, async (tx) => {

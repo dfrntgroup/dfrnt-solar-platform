@@ -42,7 +42,7 @@ export default async function Suburb({ params, searchParams }: { params: Promise
         <p className="lead">Every price below is for {s.postcode}: installed, with the rebate already taken off. {s.installs} home{s.installs > 1 ? "s" : ""} in {s.name} installed with us.</p>
         {days?.length ? <p><strong>Next free install days:</strong> {days.map((d) => longDate(d)).join(" · ")}</p> : null}
         <div className="grid" style={{ marginTop: 18 }}>{top.map(({ s: x, q }) => <SystemCard key={x.slug} s={x} q={q} earliest={days?.[0] ?? null} />)}</div>
-        <p style={{ marginTop: 16 }}><Link className="btn ghost" href={`/systems?postcode=${s.postcode}`}>See all {all.length} systems for {s.postcode} →</Link></p>
+        <p style={{ marginTop: 16 }}><Link className="btn ghost" href={`/systems?postcode=${s.postcode}`}>See all {all.filter(({ s: x }) => x.kind === "solar_battery" && x.config.phases === 1).length} single-phase systems for {s.postcode} →</Link></p>
         {photos.some((p) => p.url) && <><h2 style={{ marginTop: 28 }}>Installs in {s.name}</h2>
           <div className="grid">{photos.filter((p) => p.url).map((p, i) => <div key={i} className="card"><img src={p.url!} alt={`Installation in ${s.name}`} loading="lazy" style={{ width: "100%" }} /><span className="small">{p.title}</span></div>)}</div></>}
         {reviews.length > 0 && <><h2 style={{ marginTop: 28 }}>What {s.name} customers said</h2>

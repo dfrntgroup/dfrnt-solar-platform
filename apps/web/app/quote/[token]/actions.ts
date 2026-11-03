@@ -7,6 +7,7 @@ import { answerRevision, applyCode, chooseBank, CUSTOMER, cancel, decideVariatio
 import { queueMessage } from "@/lib/messages";
 import { longDate } from "@/lib/site";
 import { putPhoto } from "@/lib/storage";
+import { imageInfo, MIN_PHOTO_PX } from "@/lib/image-size";
 import { allow } from "@/lib/ratelimit";
 import { safeMessage } from "@/lib/report";
 
@@ -99,11 +100,13 @@ async function storePhotos(q: { id: string }, f: FormData) {
   for (const kind of PHOTO_KINDS) {
     const file = f.get(`photo_${kind}`);
     if (file instanceof File && file.size > 0) {
-      if (!file.type.startsWith("image/")) throw new Error(`The ${kind.replace("_", " ")} photo must be an image`);
       if (file.size > 15_000_000) throw new Error(`The ${kind.replace("_", " ")} photo is over 15 MB`);
-      const path = `${q.id}/${kind}-${Date.now()}.${file.type.split("/")[1] ?? "jpg"}`;
-      await putPhoto(path, await file.arrayBuffer(), file.type);
-      await db()`insert into quote_photos (quote_id, kind, path, content_type, bytes) values (${q.id}, ${kind}, ${path}, ${file.type}, ${file.size})`;
+      const bytes = await file.arrayBuffer(), info = imageInfo(new Uint8Array(bytes.slice(0, 65536)));
+      if (!info) throw new Error(`The ${kind.replace("_", " ")} photo must be a photo (JPEG, PNG or WebP)`);
+      if (Math.max(info.width, info.height) < MIN_PHOTO_PX) throw new Error(`The ${kind.replace("_", " ")} photo is too small to read. Take it again, closer and in focus`);
+      const path = `${q.id}/${kind}-${Date.now()}.${info.type === "jpeg" ? "jpg" : info.type}`;
+      await putPhoto(path, bytes, `image/${info.type}`);
+      await db()`insert into quote_photos (quote_id, kind, path, content_type, bytes) values (${q.id}, ${kind}, ${path}, ${`image/${info.type}`}, ${file.size})`;
       n++;
     }
   }
@@ -350,4 +353,10 @@ export async function joinPlan(f: FormData) {
       where not exists (select 1 from memberships where quote_id = ${q.id} and status in ('pending','active')) returning id`;
     if (m && ["installed", "lodged", "settled", "complete"].includes(q.status)) await queueMessage("M25", token, q.customer_email, { name: q.customer_name, amount: `$${plan.price}`, reference: ref });
   });
+}
+
+/* December switch-over: accept today's price for an install after the rebate change. */
+export async function acceptNextWindow(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => { const { acceptForward } = await import("@/lib/jobs"); await acceptForward((await getQuote(token))!); });
 }

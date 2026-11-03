@@ -1,6 +1,7 @@
 import { db } from "@dfrnt/db";
 import { putPhoto } from "@/lib/storage";
 import { allow } from "@/lib/ratelimit";
+import { imageInfo, MIN_PHOTO_PX } from "@/lib/image-size";
 
 export const dynamic = "force-dynamic";
 const KINDS = ["switchboard", "meter", "roof", "battery_location"];
@@ -16,12 +17,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   const form = await req.formData().catch(() => null);
   const kind = String(form?.get("kind") ?? ""), file = form?.get("file");
   if (!KINDS.includes(kind) || !(file instanceof File) || !file.size) return Response.json({ error: "No photo" }, { status: 400 });
-  if (!file.type.startsWith("image/")) return Response.json({ error: "That isn't a photo" }, { status: 400 });
   if (file.size > 4_000_000) return Response.json({ error: "Photo too large" }, { status: 413 });
-  const path = `${q.id}/${kind}-${Date.now()}.${file.type.split("/")[1] ?? "jpg"}`;
-  try { await putPhoto(path, await file.arrayBuffer(), file.type); }
+  // Judge the bytes, not the label the browser put on them.
+  const bytes = await file.arrayBuffer();
+  const info = imageInfo(new Uint8Array(bytes.slice(0, 65536)));
+  if (!info) return Response.json({ error: "That isn't a photo. Take a photo with your camera and try again" }, { status: 400 });
+  if (Math.max(info.width, info.height) < MIN_PHOTO_PX) return Response.json({ error: "That photo is too small to read. Take it again, closer and in focus" }, { status: 400 });
+  const type = `image/${info.type}`;
+  const path = `${q.id}/${kind}-${Date.now()}.${info.type === "jpeg" ? "jpg" : info.type}`;
+  try { await putPhoto(path, bytes, type); }
   catch { return Response.json({ error: "Upload failed — try again" }, { status: 502 }); }
-  await db()`insert into quote_photos (quote_id, kind, path, content_type, bytes) values (${q.id}, ${kind}, ${path}, ${file.type}, ${file.size})`;
+  await db()`insert into quote_photos (quote_id, kind, path, content_type, bytes) values (${q.id}, ${kind}, ${path}, ${type}, ${file.size})`;
   await db()`update quotes set checkout_at = now() where id = ${q.id}`;
   return Response.json({ ok: true, kind });
 }

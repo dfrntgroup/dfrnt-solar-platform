@@ -95,6 +95,8 @@ export interface RebateWindow {
   window_end: string | null;
   /** Price lock = the earlier of asOf + lock_days and window_end. */
   lock_until: string;
+  /** The date the rebate is priced at: the lock date, or the start of a later window when priced forward. */
+  rebate_date: string;
 }
 
 /**
@@ -102,14 +104,20 @@ export interface RebateWindow {
  * current schedule window. Booking (E1) only offers install dates on or before window_end, so a locked price
  * can never be installed under a lower rebate.
  */
-export function rebateWindow(asOf: string, s: RebateSettings = DEFAULT_REBATE_SETTINGS): RebateWindow {
+export function rebateWindow(asOf: string, s: RebateSettings = DEFAULT_REBATE_SETTINGS, from?: string | null): RebateWindow {
+  // `from`: price for a later window (the current one is fully booked). The price is still held from today.
+  const base = from && from > asOf ? from : asOf;
   const dates = changeDates(s);
-  const start = dates.filter((d) => d <= asOf).pop() ?? asOf;
-  const next = dates.find((d) => d > asOf);
+  const start = dates.filter((d) => d <= base).pop() ?? base;
+  const next = dates.find((d) => d > base);
   const end = next ? addDays(next, -1) : null;
   const lock = addDays(asOf, s.lock_days);
-  return { window_start: start, window_end: end, lock_until: end && end < lock ? end : lock };
+  const lock_until = end && end < lock ? end : lock;
+  return { window_start: start, window_end: end, lock_until, rebate_date: lock_until > start ? lock_until : start };
 }
+
+/** The first day of the window after the one containing `asOf` (null when no change is scheduled). */
+export const nextWindowStart = (asOf: string, s: RebateSettings = DEFAULT_REBATE_SETTINGS) => changeDates(s).find((d) => d > asOf) ?? null;
 
 /** True when an install date may be offered for a quote priced under `asOf`'s window. */
 export const installDateAllowed = (installDate: string, asOf: string, s: RebateSettings = DEFAULT_REBATE_SETTINGS) => {

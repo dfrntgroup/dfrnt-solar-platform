@@ -125,6 +125,8 @@ export async function daysFor(q: QuoteRow, opts: { fresh?: boolean; max?: number
 
 /* ---------- who + when for a postcode (before they pay) ---------- */
 const pcCache = new Map<string, { at: number; v: string[] | null }>();
+/** Tests and Ops "refresh": forget cached next-free-days. */
+export const clearNextDaysCache = () => pcCache.clear();
 const includeTest = () => process.env.VERCEL_ENV !== "production";
 
 /** Next free install days for a postcode and kind of job, across every installer who can do it. null = nobody covers it. */

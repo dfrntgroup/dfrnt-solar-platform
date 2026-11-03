@@ -16,9 +16,10 @@ export async function sitePostcode(sp?: Record<string, string | string[] | undef
 }
 
 export async function priced(postcode: string, filter: (s: CatalogueSystem) => boolean = () => true) {
-  const asOf = todayAEST();
   const data = await pricingData();
-  return data.catalogue.systems.filter(filter).map((s) => ({ s, q: priceSystem(s, { postcode, asOf }, data) }));
+  const { siteFor } = await import("./rebate-from");
+  const site = await siteFor(postcode);
+  return data.catalogue.systems.filter(filter).map((s) => ({ s, q: priceSystem(s, site, data) }));
 }
 
 export const rebateDate = () => {

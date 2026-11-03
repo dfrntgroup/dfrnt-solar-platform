@@ -133,7 +133,7 @@ section { padding: 52px 0; }
 .incl td.k { width: 34%; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--teal); font-weight: 700; padding-top: 15px; }
 .buybox { border: 2px solid var(--ink); border-radius: var(--r); padding: 22px; position: sticky; top: 86px; background: #fff; }
 .stepper { display: flex; align-items: stretch; border: 1px solid var(--teal); border-radius: var(--r); overflow: hidden; }
-.stepper button { width: 44px; border: 0; background: #fff; color: var(--teal); font-size: 22px; cursor: pointer; }
+.stepper button { width: 48px; min-height: 48px; border: 0; background: #fff; color: var(--teal); font-size: 22px; cursor: pointer; }
 .stepper button:disabled { color: #aebdba; cursor: not-allowed; }
 .stepper output { min-width: 56px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 18px; border-left: 1px solid var(--teal); border-right: 1px solid var(--teal); }
 .cfg-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; border-top: 1px solid var(--line); }
@@ -297,3 +297,21 @@ table.index th.r, table.index td.r { text-align: right; padding-left: 10px; }
 table.index th span { display: block; font-weight: 400; }
 table.index td { padding-right: 6px; }
 @media (max-width: 600px) { table.index { font-size: 13px; } table.index th { font-size: 12px; } }
+
+/* Polish (approved 3 Nov 2026) */
+.toggle-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--line); cursor: pointer; }
+.switch { appearance: none; -webkit-appearance: none; width: 48px; height: 28px; border-radius: 14px; background: #c9d6d3; position: relative; cursor: pointer; flex: none; transition: background .15s; margin: 0; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 11px; background: #fff; transition: left .15s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.switch:checked { background: var(--teal); }
+.switch:checked::after { left: 23px; }
+.switch:focus-visible { outline: 3px solid var(--teal-soft); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .hero h1 .teal.hide-sm { display: none; }
+  .hero { padding: 16px 0 18px; }
+  .hero .hero-h1 { font-size: 30px; margin-bottom: 12px; }
+  .hero .finder { margin-top: 14px; padding: 14px; }
+}
+details.menu[open] > summary { font-size: 0; }
+details.menu[open] > summary::after { content: "✕"; font-size: 22px; }
+.photo-thumb { display: block; width: 96px; height: 96px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); margin-bottom: 6px; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

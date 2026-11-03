@@ -73,7 +73,7 @@ describe("T4 — 2027 rebate rules", () => {
 
 describe("T7 — rebate window: lock = earlier of 14 days or window end", () => {
   it("mid-November lock is 14 days", () => {
-    expect(rebateWindow("2026-11-01")).toEqual({ window_start: "2026-05-01", window_end: "2026-12-31", lock_until: "2026-11-15" });
+    expect(rebateWindow("2026-11-01")).toEqual({ window_start: "2026-05-01", window_end: "2026-12-31", lock_until: "2026-11-15", rebate_date: "2026-11-15" });
   });
   it("late December lock stops at 31 Dec", () => {
     expect(rebateWindow("2026-12-24").lock_until).toBe("2026-12-31");
@@ -161,5 +161,30 @@ describe("GoodWe ESA default module is the Lynx D G2 9.0 (3 Nov 2026)", () => {
     const q = priceSystem(s, { postcode: "4012", asOf: "2026-11-03" }, { rules, catalogue: cat });
     expect(q.config.usable_kwh).toBe(16);
     expect(q.config.bom.some((b) => b.sku === "PRT-GW-LX-D-8.3-G20")).toBe(true);
+  });
+});
+
+describe("December full → price for the next rebate window (3 Nov 2026)", () => {
+  it("priced forward: rebate on the January schedule, held from today, window ends 30 June", async () => {
+    const { findSystem, priceSystem, rebateWindow, nextWindowStart } = await import("../src");
+    const asOf = "2026-12-05";
+    const from = nextWindowStart(asOf)!;
+    expect(from).toBe("2027-01-01");
+    const w = rebateWindow(asOf, undefined, from);
+    expect(w.lock_until).toBe("2026-12-19");
+    expect(w.rebate_date).toBe("2027-01-01");
+    expect(w.window_end).toBe("2027-06-30");
+    const s = findSystem("solax-10kw-15kwh")!;
+    const dec = priceSystem(s, { postcode: "4551", asOf });
+    const jan = priceSystem(s, { postcode: "4551", asOf, rebateFrom: from });
+    expect(jan.rebate.battery_factor).toBe(5.7);
+    expect(dec.rebate.battery_factor).toBe(6.8);
+    expect(jan.stack.amount_payable).toBeGreaterThan(dec.stack.amount_payable);
+    expect(jan.window.window_end).toBe("2027-06-30");
+  });
+  it("normal case is unchanged: rebate date = lock date", async () => {
+    const { rebateWindow } = await import("../src");
+    const w = rebateWindow("2026-11-03");
+    expect(w.rebate_date).toBe(w.lock_until);
   });
 });

@@ -11,6 +11,7 @@ import { Header, Footer } from "@/components/Header";
 import { PhotoInput } from "@/components/PhotoInput";
 import { getQuote, REVISABLE } from "@/lib/jobs";
 import { plainLine } from "@/lib/plain-lines";
+import { plainReason } from "@/lib/reasons";
 import { daysFor, needsOf } from "@/lib/schedule";
 import { DayPicker, dayLabel } from "@/components/DayPicker";
 import { JobThread } from "@/components/JobThread";
@@ -29,9 +30,10 @@ import { installersFor } from "@/lib/installers";
 import { siteUrl } from "@/lib/messages";
 import { dateAEST, todayAEST } from "@/lib/api";
 import { aud, aud2, longDate } from "@/lib/site";
-import { joinPlan, addAddonAction, removeAddonAction, reportProblem, passRecord, saveHeard, takeEarlierDay, changeMyDay, saveAccess, customerMessage, acceptRevision, keepOriginal, addCode, approveVariation, declineVariation, cancelOrder, payByBank, payOnline, changeHowIPay, payFinance, payVariation, pickDate, signAgreement, submitHome } from "./actions";
+import { joinPlan, addAddonAction, removeAddonAction, reportProblem, passRecord, saveHeard, takeEarlierDay, changeMyDay, saveAccess, customerMessage, acceptRevision, keepOriginal, addCode, approveVariation, declineVariation, cancelOrder, payByBank, payOnline, changeHowIPay, payFinance, payVariation, acceptNextWindow, pickDate, signAgreement, submitHome } from "./actions";
 
 export const dynamic = "force-dynamic";
+const addDay = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400_000).toISOString().slice(0, 10);
 export const metadata = { title: "Your solar record", robots: { index: false } };
 
 const STEPS: [string, JobState[]][] = [
@@ -59,7 +61,7 @@ function Breakdown({ q }: { q: Quote }) {
       {st.discounts.map((d) => <tr key={d.code}><td>Discount: {d.code.replace("_", " ")}</td><td className="r">−{aud2(d.amount_inc_gst)} inc GST</td></tr>)}
       <tr><td>GST</td><td className="r">{aud2(st.gst)}</td></tr>
       <tr><td><strong>Total inc GST</strong></td><td className="r"><strong>{aud2(st.price_inc_gst)}</strong></td></tr>
-      <tr><td>Less assignment of STCs ({st.stcs} certificates)</td><td className="r">−{aud2(st.less_stcs)}</td></tr>
+      <tr><td>Government rebates<br /><span className="small muted">{st.stcs} certificates, assigned to us</span></td><td className="r">−{aud2(st.less_stcs)}</td></tr>
       <tr className="total"><td>You pay</td><td className="r">{aud2(st.amount_payable)}</td></tr>
     </tbody></table>
   );
@@ -104,6 +106,10 @@ export default async function Record({ params, searchParams }: { params: Promise
   const finProv = q.payment_method?.startsWith("finance:") ? (await getSetting("finance")).providers.find((x) => `finance:${x.id}` === q.payment_method) : undefined;
   const picking = state === "awaiting_date" || (["booked", "gear_ordered", "delivered"].includes(state) && q.rebook);
   const choice = picking ? await daysFor(q) : null;
+  const { forwardOffer } = await import("@/lib/jobs");
+  const fwd = q ? await forwardOffer(q).catch(() => null) : null;
+  // Paid but no day left inside the window their price was for: a person sorts it (Ops sees it on the board).
+  const stuck = state === "awaiting_date" && choice && choice.mode === "live" && !choice.slots.length && choice.until ? addDay(choice.until, 1) : null;
   const signDays = state === "priced" && q.installer_id ? await daysFor(q, { max: 3 }).catch(() => null) : null;
   const [earlier] = ["booked", "gear_ordered"].includes(state) && !q.rebook && sp.offer && /^[0-9a-f-]{36}$/.test(sp.offer)
     ? await db()`select id, dates::text[] dates from date_offers where id = ${sp.offer} and quote_id = ${q.id} and kind = 'earlier' and status = 'open' and expires_at > now()` : [];
@@ -148,6 +154,13 @@ export default async function Record({ params, searchParams }: { params: Promise
           </div>)}
 
         <RecordUsage q={q} sp={sp} />
+        {fwd && <div className="card" style={{ marginTop: 16, borderLeft: "4px solid var(--teal)" }}>
+          <strong>Installs up to {longDate(addDay(fwd.from, -1))} are fully booked in your area.</strong>
+          <span className="small">Your price ({aud2(fwd.was)}) was for an install by then, and there are no days left to give you. The rebate is lower from {longDate(fwd.from)}, so today&apos;s price for an install from then is <strong>{aud2(fwd.now)}</strong>.</span>
+          <form action={acceptNextWindow} style={{ marginTop: 10 }}><input type="hidden" name="token" value={token} /><button className="btn" type="submit">Accept {aud2(fwd.now)} for an install from {longDate(fwd.from)}</button></form>
+          <span className="small muted" style={{ marginTop: 6 }}>Or don&apos;t go ahead: {["signed", "payment_pending"].includes(state) ? "cancel below for a full refund of anything you've paid" : "nothing is owed"}. Questions? Call 1300 133 768.</span>
+        </div>}
+        {stuck && <div className="note" style={{ marginTop: 16 }}><strong>Installs up to {longDate(addDay(stuck, -1))} are fully booked in your area.</strong> We&apos;ll call you today to sort your install date. Nothing is lost: your payment is safe.</div>}
         {state === "lapsed" && (<>
           <div className="note" style={{ marginTop: 16 }}><strong>This price expired on {longDate(q.lock_until)}.</strong> Prices and the rebate move over time, so we can&apos;t hold it any longer.</div>
           <p style={{ marginTop: 12 }}><Link className="btn block" href={lapsedSlug ? `/systems/${lapsedSlug}?postcode=${q.postcode}` : `/systems?postcode=${q.postcode}`}>See today&apos;s price for this system</Link></p>
@@ -155,12 +168,12 @@ export default async function Record({ params, searchParams }: { params: Promise
         </>)}
         {(state === "saved" || state === "secured") && (<>
           <div className="pay" style={{ margin: "16px 0 6px" }}><small>You pay, installed</small>{aud(q.result.stack.amount_payable)}</div>
-          <div className="ok">Price and rebate locked until <strong>{longDate(q.lock_until)}</strong>. Keep this link: it&apos;s your record.</div>
+          {!fwd && <div className="ok">Price and rebate locked until <strong>{longDate(q.lock_until)}</strong>. Keep this link: it&apos;s your record.</div>}
           <p style={{ marginTop: 10 }}><Share title="Our solar price" text={`${q.title ?? "Solar and battery"}: ${aud(q.result.stack.amount_payable)} installed, locked until ${longDate(q.lock_until)}.`} label="Send to someone at home" /></p>
           {q.design_fee_status === "due" ? (
             <div className="card" style={{ marginTop: 20 }}>
               <strong>One step left: your design check</strong>
-              <span className="small">Your home needs an installer to check your photos before we confirm the price{q.pricing_reasons?.length ? ` (${q.pricing_reasons.join(", ").toLowerCase()})` : ""}. The design check is {aud(fee?.amount ?? 99)}, and it comes off your system price when you go ahead.</span>
+              <span className="small">Your home needs an installer to check your photos before we confirm the price{q.pricing_reasons?.length ? ` (${q.pricing_reasons.map(plainReason).join("; ").toLowerCase()})` : ""}. The design check is {aud(fee?.amount ?? 99)}, and it comes off your system price when you go ahead.</span>
               <table className="lines"><tbody>
                 <tr><td>Amount</td><td className="r"><strong>{aud(fee?.amount ?? 99)}</strong></td></tr>
                 <tr><td>Reference</td><td className="r"><strong>{fee?.reference}</strong></td></tr>
@@ -173,8 +186,10 @@ export default async function Record({ params, searchParams }: { params: Promise
         </>)}
 
         {(state === "pricing_installer" || state === "pricing_instant" || state === "tech_review") && (<>
-          <div className="ok" style={{ marginTop: 16 }}><strong>Your installer is pricing your home.</strong> You&apos;ll get your confirmed price by email, usually today. Your lock is held while we price.</div>
-          {q.pricing_reasons?.length ? <p className="muted small">Why it needs a look: {q.pricing_reasons.join(" · ")}</p> : null}
+          <div className="ok" style={{ marginTop: 16 }}>
+            <strong>{q.pricing_reasons?.length ? `Your installer is checking ${q.pricing_reasons.length === 1 ? "one thing" : `${["", "", "two", "three", "four", "five"][q.pricing_reasons.length] ?? q.pricing_reasons.length} things`} on your home.` : "Your installer is pricing your home."}</strong> You&apos;ll get your confirmed price by email, usually today. Your price stays held while they do.
+            {q.pricing_reasons?.length ? <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{q.pricing_reasons.map((r) => <li key={r}>{plainReason(r)}</li>)}</ul> : null}
+          </div>
           <CallBack back={`/quote/${token}`} token={token} state={sp.callback} compact />
         </>)}
 

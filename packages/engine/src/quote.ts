@@ -15,6 +15,8 @@ export interface QuoteContext {
   extraLabour?: LabourRequest[];
   /** Installer-priced variations already in the price. */
   variations?: PriceLine[];
+  /** Price for the window starting here (current window fully booked). Inferred from input.installDate when that is past the current window. */
+  rebateFrom?: string | null;
 }
 export interface Quote {
   config: ConfigOutput; rebate: Rebate; window: RebateWindow; stack: PriceStack;
@@ -31,7 +33,7 @@ export function quote(input: ConfigInput, ctx: QuoteContext): Quote {
   const labour = labourLines([...config.labour, ...(ctx.extraLabour ?? [])], { kw: config.panel_kw, panels: input.panelCount }, { menu, margins });
   const rebate = computeRebate({ eligibleKw: config.rebates.eligible_kw, usableKwh: input.priorBatteryClaim ? 0 : config.usable_kwh, postcode: input.postcode, installDate: input.installDate }, settings);
   const stack = priceStack([...hw, ...labour, ...(ctx.variations ?? [])], { stcs: rebate.solar_stcs + rebate.battery_stcs, total: rebate.total }, ctx.discounts);
-  const window = rebateWindow(ctx.asOf, settings);
+  const window = rebateWindow(ctx.asOf, settings, ctx.rebateFrom ?? (input.installDate > (rebateWindow(ctx.asOf, settings).window_end ?? "9999") ? input.installDate : null));
   return {
     config, rebate, window, stack, ok: config.ok,
     checkout_allowed: config.ok && stack.checkout_allowed,

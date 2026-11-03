@@ -117,8 +117,8 @@ export async function Checkout({ q, step, sp, have, installers, recordUrl }: {
         <div className="card" style={{ marginTop: 12, padding: 14, display: "flex", gap: 14, alignItems: "center", flexWrap: "wrap" }}>
           <div className="hide-sm" aria-hidden dangerouslySetInnerHTML={{ __html: qr }} />
           <div style={{ flex: 1, minWidth: 200 }}>
-            <strong>Easier on your phone?</strong>
-            <span className="small muted"><span className="hide-sm">Scan this with your phone camera, or </span>get the link by email and take the photos when you&apos;re next home.</span>
+            <strong className="hide-sm">Easier on your phone?</strong><strong className="show-sm" style={{ fontSize: 16 }}>Not at home right now?</strong>
+            <span className="small muted" style={{ display: "block" }}><span className="hide-sm">Scan this with your phone camera, or get the link by email and take the photos when you&apos;re next home.</span><span className="show-sm" style={{ fontSize: 13 }}>Email yourself the link and take the photos later.</span></span>
             {sp.sent ? <p className="small ok" style={{ margin: "6px 0 0" }}>Sent to {q.customer_email}.</p> :
               <form action={emailMeLink} style={{ marginTop: 8 }}><input type="hidden" name="token" value={token} /><button className="btn ghost sm" type="submit">Email me the link</button></form>}
           </div>

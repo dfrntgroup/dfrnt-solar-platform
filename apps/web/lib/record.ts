@@ -73,10 +73,14 @@ export async function reportFault(q: QuoteRow, f: { what: string; detail: string
     `Serials: ${(q.serials ?? []).map((s) => s.serial).join(", ") || "not yet on file"}`].join("\n");
   const id = await openTicket({ kind: "fault", name: q.customer_name ?? undefined, email: q.customer_email ?? undefined, phone: q.customer_phone ?? undefined, subject: `Fault: ${f.what}`.slice(0, 120), body, quoteId: q.id });
   for (const file of f.photos.slice(0, 3)) {
-    if (!file.size || !file.type.startsWith("image/") || file.size > 15_000_000) continue;
-    const path = `${q.id}/issue-${Date.now()}.${file.type.split("/")[1] ?? "jpg"}`;
-    await putPhoto(path, await file.arrayBuffer(), file.type);
-    await db()`insert into quote_photos (quote_id, kind, path, content_type, bytes, ticket_id) values (${q.id}, 'issue', ${path}, ${file.type}, ${file.size}, ${id})`;
+    if (!file.size || file.size > 15_000_000) continue;
+    const bytes = await file.arrayBuffer();
+    const { imageInfo } = await import("./image-size");
+    const info = imageInfo(new Uint8Array(bytes.slice(0, 65536)));
+    if (!info) continue;
+    const path = `${q.id}/issue-${Date.now()}.${info.type === "jpeg" ? "jpg" : info.type}`;
+    await putPhoto(path, bytes, `image/${info.type}`);
+    await db()`insert into quote_photos (quote_id, kind, path, content_type, bytes, ticket_id) values (${q.id}, 'issue', ${path}, ${`image/${info.type}`}, ${file.size}, ${id})`;
   }
   const { getSetting } = await import("./settings");
   const { sendEmail } = await import("./email");

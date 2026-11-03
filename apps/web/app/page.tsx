@@ -18,22 +18,28 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
   const from = Math.min(...all.map(({ q }) => q.stack.amount_payable));
   const end = await windowEnd();
   const t = await getSetting("trust");
+  const { rebateFromFor } = await import("@/lib/rebate-from");
+  const forward = await rebateFromFor(postcode);
   const anchor = all.find(({ s }) => s.slug === "solax-10kw-15kwh") ?? top[0];
   return (
     <>
       <Header postcode={postcode} />
       <div className="hero"><div className="wrap split">
         <div>
-          <p className="eyebrow">DFRNT Solar · Solar and home batteries</p>
-          <h1>Keep more of your money.<span className="teal">Make more of your own power.</span></h1>
-          <p className="lead">Every system priced for your postcode, installed, with the rebate already taken off. One contract, one price, one payment.</p>
+          <p className="eyebrow hide-sm">DFRNT Solar · Solar and home batteries</p>
+          <h1 className="hero-h1">Keep more of your money.<span className="teal hide-sm">Make more of your own power.</span></h1>
+          <p className="lead hide-sm">Every system priced for your postcode, installed, with the rebate already taken off. One contract, one price, one payment.</p>
+          <p className="lead show-sm" style={{ margin: "-8px 0 0" }}>Installed price, rebate off, for your postcode.</p>
           <form action="/estimate" method="get" className="finder">
             <strong style={{ display: "block", marginBottom: 10 }}>Find my system in 30 seconds</strong>
             <div className="row">
               <label>Postcode<input name="postcode" defaultValue={postcode} inputMode="numeric" pattern="\d{4}" maxLength={4} className="field" /></label>
               <label>Last quarterly bill ($)<input name="bill" inputMode="numeric" placeholder="e.g. 750" className="field" required /></label>
             </div>
-            <label className="small" style={{ display: "block", marginTop: 10 }}>Already have solar panels?<select name="solar" className="field" defaultValue="no"><option value="no">No, I need panels and a battery</option><option value="yes">Yes, I just want a battery</option></select></label>
+            <div className="pills" role="radiogroup" aria-label="What do you need?" style={{ paddingTop: 10 }}>
+              <label><input type="radio" name="solar" value="no" defaultChecked style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">Panels + battery</span></label>
+              <label><input type="radio" name="solar" value="yes" style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">Battery only (I have solar)</span></label>
+            </div>
             <button className="btn block" style={{ marginTop: 12 }} type="submit">Find my system →</button>
             <p className="small muted" style={{ margin: "8px 0 0" }}>Systems from {aud(from)} installed, after rebates.</p>
           </form>
@@ -47,11 +53,11 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
 
       <section className="shade"><div className="wrap"><div className="grid g2">
         {anchor && <div className="card">
-          <p className="eyebrow" style={{ marginBottom: 4 }}>Most homes choose</p>
+          <p className="eyebrow" style={{ marginBottom: 4 }}>Sized for a typical family home</p>
           <h3 style={{ margin: "0 0 6px" }}>{anchor.s.brand} {anchor.s.title}</h3>
           <div className="pay" style={{ margin: "4px 0" }}>{aud(anchor.q.stack.amount_payable)}</div>
           <p className="small muted" style={{ margin: "0 0 12px" }}>Installed, inc GST, rebate of {aud(anchor.q.stack.less_stcs)} already off · postcode {postcode}</p>
-          <Link className="btn" href={`/systems/${anchor.s.slug}`}>See this system</Link>
+          <Link className="btn" href={`/systems/${anchor.s.slug}`}>See this system</Link> <Link className="link" href="/estimate" style={{ marginLeft: 10 }}>Find my size</Link>
         </div>}
         <div className="card founder">
           <div className="face"><span className="avatar" aria-hidden>KB</span><div><strong>Karl Brown, founder</strong><br /><span className="small muted">Founded InStyle Solar: 29,000+ installs, AFR Fast 100 #3</span></div></div>
@@ -73,9 +79,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
       <section className="shade"><div className="wrap">
         <p className="eyebrow">Most chosen · {postcode} · rebates as at {rebateDate()}</p>
         <h2>Pick a system. See what you pay.</h2>
-        {end && <p className="muted">Battery rebates step down after {longDate(end)}. Secure a price now and every install date we offer is on or before then.</p>}
+        {forward ? <p className="muted">Installs up to {longDate(end!)} are fully booked in {postcode}. Prices now include the rebate for installs from {longDate(forward)}.</p>
+          : end && <p className="muted">Battery rebates step down after {longDate(end)}. Secure a price now and every install date we offer is on or before then.</p>}
         <div className="grid" style={{ marginTop: 20 }}>{top.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} earliest={earliest} />)}</div>
-        <p style={{ marginTop: 22 }}><Link className="btn ghost" href="/systems">See all {all.length} systems →</Link></p>
+        <p style={{ marginTop: 22 }}><Link className="btn ghost" href="/systems">See all {all.filter(({ s }) => s.kind === "solar_battery" && s.config.phases === 1).length} systems for single-phase homes →</Link> <Link className="link" href="/systems?phase=3" style={{ marginLeft: 10 }}>Three-phase</Link></p>
       </div></section>
 
       <section><div className="wrap">

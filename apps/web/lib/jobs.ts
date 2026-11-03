@@ -93,8 +93,9 @@ export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name
   if (!["saved", "secured", "lapsed"].includes(q.status)) throw new Error("This quote has already been priced");
   if (q.status === "saved" || q.status === "lapsed") {
     // A fresh lock from today: new lock date and a rebate date inside today's window (a lapsed quote kept the old ones).
-    const w = rebateWindow(todayAEST(), (await pricingDataFor(q.result.versions)).rebates);
-    await move(q, "secured", CUSTOMER, "quotes.secure", { lock_until: w.lock_until, input: db().json({ ...q.input, installDate: w.lock_until } as never) });
+    const { rebateFromFor } = await import("./rebate-from");
+    const w = rebateWindow(todayAEST(), (await pricingDataFor(q.result.versions)).rebates, await rebateFromFor(q.postcode));
+    await move(q, "secured", CUSTOMER, "quotes.secure", { lock_until: w.lock_until, input: db().json({ ...q.input, installDate: w.rebate_date } as never) });
     q = (await getQuote(q.token))!;
   }
   const inst = await installerFor(q, site);
@@ -154,6 +155,11 @@ const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00
 export async function sign(q: QuoteRow, name: string) {
   if (q.status !== "priced") throw new Error("Nothing to sign");
   if (q.lock_until < todayAEST()) { await move(q, "lapsed", SYSTEM, "quotes.lapse", {}, "Lock expired before signing"); throw new Error("This price has expired. Secure it again at today's price."); }
+  {
+    const { rebateFromFor } = await import("./rebate-from");
+    const from = await rebateFromFor(q.postcode);
+    if (from && (q.input.installDate ?? "") < from) throw new Error("Installs before the rebate change are fully booked in your area. Accept today's price for an install in the new year (shown above), or call us on 1300 133 768.");
+  }
   {
     // Signing inside the last days of a rebate window would leave a paid job with no bookable day (every offered
     // date must be inside the window). Stop before money changes hands and send them to a person.
@@ -369,11 +375,11 @@ export async function applyCode(q: QuoteRow, raw: string) {
   await repriceFrozen(q);
 }
 
-async function repriceFrozen(q: QuoteRow) {
-  if (q.status !== "priced") return;
+async function repriceFrozen(q: QuoteRow, states: JobState[] = ["priced"]) {
+  if (!states.includes(q.status)) return;
   const fresh = (await getQuote(q.token))!;
   const p = await reprice(fresh, { extraLabour: extraFromSnapshot(fresh) });
-  await db()`update quotes set snapshot = ${db().json(p as never)}, amount_payable = ${p.stack.amount_payable}, price_inc_gst = ${p.stack.price_inc_gst} where id = ${q.id}`;
+  await db()`update quotes set snapshot = ${db().json(p as never)}, amount_payable = ${p.stack.amount_payable}, price_inc_gst = ${p.stack.price_inc_gst}, stcs = ${p.stack.stcs} where id = ${q.id}`;
 }
 
 /* C8: design-check fee received (only when the $99 switch is on) → credit for the same amount, then on to the installer. */
@@ -444,4 +450,35 @@ export async function answerRevision(q: QuoteRow, accept: boolean) {
   } else {
     await freezePrice(fresh, rev.priced, CUSTOMER, `Customer accepted the revised design: ${rev.reason}`);
   }
+}
+
+/** States in which a customer whose price was for the current rebate window can move to the next one. */
+export const FORWARDABLE: JobState[] = ["secured", "pricing_instant", "pricing_installer", "tech_review", "priced", "signed", "payment_pending"];
+
+/** The installs-before-the-change are full in this area and this price was for them: today's price for the next window. */
+export async function forwardOffer(q: QuoteRow): Promise<{ from: string; was: number; now: number } | null> {
+  if (!FORWARDABLE.includes(q.status)) return null;
+  const { rebateFromFor } = await import("./rebate-from");
+  const from = await rebateFromFor(q.postcode);
+  if (!from || (q.input.installDate ?? "") >= from) return null;
+  const w = rebateWindow(todayAEST(), (await pricingDataFor(q.result.versions)).rebates, from);
+  const moved = { ...q, input: { ...q.input, installDate: w.rebate_date } } as QuoteRow;
+  const p = await reprice(moved, { extraLabour: extraFromSnapshot(q) });
+  return { from, was: (q.snapshot ?? q.result).stack.amount_payable, now: p.stack.amount_payable };
+}
+
+/** The customer accepts the next window's price (approved 3 Nov 2026: offered on their record, one tap). */
+export async function acceptForward(q: QuoteRow) {
+  const offer = await forwardOffer(q);
+  if (!offer) throw new Error("Nothing to change: your price is still bookable.");
+  if (q.status === "payment_pending") { await changePayment(q); q = (await getQuote(q.token))!; }
+  const w = rebateWindow(todayAEST(), (await pricingDataFor(q.result.versions)).rebates, offer.from);
+  await write({ actor: CUSTOMER, action: "quotes.accept_next_window", rationale: "Installs before the rebate change fully booked; customer accepted the new-window price" },
+    { token: q.token, from: offer.from }, async (tx) => {
+      await tx`update quotes set input = ${tx.json({ ...q.input, installDate: w.rebate_date } as never)}, lock_until = ${w.lock_until}, updated_at = now() where id = ${q.id}`;
+      return { entity: "quote", entityId: q.id, event: "quote.next_window", result: { was: offer.was, now: offer.now, from: offer.from }, payload: { was: offer.was, now: offer.now } };
+    });
+  const fresh = (await getQuote(q.token))!;
+  if (["priced", "signed"].includes(fresh.status)) await repriceFrozen(fresh, ["priced", "signed"]);
+  else { const p = await reprice(fresh); await db()`update quotes set result = ${db().json(p as never)}, amount_payable = ${p.stack.amount_payable}, price_inc_gst = ${p.stack.price_inc_gst}, stcs = ${p.stack.stcs} where id = ${q.id}`; }
 }

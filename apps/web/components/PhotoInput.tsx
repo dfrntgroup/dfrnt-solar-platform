@@ -16,12 +16,22 @@ async function shrink(file: File): Promise<File> {
   } catch { return file; }
 }
 
+/** Longest side in pixels, or 0 when the browser can't read it as an image. */
+async function longestSide(file: File) {
+  try { const b = await createImageBitmap(file); const n = Math.max(b.width, b.height); b.close?.(); return n; } catch { return 0; }
+}
+
 export function PhotoInput({ name, token, kind }: { name: string; token?: string; kind?: string }) {
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [msg, setMsg] = useState("");
+  const [thumb, setThumb] = useState<string | null>(null);
   async function picked(e: React.ChangeEvent<HTMLInputElement>) {
     const input = e.currentTarget, original = input.files?.[0];
     if (!original) return;
+    const side = await longestSide(original);
+    if (!side) { input.value = ""; setThumb(null); setState("error"); setMsg("That isn't a photo. Take one with your camera"); return; }
+    if (side < 800) { input.value = ""; setThumb(null); setState("error"); setMsg("That photo is too small to read. Take it again, closer and in focus"); return; }
+    setThumb(URL.createObjectURL(original));
     const file = await shrink(original);
     const put = (f: File) => { const dt = new DataTransfer(); dt.items.add(f); input.files = dt.files; };
     if (file !== original) put(file);
@@ -39,10 +49,11 @@ export function PhotoInput({ name, token, kind }: { name: string; token?: string
   }
   return (
     <span style={{ display: "block" }}>
-      <input type="file" name={name} accept="image/*" capture="environment" onChange={picked} disabled={state === "sending"} />
+      {thumb && <img src={thumb} alt="" className="photo-thumb" />}
+      <input type="file" name={name} accept="image/*" capture="environment" onChange={picked} disabled={state === "sending"} className={state === "done" ? "visually-hidden" : undefined} id={kind ? `photo-${kind}` : undefined} />
       {state === "sending" && <span className="small muted" style={{ display: "block", marginTop: 4 }}>Uploading…</span>}
-      {state === "done" && <span className="small ok" style={{ display: "block", marginTop: 4 }}>✓ Uploaded</span>}
-      {state === "error" && <span className="small note" style={{ display: "block", marginTop: 4 }}>{msg}. It&apos;ll go when you press the button below instead.</span>}
+      {state === "done" && <span className="small ok" style={{ display: "block", marginTop: 4 }}>✓ Uploaded {kind && <label htmlFor={`photo-${kind}`} className="link" style={{ marginLeft: 8, cursor: "pointer" }}>Retake</label>}</span>}
+      {state === "error" && <span className="small note" style={{ display: "block", marginTop: 4 }}>{msg}{/too small|isn't a photo/.test(msg) ? "." : ". It'll go when you press the button below instead."}</span>}
     </span>
   );
 }
