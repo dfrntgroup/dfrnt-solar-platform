@@ -352,7 +352,8 @@ details.menu[open] > summary::after { content: "✕"; font-size: 22px; }
 .filters .lab { font-size: 13px; color: var(--muted); align-self: center; min-width: 76px; }
 .filterrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
 .stepper button small { display: block; font-size: 10px; line-height: 1; color: var(--muted); margin-top: 2px; }
-.stepper button { padding: 4px 0; width: 54px; }
+.stepper button { padding: 4px 0; width: 64px; font-size: 20px; }
+.stepper button small { font-size: 10px; white-space: nowrap; }
 .pills button .delta { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
 .steps3 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 18px; }
 .steps3 .num { color: var(--teal-soft); }

@@ -35,10 +35,12 @@ export async function secureSystem(form: FormData) {
   // No installer covers the postcode: a secured price would promise what nobody can deliver.
   { const { earliestFor } = await import("@/lib/capacity"); if ((await earliestFor(postcode)) === null) redirect(`/contact?kind=waitlist&postcode=${postcode}`); }
   const backup = form.get("backup") === "whole_home" ? "whole_home" : "none";
+  const inverterSku = /^[A-Z0-9.\-]{3,40}$/.test(String(form.get("inverter") ?? "")) ? String(form.get("inverter")) : undefined;
   const s = form.get("panels") != null
-    ? configured(base, { panels: Number(form.get("panels")), modules: Number(form.get("modules")), backup }, postcode, data)
+    ? configured(base, { panels: Number(form.get("panels")), modules: Number(form.get("modules")), backup, inverterSku }, postcode, data)
     : base;
-  const changed = s.config.panelCount !== base.config.panelCount || s.config.batteryModules !== base.config.batteryModules || backup !== "none";
+  const { baseInverter } = await import("@/lib/configure");
+  const changed = s.config.panelCount !== base.config.panelCount || s.config.batteryModules !== base.config.batteryModules || backup !== "none" || (!!inverterSku && inverterSku !== baseInverter(base, postcode, data));
   const out = await createQuote({ type: "customer", id: "anonymous" }, {
     config: {
       backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false,

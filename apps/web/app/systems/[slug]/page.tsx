@@ -20,7 +20,8 @@ import { nextDays, outcome } from "@/lib/capacity";
 import { Trust } from "@/components/Trust";
 import { CallBack } from "@/components/CallBack";
 import { componentLines } from "@/lib/price-lines";
-import { stepPrices } from "@/lib/steps";
+import { inverterOptions, stepPrices } from "@/lib/steps";
+import { baseInverter } from "@/lib/configure";
 import { BandPill, Facts } from "@/components/SystemCard";
 
 export const dynamic = "force-dynamic";
@@ -46,13 +47,16 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const { siteFor } = await import("@/lib/rebate-from");
   const site = await siteFor(postcode);
   const q0 = priceSystem(s, site, data);
-  const opts = configOptions({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode, installDate: q0.window.rebate_date, ...s.config } as ConfigInput, data.rules);
+  // The inverter is held at the system's own unless the customer picked another (?inverter=); ranges are what that inverter carries.
+  const wantInv = /^[A-Z0-9.\-]{3,40}$/.test(sp.inverter ?? "") && data.rules.inverters[sp.inverter!] ? sp.inverter : undefined;
+  const heldInverter = wantInv ?? baseInverter(s, postcode, data, site.rebateFrom);
+  const opts = configOptions({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode, installDate: q0.window.rebate_date, ...s.config, inverterSku: heldInverter, preferInverterSku: undefined } as ConfigInput, data.rules, { fixedInverter: true });
   // Arriving from a usage-based recommendation: start the configurator at the recommended counts.
   const wantP = Number(sp.panels), wantM = Number(sp.modules);
   const usePanels = Number.isInteger(wantP) && (s.config.panelCount === 0 ? wantP === 0 : opts.panels.includes(wantP)) ? wantP : s.config.panelCount;
   const useModules = Number.isInteger(wantM) && opts.modules.includes(wantM) ? wantM : s.config.batteryModules;
-  const custom = usePanels !== s.config.panelCount || useModules !== s.config.batteryModules;
-  const q = custom ? priceSystem(configured(s, { panels: usePanels, modules: useModules, backup: "none" }, postcode, data, site.rebateFrom), site, data) : q0;
+  const custom = usePanels !== s.config.panelCount || useModules !== s.config.batteryModules || (!!wantInv && wantInv !== baseInverter(s, postcode, data, site.rebateFrom));
+  const q = custom ? priceSystem(configured(s, { panels: usePanels, modules: useModules, backup: "none", inverterSku: wantInv }, postcode, data, site.rebateFrom), site, data) : q0;
   const st = q.stack, c = q.config, r = q.rebate;
   const { activeAddons } = await import("@/lib/addons");
   const addons = await activeAddons(s.brand).catch(() => []);
@@ -67,7 +71,8 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const rebateLine = rebateLineFor(q.window, site.rebateFrom);
   const parts = c.bom.filter((b) => !b.included && !b.sku.startsWith("BOS") && !b.sku.startsWith("MNT"));
   const lines = componentLines(q, usePanels);
-  const steps = stepPrices(s.slug, { panels: usePanels, modules: useModules, backup: "none" }, postcode, data, site.rebateFrom);
+  const steps = stepPrices(s.slug, { panels: usePanels, modules: useModules, backup: "none", inverterSku: wantInv }, postcode, data, site.rebateFrom);
+  const inverters = inverterOptions(s.slug, { panels: usePanels, modules: useModules, backup: "none", inverterSku: wantInv }, postcode, data, site.rebateFrom);
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "Product", name: `${s.brand} ${s.title}, installed`, brand: { "@type": "Brand", name: s.brand },
@@ -118,12 +123,12 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
           <aside className="buybox">
             <p className="eyebrow" style={{ marginBottom: 6 }}>Size it to your home</p>
             <h3>Panels and battery, your way.</h3>
-            <p className="small muted" style={{ marginTop: 0 }}>Change the counts. The inverter, parts, rebates and installation follow, and each button shows what the step costs you after rebates.</p>
+            <p className="small muted" style={{ marginTop: 0 }}>Change the panels, the battery or the inverter. Parts, rebates and installation follow, and each button shows what the step costs you after rebates.</p>
             <Configurator slug={s.slug} postcode={postcode} panels={opts.panels} modules={opts.modules} backupAvailable={opts.backup} moduleKwh={opts.moduleKwh} panelW={opts.panelW}
-              start={{ panels: usePanels, modules: useModules }} lockUntil={longDate(q.window.lock_until)} secure={secureSystem} served={next !== null}
+              start={{ panels: usePanels, modules: useModules, inverter: wantInv }} lockUntil={longDate(q.window.lock_until)} secure={secureSystem} served={next !== null}
               initial={{ ok: q.config.ok, summary: c.summary, solar_kw: c.panel_kw, usable_kwh: c.usable_kwh, inverter: c.inverter?.model, towers: c.stacks?.physical_towers ?? 0,
                 you_pay: st.amount_payable, before_rebates: st.price_inc_gst, rebates: st.less_stcs, gst: st.gst, equipment: st.hardware_ex_gst, installation: st.installation_ex_gst,
-                solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message), lines, steps }} />
+                solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message), lines, steps, inverters, inverter_sku: c.inverter?.sku }} />
             <p className="small" style={{ margin: "4px 0 8px" }}>Want a different inverter or panel? <Link href={buildHref({ ...s.config, inverterSku: c.inverter?.sku, batteryModules: useModules, panelCount: usePanels }, postcode)}>Build your own</Link></p>
             <table className="incl" style={{ marginTop: 6 }}><tbody>
               <tr><td className="k">Next free days</td><td>{next?.length ? <strong>{next.map((d) => longDate(d)).join(" · ")}</strong> : next === null ? "Not in your area yet — join the waitlist" : "Confirmed when you book"}<br /><span className="small muted">{next?.length ? "From installers' live calendars. You pick your day after paying." : "From your installer's real free days"}</span></td></tr>

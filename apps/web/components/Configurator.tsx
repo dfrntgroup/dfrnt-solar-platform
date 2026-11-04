@@ -6,13 +6,14 @@ import { outcome } from "@/lib/outcome";
 import { friendlySummary, friendlyWarning } from "@/lib/images";
 
 interface Price { ok: boolean; summary: string; solar_kw: number; usable_kwh: number; inverter?: string; towers: number; you_pay: number; before_rebates: number; rebates: number; gst: number; equipment: number; installation: number; solar_stcs: number; battery_stcs: number; warnings: string[]; blockers: string[];
-  lines?: { label: string; amount: number }[]; steps?: { panel: { down: number | null; up: number | null }; modules: Record<number, number> } | null }
+  lines?: { label: string; amount: number }[]; steps?: { panel: { down: number | null; up: number | null }; modules: Record<number, number> } | null;
+  inverters?: { sku: string; model: string; kw: number; you_pay: number | null; current: boolean; reason: string; blocker?: string }[]; inverter_sku?: string }
 const aud = (n: number, d = 0) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: d, minimumFractionDigits: d });
 const delta = (n: number | null | undefined) => n == null ? "" : n === 0 ? "same price" : `${n > 0 ? "+" : "−"}${aud(Math.abs(n))}`;
 
 export function Configurator(props: {
   slug: string; postcode: string; panels: number[]; modules: number[]; backupAvailable: boolean; moduleKwh: number; panelW: number;
-  start: { panels: number; modules: number }; initial: Price; lockUntil: string;
+  start: { panels: number; modules: number; inverter?: string }; initial: Price; lockUntil: string;
   /** false = no installer covers this postcode: show the waitlist instead of Secure. */
   served?: boolean;
   secure: (f: FormData) => Promise<void>;
@@ -20,6 +21,7 @@ export function Configurator(props: {
   const [panels, setPanels] = useState(props.start.panels);
   const [modules, setModules] = useState(props.start.modules);
   const [backup, setBackup] = useState<"none" | "whole_home">("none");
+  const [inverter, setInverter] = useState<string | undefined>(props.start.inverter);
   const [p, setP] = useState<Price>(props.initial);
   const [busy, setBusy] = useState(false);
   const first = useRef(true);
@@ -28,20 +30,20 @@ export function Configurator(props: {
   useEffect(() => {
     if (first.current) { first.current = false; return; }
     setBusy(true);
-    track("configure", { slug: props.slug, panels, modules, backup });
+    track("configure", { slug: props.slug, panels, modules, backup, inverter });
     const t = setTimeout(async () => {
-      const r = await fetch("/api/v1/price", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug: props.slug, panels, modules, backup, postcode: props.postcode }) });
+      const r = await fetch("/api/v1/price", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ slug: props.slug, panels, modules, backup, postcode: props.postcode, inverterSku: inverter }) });
       if (r.ok) {
         setP(await r.json());
         // Re-render the rest of the page (what it does, the kit, how the price is made) for these counts.
         const q = new URLSearchParams(window.location.search);
-        q.set("panels", String(panels)); q.set("modules", String(modules));
+        q.set("panels", String(panels)); q.set("modules", String(modules)); if (inverter) q.set("inverter", inverter); else q.delete("inverter");
         router.replace(`${window.location.pathname}?${q}`, { scroll: false });
       }
       setBusy(false);
     }, 250);
     return () => clearTimeout(t);
-  }, [panels, modules, backup, props.slug, props.postcode]);
+  }, [panels, modules, backup, inverter, props.slug, props.postcode]);
 
   useEffect(() => {
     if (!p.ok || (panels === props.start.panels && modules === props.start.modules)) return;
@@ -65,7 +67,15 @@ export function Configurator(props: {
 
   return (
     <div>
-      {props.panels.length > 0 && <Stepper label="Solar panels" value={panels} sub={`${(panels * props.panelW / 1000).toFixed(2)} kW · the buttons show the price change after rebates (the inverter is re-sized to fit)`} list={props.panels} set={setPanels} down={p.steps?.panel.down} up={p.steps?.panel.up} />}
+      {props.panels.length > 0 && <Stepper label="Solar panels" value={panels} sub={`${(panels * props.panelW / 1000).toFixed(2)} kW · the buttons show what one panel more or fewer costs after rebates`} list={props.panels} set={setPanels} down={p.steps?.panel.down} up={p.steps?.panel.up} />}
+      {(p.inverters?.length ?? 0) > 1 && (
+        <div className="cfg-row" style={{ display: "block" }}>
+          <div><strong>Inverter</strong><div className="small muted">Chosen for this system. Pick a bigger one for more battery power and room to add panels later.</div></div>
+          <div className="pills" role="group" aria-label="Inverter">{p.inverters!.map((o) => {
+            const here = p.inverters!.find((x) => x.current)?.you_pay ?? p.you_pay;
+            return <button key={o.sku} type="button" className={o.current ? "on" : ""} disabled={o.you_pay == null} title={o.blocker ?? o.reason} onClick={() => setInverter(o.sku)} aria-pressed={o.current}>{o.kw}<small>kW</small>{o.current ? <span className="delta">current</span> : o.you_pay == null ? <span className="delta">doesn&apos;t fit</span> : <span className="delta">{delta(o.you_pay - here)}</span>}</button>; })}</div>
+          <p className="small muted" style={{ margin: "6px 0 0" }}>{p.inverters!.find((x) => x.current)?.reason}{props.panels.length > 0 && panels >= (props.panels[props.panels.length - 1] ?? 0) && p.inverters!.some((x) => !x.current && x.you_pay != null && x.kw > (p.inverters!.find((y) => y.current)?.kw ?? 0)) ? " · at this inverter's panel limit: pick a bigger one to go further" : ""}</p>
+        </div>)}
       {props.modules.length > 0 && (
         <div className="cfg-row" style={{ display: "block" }}>
           <div><strong>Battery size</strong><div className="small muted">{modules} module{modules === 1 ? "" : "s"} of {props.moduleKwh} kWh · usable capacity{p.towers > 1 ? ` · ${p.towers} towers` : ""} · each size shows what it adds or saves</div></div>
@@ -94,7 +104,7 @@ export function Configurator(props: {
       </div>
       <form id="secure-form" action={props.secure} onSubmit={() => track("secure_click", { slug: props.slug, panels, modules, backup })}>
         <input type="hidden" name="slug" value={props.slug} /><input type="hidden" name="postcode" value={props.postcode} />
-        <input type="hidden" name="panels" value={panels} /><input type="hidden" name="modules" value={modules} /><input type="hidden" name="backup" value={backup} />
+        <input type="hidden" name="panels" value={panels} /><input type="hidden" name="modules" value={modules} /><input type="hidden" name="backup" value={backup} />{inverter && <input type="hidden" name="inverter" value={inverter} />}
         {props.served === false
           ? <a className="btn block" href={`/contact?kind=waitlist&postcode=${props.postcode}`}>Join the waitlist for {props.postcode}</a>
           : <button className="btn block" type="submit" disabled={!p.ok || busy}>Secure this price for 14 days</button>}

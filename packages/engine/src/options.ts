@@ -24,13 +24,14 @@ export interface ConfigOptions { panels: number[]; modules: number[]; backup: bo
 /** Biggest battery offered on the site (usable kWh). The rebate stops growing at 50 kWh; 60 keeps every brand's full single-column size (6 × GoodWe 9.0 = 53 kWh) and drops the 80–160 kWh multi-tower ends that are a commercial conversation, not a product page. */
 export const HOME_MAX_USABLE_KWH = 60;
 
-export function configOptions(base: ConfigInput, rules: ConfigRules = DEFAULT_RULES): ConfigOptions {
+/** With fixedInverter, ranges are what base.inverterSku can carry (the product page holds the inverter unless the customer changes it). */
+export function configOptions(base: ConfigInput, rules: ConfigRules = DEFAULT_RULES, opts: { fixedInverter?: boolean } = {}): ConfigOptions {
   const fam = rules.families[base.familyKey]!;
   const bf = rules.battery_families[fam.battery_family];
   const rule = bf?.rules[base.familyKey];
   const real = (o: ReturnType<typeof resolveConfig>) => o.blockers.every((b) => b.step === "cec");
   const panels: number[] = [];
-  const withPanels = { ...base, inverterSku: undefined, preferInverterSku: undefined };
+  const withPanels = opts.fixedInverter && base.inverterSku ? { ...base, preferInverterSku: undefined } : { ...base, inverterSku: undefined, preferInverterSku: undefined };
   if (base.panelCount > 0) for (let n = 6; n <= 40; n++) if (real(resolveConfig({ ...withPanels, panelCount: n }, { rules }))) panels.push(n);
   const modules: number[] = [];
   const maxMods = rule ? rule.modules_per_stack[1] * rule.max_stacks : 0;
