@@ -1,7 +1,7 @@
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
 import { getSetting } from "@/lib/settings";
-import { saveDesignCheck, saveScheduling, saveServicePlan, saveTrust } from "../actions";
+import { saveDesignCheck, savePricingMode, saveScheduling, saveServicePlan, saveTrust } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +9,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const me = await requireStaff();
   const sp = await searchParams;
   const dc = await getSetting("design_check");
+  const pm = await getSetting("pricing_mode");
   const t = await getSetting("trust");
   const sc = await getSetting("scheduling");
   const sv = await getSetting("service_plan");
@@ -18,10 +19,18 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     <AdminShell who={me.name} area="ops">
       <h1 style={{ fontSize: 28 }}>Settings</h1>
       {sp.ok && <div className="ok small">{sp.ok}</div>}{sp.error && <div className="note small">{sp.error}</div>}
+      {pm.allow_test_installer && <div className="note" style={{ borderColor: "#b00020", color: "#b00020" }}><strong>Test installer can be assigned to real quotes.</strong> Switch this off before launch (Pricing mode, below).</div>}
       <div className="pdp">
+        <form action={savePricingMode} className="card">
+          <strong>Pricing mode</strong>
+          <span className="small muted">Decided 4 Nov 2026. On: every home goes to the installer&apos;s photo check before any payment; the price is confirmed by 5 pm the same business day. Off: homes inside the installer&apos;s standard scope are priced instantly with nobody looking at the photos. Ops → Pricing shows when a home pattern is safe to switch.</span>
+          <label className="small"><input type="checkbox" name="installer_confirms_all" defaultChecked={pm.installer_confirms_all} /> Installer confirms every job</label>
+          <label className="small" style={{ display: "block", marginTop: 6 }}><input type="checkbox" name="allow_test_installer" defaultChecked={pm.allow_test_installer} /> Allow the test installer on real quotes (testing only)</label>
+          <button className="btn">Save</button>
+        </form>
         <form action={saveDesignCheck} className="card">
           <strong>Design check fee</strong>
-          <span className="small muted">Off: every design check is free. Standard homes are always priced instantly and free. On: homes that need an installer&apos;s photo check pay this first by bank transfer, and it comes off their system price as a credit. Watch the reviewed-to-sale rate in Analytics before switching on.</span>
+          <span className="small muted">Off: every design check is free. On: homes that need an installer&apos;s photo check pay this first by bank transfer, and it comes off their system price as a credit. Watch the reviewed-to-sale rate in Analytics before switching on.</span>
           <label className="small"><input type="checkbox" name="fee_on" defaultChecked={dc.fee_on} /> Charge for design checks</label>
           <F name="amount" label="Amount (inc GST)" value={String(dc.amount)} />
           <button className="btn">Save</button>

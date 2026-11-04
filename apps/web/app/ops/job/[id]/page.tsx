@@ -29,7 +29,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
   if (!q) notFound();
   const p = q.snapshot ?? q.result;
   const { menu } = await pricingData();
-  const photos = await db()`select id, kind, path, public from quote_photos where quote_id = ${id} order by created_at`;
+  const photos = await db()`select id, kind, path, public from quote_photos where quote_id = ${id} and superseded_at is null order by created_at`;
   const urls = await Promise.all(photos.map(async (ph) => ({ id: ph.id as string, pub: ph.public as boolean, kind: ph.kind as string, url: await photoUrl(ph.path as string) })));
   const [consent] = await db()`select showcase_consent from quotes where id = ${id}`;
   const audit = await db()`select at, actor_type, actor_id, action, rationale from audit_log where entity = 'quote' and entity_id = ${id} order by id desc limit 50`;

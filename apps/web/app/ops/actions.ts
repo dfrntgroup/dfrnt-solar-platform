@@ -137,8 +137,8 @@ export async function runTimersNow(f: FormData) {
   const which = s(f, "which");
   await run("/ops", async () => {
     if (!me.roles.includes("owner")) throw new Error("Owner only");
-    const { runDaily, runCutoff } = await import("@/lib/timers");
-    const r = which === "cutoff" ? await runCutoff() : await runDaily();
+    const { runDaily, runCutoff, runAfternoon } = await import("@/lib/timers");
+    const r = which === "cutoff" ? await runCutoff() : which === "afternoon" ? await runAfternoon() : await runDaily();
     await write({ actor: me.actor, action: `timers.${which}.manual` }, {}, async () => ({ entity: "timers", entityId: which, event: "timers.ran", result: r as never }));
   });
 }
@@ -307,6 +307,15 @@ export async function formbaySyncNow(f: FormData) {
 export async function callbackDone(f: FormData) {
   const me = await requireStaff();
   await run("/ops/callbacks", async () => { await db()`update callbacks set status = 'done', done_at = now(), done_by = ${me.name} where id = ${s(f, "id")}`; });
+}
+/** P1/P6 (4 Nov 2026): how jobs get priced, and whether a test installer may be assigned. */
+export async function savePricingMode(f: FormData) {
+  const me = await requireStaff();
+  const { setSetting } = await import("@/lib/settings");
+  await run("/ops/settings", async () => {
+    if (!me.roles.includes("owner")) throw new Error("Owner only");
+    await setSetting("pricing_mode", { installer_confirms_all: f.get("installer_confirms_all") === "on", allow_test_installer: f.get("allow_test_installer") === "on" }, me.name);
+  });
 }
 export async function saveDesignCheck(f: FormData) {
   const me = await requireStaff();

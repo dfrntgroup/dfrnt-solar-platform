@@ -176,7 +176,7 @@ export async function earliestFor(installerId: string, needs: JobNeeds): Promise
 }
 
 /* ---------- booking ---------- */
-const placeOf = (q: QuoteRow) => { const a = q.site?.address; return a ? `${a.unit ? `${a.unit}/` : ""}${a.line1}, ${a.suburb} ${a.postcode}` : q.postcode; };
+export const placeOf = (q: QuoteRow) => { const a = q.site?.address; return a ? `${a.unit ? `${a.unit}/` : ""}${a.line1}, ${a.suburb} ${a.postcode}` : q.postcode; };
 
 async function writeToCalendar(q: QuoteRow, crewId: string, dates: string[]) {
   const [c] = await db()`select source, dfrnt_calendar_id from installer_crews where id = ${crewId}`;

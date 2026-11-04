@@ -10,6 +10,7 @@ import { CallBack } from "./CallBack";
 import { Trust } from "./Trust";
 import { aud, longDate } from "@/lib/site";
 import { emailMeLink, saveContact, saveHome, savePhotos, submitHome } from "@/app/quote/[token]/actions";
+import { PHOTO_COPY, photosFor } from "@/lib/photos";
 
 const input = { width: "100%", padding: "10px", border: "1px solid var(--line)", borderRadius: 6, font: "inherit" } as const;
 const Field = ({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) => (
@@ -20,12 +21,8 @@ const Sel = ({ name, value, opts }: { name: string; value?: string; opts: [strin
   <select name={name} style={input} defaultValue={value ?? opts[0]![0]}>{opts.map(([v, t]) => <option key={v} value={v}>{t}</option>)}</select>
 );
 
-export const PHOTOS: [string, string, string][] = [
-  ["switchboard", "Switchboard, door open", "Stand back so the whole board and its labels are in the shot."],
-  ["meter", "Electricity meter", "Close enough to read the numbers on it."],
-  ["roof", "Roof, from the street", "The side the panels would go on, if you can."],
-  ["battery_location", "Where the battery goes", "The wall, with a metre or so of space either side showing."],
-];
+/** Photos for this job, with the words the customer sees (P3: battery-only swaps the roof for the existing inverter). */
+export const photoList = (q: Pick<QuoteRow, "input">): [string, string, string][] => photosFor(q).map((k) => [k, ...PHOTO_COPY[k]] as [string, string, string]);
 
 export function stepFor(q: QuoteRow, asked?: string) {
   const max = !q.customer_email || !q.checkout_at ? 1 : !q.site_draft?.address ? 2 : 3;
@@ -91,7 +88,7 @@ export async function Checkout({ q, step, sp, have, installers, recordUrl }: {
         <form action={submitHome}>
           <input type="hidden" name="token" value={token} />
           <p className="small" style={{ marginTop: 6 }}>Four photos from your phone. Your installer uses them instead of a site visit. <PhotoCount initial={[...have]} /></p>
-          {PHOTOS.map(([k, t, hint]) => (
+          {photoList(q).map(([k, t, hint]) => (
             <div key={k} className="card" style={{ marginBottom: 10, padding: 12, borderColor: have.has(k) ? "var(--teal)" : undefined }}>
               <strong>{have.has(k) ? "✓ " : ""}{t}</strong><span className="small muted">{hint}</span>
               {have.has(k) ? <span className="small">Got it. Add another to replace it:</span> : null}

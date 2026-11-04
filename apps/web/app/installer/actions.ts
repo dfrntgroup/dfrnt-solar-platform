@@ -19,6 +19,10 @@ async function run(path: string, fn: () => Promise<unknown>) {
 }
 const back = (f: FormData) => `/installer/job/${s(f, "id")}${s(f, "as") ? `?as=${s(f, "as")}` : ""}`;
 
+/** P4: the installer can't read a photo; the customer is asked for that one again and the job stays here. */
+export async function askPhotoAgain(f: FormData) {
+  await run(back(f), async () => { const { me, q } = await own(f); const { requestRetake } = await import("@/lib/photos"); await requestRetake(q, me.actor, s(f, "kind"), s(f, "reason")); });
+}
 export async function confirmPrice(f: FormData) {
   await run(back(f), async () => { const { me, q } = await own(f); await installerPrice(q, me.actor, f.getAll("codes").map(String), s(f, "note")); });
 }

@@ -171,15 +171,17 @@ export async function runCutoff() {
   const waiting = await db()`select id, installer_id, postcode, pricing_reasons, tried_installers from quotes
     where status = 'pricing_installer' and updated_at < now() - interval '1 hour'`;
   let reassigned = 0, toOps = 0;
+  const { allow_test_installer: allowTest } = await (await import("./settings")).getSetting("pricing_mode");
   for (const q of waiting) {
     const pc = parseInt(q.postcode as string, 10);
     const tried = [...((q.tried_installers as string[] | null) ?? []), q.installer_id as string].filter(Boolean);
-    const [next] = await db()`select id from installers where active and not (id = any(${tried}::uuid[])) and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int) order by is_test, created_at limit 1`;
+    const [next] = await db()`select id from installers where active and (${allowTest} or not is_test) and not (id = any(${tried}::uuid[])) and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int) order by is_test, created_at limit 1`;
     if (next) {
       await write({ actor: SYSTEM, action: "timers.reassign", rationale: "5 pm cut-off missed" }, { id: q.id }, async (tx) => {
-        await tx`update quotes set installer_id = ${next.id}, tried_installers = ${tried}::uuid[], updated_at = now() where id = ${q.id}`;
+        await tx`update quotes set installer_id = ${next.id}, tried_installers = ${tried}::uuid[], pricing_requested_at = now(), reminders = reminders - 'price_nudge', updated_at = now() where id = ${q.id}`;
         return { entity: "quote", entityId: q.id as string, event: "quote.reassigned", result: { installer: next.id } };
       });
+      { const { getQuoteById, notifyInstallerToPrice } = await import("./jobs"); const fresh = await getQuoteById(q.id as string); if (fresh) await notifyInstallerToPrice(fresh, next.id as string, "reassigned").catch(() => null); }
       reassigned++;
     } else {
       await setStatus(q.id as string, "pricing_installer", "tech_review", "5 pm cut-off missed and no other installer covers this postcode");
@@ -187,6 +189,26 @@ export async function runCutoff() {
     }
   }
   return { followups, sheets, reassigned, to_ops: toOps };
+}
+
+/** P2: 3 pm AEST reminder (I6) to installers with a job still waiting since before 2 pm. Weekdays only; once per arrival. */
+export async function runAfternoon() {
+  const dow = new Date(Date.now() + 10 * 3600_000).getUTCDay();
+  if (dow === 0 || dow === 6) return { nudged: 0, weekend: true };
+  const waiting = await db()`select q.id, q.token, q.title, q.installer_id, i.email, i.business_name from quotes q join installers i on i.id = q.installer_id
+    where q.status = 'pricing_installer' and coalesce(q.pricing_requested_at, q.updated_at) < now() - interval '1 hour' and not (q.reminders ? 'price_nudge')`;
+  let nudged = 0;
+  for (const q of waiting) {
+    if (!q.email) continue;
+    const { getQuoteById } = await import("./jobs");
+    const fresh = await getQuoteById(q.id as string);
+    if (!fresh) continue;
+    const { placeOf } = await import("./schedule");
+    await queueMessage("I6", q.token as string, q.email as string, { name: q.business_name as string, title: fresh.title ?? fresh.result.config.summary, place: placeOf(fresh), jobId: q.id });
+    await db()`update quotes set reminders = reminders || '{"price_nudge":true}' where id = ${q.id}`;
+    nudged++;
+  }
+  return { nudged };
 }
 
 /** Formbay has no webhooks: poll every linked job that isn't finished, store its status, and move installed jobs to lodged

@@ -8,7 +8,9 @@ import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2, longDate } from "@/lib/site";
-import { confirmPrice, installerRevise, installerStage, installerVariation, setTechnician, cantDoDay, moveDay, offerDays, setJobDays, installerMessage } from "../../actions";
+import { askPhotoAgain, confirmPrice, installerRevise, installerStage, installerVariation, setTechnician, cantDoDay, moveDay, offerDays, setJobDays, installerMessage } from "../../actions";
+import { PHOTO_COPY, photosFor, retakeKinds } from "@/lib/photos";
+import type { PhotoKind } from "@dfrnt/engine";
 import { JobThread } from "@/components/JobThread";
 import { dayLabel } from "@/components/DayPicker";
 import { needsOf, profileOf } from "@/lib/schedule";
@@ -25,8 +27,11 @@ export default async function InstallerJob({ params, searchParams }: { params: P
   if (!q || q.installer_id !== me.id) notFound();
   const p = q.snapshot ?? q.result;
   const { menu } = await pricingData();
-  const photos = await db()`select kind, path from quote_photos where quote_id = ${id}`;
-  const urls = await Promise.all(photos.map(async (ph) => ({ kind: ph.kind as string, url: await photoUrl(ph.path as string) })));
+  const photos = await db()`select kind, path, superseded_at from quote_photos where quote_id = ${id} order by created_at`;
+  const urls = await Promise.all(photos.map(async (ph) => ({ kind: ph.kind as string, url: await photoUrl(ph.path as string), old: !!ph.superseded_at })));
+  const waitingFor = ["pricing_installer", "tech_review"].includes(q.status) ? await retakeKinds(q.id) : [];
+  const label = (k: string) => (PHOTO_COPY as Record<string, [string, string]>)[k]?.[0] ?? k;
+  const needed = photosFor(q);
   const site = q.site;
   const techs = await db()`select id, name, is_default from technicians where installer_id = ${me.id} and active order by is_default desc, name`;
   const [curTech] = await db()`select technician_id from quotes where id = ${id}`;
@@ -53,7 +58,19 @@ export default async function InstallerJob({ params, searchParams }: { params: P
           {site && <><h3 style={{ marginTop: 16 }}>Site answers</h3><p className="small">{String(site.phases)}-phase · {site.roofType} roof · {site.storeys} storey · battery {site.batteryLocation.replace("_", " ")} · switchboard {site.switchboard}</p></>}
           <UsageJobCard quoteId={q.id} />
           <h3 style={{ marginTop: 16 }}>Photos</h3>
-          <div className="filters">{urls.map((u, i) => u.url ? <a key={i} className="chip" href={u.url} target="_blank">{u.kind}</a> : <span key={i} className="chip">{u.kind}</span>)}</div>
+          <div className="filters">{urls.filter((u) => !u.old).map((u, i) => u.url ? <a key={i} className="chip" href={u.url} target="_blank">{label(u.kind)}</a> : <span key={i} className="chip">{label(u.kind)}</span>)}
+            {urls.some((u) => u.old) && <span className="small muted" style={{ alignSelf: "center" }}>{urls.filter((u) => u.old).length} earlier photo{urls.filter((u) => u.old).length === 1 ? "" : "s"} asked again</span>}</div>
+          {waitingFor.length > 0 && <p className="small note" style={{ marginTop: 8 }}>Waiting on the customer: {waitingFor.map((w) => label(w.kind).toLowerCase()).join(", ")}. You&apos;ll get an email when it lands.</p>}
+          {q.status === "pricing_installer" && (
+            <details style={{ marginTop: 8 }}><summary className="small">Can&apos;t read one? Ask for it again</summary>
+              {needed.filter((k) => !waitingFor.some((w) => w.kind === k)).map((k: PhotoKind) => (
+                <form key={k} action={askPhotoAgain} style={{ display: "flex", gap: 6, alignItems: "center", margin: "6px 0", flexWrap: "wrap" }}>{hid}
+                  <input type="hidden" name="kind" value={k} />
+                  <span className="small" style={{ minWidth: 150 }}>{label(k)}</span>
+                  <input name="reason" placeholder="What's wrong with it (customer sees this)" style={{ ...input, flex: 1, minWidth: 180 }} />
+                  <button className="btn ghost sm" type="submit">Send again</button>
+                </form>))}
+            </details>)}
           <h3 style={{ marginTop: 16 }}>Your pay</h3>
           <table className="lines"><tbody>{p.stack.lines.filter((l) => l.kind === "installation" || l.kind === "variation").map((l) => <tr key={l.code}><td>{l.description} × {l.qty}</td><td className="r">{l.cost_ex_gst != null ? aud2(l.cost_ex_gst) : "rate needed"}</td></tr>)}
             <tr className="total"><td>Total ex GST</td><td className="r">{aud2(p.stack.installer_pay_ex_gst)}</td></tr></tbody></table>

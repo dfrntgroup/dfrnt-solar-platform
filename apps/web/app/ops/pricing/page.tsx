@@ -15,6 +15,14 @@ export default async function Pricing({ searchParams }: { searchParams: Promise<
   const d = await pricingData();
   const history = await db()`select id, kind, note, created_by, created_at from config_versions order by id desc limit 30`;
   const list = d.catalogue.systems.map((s) => ({ s, q: priceSystem(s, { postcode: "4551", asOf: todayAEST() }, d) }));
+  // P7: is a home pattern safe to price on sight? Jobs the installer confirmed unchanged say yes; jobs they added lines to say no.
+  const readiness = await db()`select i.business_name, q.scope_result->>'pattern' pattern, bool_and((q.scope_result->>'in_scope')::boolean) in_scope,
+      count(*)::int priced, count(*) filter (where q.priced_by in ('installer','ops') and not coalesce(q.price_changed, false))::int unchanged,
+      count(*) filter (where coalesce(q.price_changed, false))::int changed, count(*) filter (where q.priced_by = 'instant')::int instant
+    from quotes q join installers i on i.id = q.installer_id
+    where q.priced_by is not null and q.scope_result is not null and not i.is_test
+    group by i.business_name, q.scope_result->>'pattern' order by i.business_name, priced desc`;
+  const pm = await (await import("@/lib/settings")).getSetting("pricing_mode");
   const note = <input name="note" placeholder="What changed and why (required)" style={input} required />;
   const sm = { ...input, width: 110 };
   return (
@@ -24,6 +32,15 @@ export default async function Pricing({ searchParams }: { searchParams: Promise<
       {sp.error && <div className="note">{sp.error}</div>}
       {sp.saved && <div className="ok">Saved. New quotes use it now.</div>}
       <p className="small muted">Live versions: {Object.entries(d.versions).map(([k, v]) => `${k} ${v}`).join(" · ")}</p>
+
+      <h2 style={{ marginTop: 20 }}>Instant-price readiness</h2>
+      <p className="muted small">Pricing mode is <strong>{pm.installer_confirms_all ? "installer confirms every job" : "instant for homes inside the installer's scope"}</strong> (Ops → Settings). Each row is one installer and one home pattern. &ldquo;Unchanged&rdquo; means the installer confirmed the standard price from the photos without adding anything. When a pattern that the scope rules call in-scope sits at 90 %+ unchanged over 20+ jobs, it&apos;s safe to price on sight.</p>
+      {readiness.length === 0 ? <p className="small muted">No priced jobs yet. This fills as installers confirm prices.</p> : (
+        <table className="lines small"><thead><tr><th>Installer</th><th>Home pattern</th><th>Scope</th><th className="r">Priced</th><th className="r">Unchanged</th><th className="r">Changed</th><th className="r">Instant</th><th className="r">Unchanged %</th></tr></thead><tbody>
+          {readiness.map((r, i) => { const human = (r.unchanged as number) + (r.changed as number); const pct = human ? Math.round(((r.unchanged as number) / human) * 100) : null;
+            return <tr key={i}><td>{r.business_name as string}</td><td>{(r.pattern as string) ?? "—"}</td><td>{r.in_scope ? "in scope" : "exception"}</td><td className="r">{r.priced as number}</td><td className="r">{r.unchanged as number}</td><td className="r">{r.changed as number}</td><td className="r">{r.instant as number}</td>
+              <td className="r">{pct === null ? "—" : <strong style={{ color: pct >= 90 && human >= 20 ? "var(--teal)" : undefined }}>{pct} %</strong>}</td></tr>; })}
+        </tbody></table>)}
 
       <h2 style={{ marginTop: 20 }}>Effect: every system at 4551</h2>
       <table className="lines small"><tbody>{list.map(({ s, q }) => <tr key={s.slug}><td>{s.brand} · {s.title}</td><td className="r">{aud(q.stack.price_inc_gst)}</td><td className="r"><strong>{aud(q.stack.amount_payable)}</strong></td><td className="r">{q.stack.gross_margin_pct}% GM</td></tr>)}</tbody></table>

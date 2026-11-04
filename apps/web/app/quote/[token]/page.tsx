@@ -27,6 +27,8 @@ import { stripeReady, publishableKey, clientSecretFor, isOnline, PAYTO_MAX } fro
 import { financeLink } from "@/lib/jobs";
 import { getSetting } from "@/lib/settings";
 import { installersFor } from "@/lib/installers";
+import { activeKinds, PHOTO_COPY, pricePromise, retakeKinds } from "@/lib/photos";
+import { resendPhotos } from "./actions";
 import { siteUrl } from "@/lib/messages";
 import { dateAEST, todayAEST } from "@/lib/api";
 import { aud, aud2, longDate } from "@/lib/site";
@@ -122,7 +124,11 @@ export default async function Record({ params, searchParams }: { params: Promise
   const docs = ["Signed agreement", "Tax invoice", "Certificate of compliance", "STC assignment form", "Warranty cards"];
   const canCancel = ["signed", "payment_pending", "payment_review", "awaiting_date", "booked", "gear_ordered", "delivered"].includes(state);
   const open = ["saved", "secured", "lapsed"].includes(state);
-  const have = new Set(open ? (await db()`select distinct kind from quote_photos where quote_id = ${q.id}`).map((r) => r.kind as string) : []);
+  const have = open ? await activeKinds(q.id) : new Set<string>();
+  const pricing = state === "pricing_installer" || state === "pricing_instant" || state === "tech_review";
+  const retakes = pricing ? await retakeKinds(q.id) : [];
+  // The launch rule ("installer confirms every job") is not a thing wrong with the home; don't list it as one.
+  const checks = (q.pricing_reasons ?? []).filter((r) => r !== "Installer confirms every job" && r !== "No installer covers this postcode yet");
   const choices = open && q.site_draft?.address ? await installersFor(q.site_draft.address.postcode ?? q.postcode, needsOf(q)) : [];
   const [fee] = q.design_fee_status === "due" ? await db()`select amount::float8 amount, reference from payments where quote_id = ${q.id} and kind = 'report' and status = 'pending' limit 1` : [];
   const rev = q.revision && REVISABLE.includes(state) ? q.revision : null;
@@ -187,11 +193,26 @@ export default async function Record({ params, searchParams }: { params: Promise
           ) : <Checkout q={q} step={stepFor(q, sp.step)} sp={sp} have={have} installers={choices} recordUrl={`${siteUrl()}/quote/${token}`} />}
         </>)}
 
-        {(state === "pricing_installer" || state === "pricing_instant" || state === "tech_review") && (<>
-          <div className="ok" style={{ marginTop: 16 }}>
-            <strong>{q.pricing_reasons?.length ? `Your installer is checking ${q.pricing_reasons.length === 1 ? "one thing" : `${["", "", "two", "three", "four", "five"][q.pricing_reasons.length] ?? q.pricing_reasons.length} things`} on your home.` : "Your installer is pricing your home."}</strong> You&apos;ll get your confirmed price by email, usually today. Your price stays held while they do.
-            {q.pricing_reasons?.length ? <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{q.pricing_reasons.map((r) => <li key={r}>{plainReason(r)}</li>)}</ul> : null}
-          </div>
+        {pricing && (<>
+          {retakes.length > 0 ? (
+            <form action={resendPhotos} className="card" style={{ marginTop: 16, borderColor: "var(--teal)" }}>
+              <input type="hidden" name="token" value={token} />
+              <strong>Your installer needs {retakes.length === 1 ? "one photo" : `${retakes.length} photos`} again.</strong>
+              <p className="small muted" style={{ margin: "4px 0 8px" }}>Your price stays held while you do this. Take it in daylight, hold still, and get the whole thing in the frame.</p>
+              {retakes.map((r) => (
+                <div key={r.kind} className="card" style={{ marginBottom: 10, padding: 12 }}>
+                  <strong>{PHOTO_COPY[r.kind][0]}</strong><span className="small muted">{PHOTO_COPY[r.kind][1]}</span>
+                  {r.reason ? <span className="small">Your installer said: &ldquo;{r.reason}&rdquo;</span> : null}
+                  <PhotoInput name={`photo_${r.kind}`} token={token} kind={r.kind} />
+                </div>))}
+              <button className="btn block" type="submit">Send</button>
+            </form>
+          ) : (
+            <div className="ok" style={{ marginTop: 16 }}>
+              <strong>{state === "tech_review" ? "We're finding the right installer for your home." : checks.length ? `Your installer is checking ${checks.length === 1 ? "one thing" : `${["", "", "two", "three", "four", "five"][checks.length] ?? checks.length} things`} on your home.` : "Your installer is checking your photos and confirming your price."}</strong> You&apos;ll get your confirmed price by email, {pricePromise()}. Your price stays held while they do.
+              {checks.length ? <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>{checks.map((r) => <li key={r}>{plainReason(r)}</li>)}</ul> : null}
+            </div>
+          )}
           <CallBack back={`/quote/${token}`} token={token} state={sp.callback} compact />
         </>)}
 

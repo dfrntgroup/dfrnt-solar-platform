@@ -15,7 +15,7 @@ export default async function Callbacks() {
   const calls = await db()`select c.id, c.created_at, c.name, c.phone, c.page, c.note, c.status, c.done_by, q.id quote_id, q.title, q.status qstatus, q.amount_payable::float8 amount
     from callbacks c left join quotes q on q.id = c.quote_id order by (c.status = 'new') desc, c.created_at desc limit 100`;
   const partway = await db()`select id, title, customer_name, customer_phone, customer_email, status, design_fee_status, checkout_at, site_draft is not null has_home, amount_payable::float8 amount, reminders,
-      (select count(distinct kind)::int from quote_photos p where p.quote_id = quotes.id) photos
+      (select count(distinct kind)::int from quote_photos p where p.quote_id = quotes.id and p.superseded_at is null) photos
     from quotes where status = 'secured' and created_at > now() - interval '30 days' order by coalesce(checkout_at, created_at) desc limit 100`;
   const t = (d: unknown) => new Date(d as string).toLocaleString("en-AU", { timeZone: "Australia/Brisbane", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
   return (

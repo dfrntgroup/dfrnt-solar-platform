@@ -2,7 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db } from "@dfrnt/db";
-import type { SiteAnswers } from "@dfrnt/engine";
+import type { PhotoKind, SiteAnswers } from "@dfrnt/engine";
+import { activeKinds, PHOTO_COPY, photosFor, retakeKinds, retakeReceived } from "@/lib/photos";
 import { answerRevision, applyCode, chooseBank, CUSTOMER, cancel, decideVariation, getQuote, sign, submitSite } from "@/lib/jobs";
 import { queueMessage } from "@/lib/messages";
 import { longDate } from "@/lib/site";
@@ -20,7 +21,6 @@ async function run(token: string, fn: () => Promise<unknown>) {
   back(token);
 }
 
-const PHOTO_KINDS = ["switchboard", "meter", "roof", "battery_location"] as const;
 const goto = (token: string, step?: number, err?: string) =>
   redirect(`/quote/${token}?${new URLSearchParams({ ...(step ? { step: String(step) } : {}), ...(err ? { error: err } : {}) })}#checkout`);
 
@@ -95,15 +95,15 @@ export async function saveHome(f: FormData) {
   });
 }
 
-async function storePhotos(q: { id: string }, f: FormData) {
+async function storePhotos(q: { id: string }, f: FormData, kinds: readonly string[]) {
   let n = 0;
-  for (const kind of PHOTO_KINDS) {
+  for (const kind of kinds) {
     const file = f.get(`photo_${kind}`);
     if (file instanceof File && file.size > 0) {
-      if (file.size > 15_000_000) throw new Error(`The ${kind.replace("_", " ")} photo is over 15 MB`);
+      if (file.size > 15_000_000) throw new Error(`The ${PHOTO_COPY[kind as PhotoKind][0].toLowerCase()} photo is over 15 MB`);
       const bytes = await file.arrayBuffer(), info = imageInfo(new Uint8Array(bytes.slice(0, 65536)));
-      if (!info) throw new Error(`The ${kind.replace("_", " ")} photo must be a photo (JPEG, PNG or WebP)`);
-      if (Math.max(info.width, info.height) < MIN_PHOTO_PX) throw new Error(`The ${kind.replace("_", " ")} photo is too small to read. Take it again, closer and in focus`);
+      if (!info) throw new Error(`The ${PHOTO_COPY[kind as PhotoKind][0].toLowerCase()} photo must be a photo (JPEG, PNG or WebP)`);
+      if (Math.max(info.width, info.height) < MIN_PHOTO_PX) throw new Error(`The ${PHOTO_COPY[kind as PhotoKind][0].toLowerCase()} photo is too small to read. Take it again, closer and in focus`);
       const path = `${q.id}/${kind}-${Date.now()}.${info.type === "jpeg" ? "jpg" : info.type}`;
       await putPhoto(path, bytes, `image/${info.type}`);
       await db()`insert into quote_photos (quote_id, kind, path, content_type, bytes) values (${q.id}, ${kind}, ${path}, ${`image/${info.type}`}, ${file.size})`;
@@ -113,7 +113,7 @@ async function storePhotos(q: { id: string }, f: FormData) {
   return n;
 }
 
-/* C1 step 3: photos, then the confirmed price (instant for standard homes, otherwise the installer's photo check). */
+/* C1 step 3: photos (set by job type, P3), then the confirmed price: the installer's photo check, or instant when Ops has switched that on. */
 export async function submitHome(f: FormData) { await photoStep(f, true); }
 export async function savePhotos(f: FormData) { await photoStep(f, false); }
 async function photoStep(f: FormData, finish: boolean) {
@@ -122,20 +122,36 @@ async function photoStep(f: FormData, finish: boolean) {
     if (!(await allow("site", 30))) throw new Error("Too many attempts — please wait a few minutes");
     const q = await openQuote(token);
     if (!q.site_draft?.address) return 2;
-    await storePhotos(q, f);
+    const kinds = photosFor(q);
+    await storePhotos(q, f, kinds);
     const chosen = s(f, "installer");
     if (chosen && /^[0-9a-f-]{36}$/.test(chosen)) await db()`update quotes set chosen_installer_id = ${chosen} where id = ${q.id}`;
     await db()`update quotes set checkout_at = now() where id = ${q.id}`;
-    const have = await db()`select distinct kind from quote_photos where quote_id = ${q.id}`;
-    const photos: Record<string, boolean> = Object.fromEntries(have.map((r) => [r.kind as string, true]));
-    const missing = PHOTO_KINDS.filter((k) => !photos[k]);
+    const have = await activeKinds(q.id);
+    const photos: Record<string, boolean> = Object.fromEntries([...have].map((k) => [k, true]));
+    const missing = kinds.filter((k) => !photos[k]);
     if (!finish || missing.length) {
-      if (finish) throw new Error(`Still needed: ${missing.map((k) => k.replace("_", " ")).join(", ")}. Or tap "Call me back" and we'll help.`);
+      if (finish) throw new Error(`Still needed: ${missing.map((k) => PHOTO_COPY[k][0].toLowerCase()).join(", ")}. Or tap "Call me back" and we'll help.`);
       return 3;
     }
     const fresh = (await getQuote(token))!;
     await submitSite(fresh, { ...(fresh.site_draft as Omit<SiteAnswers, "photos">), photos } as SiteAnswers,
       { name: fresh.customer_name ?? "", email: fresh.customer_email ?? "", phone: fresh.customer_phone ?? "" });
+  });
+}
+
+/* P4: the installer asked for a photo again while pricing. Store what came, then tell them once the set is complete. */
+export async function resendPhotos(f: FormData) {
+  const token = s(f, "token");
+  await run(token, async () => {
+    if (!(await allow("site", 30))) throw new Error("Too many attempts — please wait a few minutes");
+    const q = await getQuote(token);
+    if (!q || !["pricing_installer", "tech_review"].includes(q.status)) throw new Error("Nothing to send");
+    const wanted = (await retakeKinds(q.id)).map((r) => r.kind);
+    if (!wanted.length) return;                                    // already uploaded as they were picked; nothing left to send
+    const n = await storePhotos(q, f, wanted);
+    if (!n) throw new Error("Pick the photo first");
+    await retakeReceived(q.id);
   });
 }
 

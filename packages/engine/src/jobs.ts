@@ -63,7 +63,17 @@ export interface SiteAnswers {
   photos: Record<string, boolean>;
 }
 
-export const REQUIRED_PHOTOS = ["switchboard", "meter", "roof", "battery_location"] as const;
+/** Photo kinds a job can carry. */
+export type PhotoKind = "switchboard" | "meter" | "roof" | "battery_location" | "existing_inverter";
+/** Solar + battery: the roof the panels go on. Battery only (4 Nov 2026): no roof; the existing inverter and its label instead. */
+export const PHOTOS_SOLAR_BATTERY: readonly PhotoKind[] = ["switchboard", "meter", "roof", "battery_location"];
+export const PHOTOS_BATTERY_ONLY: readonly PhotoKind[] = ["switchboard", "meter", "existing_inverter", "battery_location"];
+export const requiredPhotos = (hasPanels: boolean): readonly PhotoKind[] => (hasPanels ? PHOTOS_SOLAR_BATTERY : PHOTOS_BATTERY_ONLY);
+/** @deprecated use requiredPhotos(hasPanels) */
+export const REQUIRED_PHOTOS = PHOTOS_SOLAR_BATTERY;
+export const PHOTO_LABEL: Record<PhotoKind, string> = {
+  switchboard: "switchboard", meter: "meter", roof: "roof", battery_location: "battery location", existing_inverter: "existing inverter",
+};
 
 export interface StandardScope {
   version: number;
@@ -77,10 +87,11 @@ export interface StandardScope {
 
 export const DEFAULT_SCOPE: StandardScope = { version: 1, maxStoreys: 2, roofTypes: ["tin", "tile", "kliplok"], batteryLocations: ["garage", "outdoor_wall", "other"], switchboardOk: true, maxCableRunM: 10, phases: [1, 3] };
 
-/** Returns [] when the job can be priced instantly; otherwise the reasons it goes to the installer (I2). */
-export function instantPriceBlockers(a: SiteAnswers, scope: StandardScope): string[] {
+/** Returns [] when the job can be priced instantly; otherwise the reasons it goes to the installer (I2).
+ *  `required` is the photo set for this job type (requiredPhotos); defaults to solar + battery. */
+export function instantPriceBlockers(a: SiteAnswers, scope: StandardScope, required: readonly PhotoKind[] = PHOTOS_SOLAR_BATTERY): string[] {
   const r: string[] = [];
-  for (const p of REQUIRED_PHOTOS) if (!a.photos[p]) r.push(`Photo missing: ${p.replace("_", " ")}`);
+  for (const p of required) if (!a.photos[p]) r.push(`Photo missing: ${PHOTO_LABEL[p]}`);
   if (a.phases === "unknown") r.push("Phases unknown");
   else if (!scope.phases.includes(a.phases)) r.push(`${a.phases}-phase outside scope`);
   if (a.storeys > scope.maxStoreys) r.push(`${a.storeys} storeys outside scope`);

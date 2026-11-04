@@ -41,10 +41,12 @@ export default async function Board({ searchParams }: { searchParams: Promise<{ 
   const days = (d: string | null) => d ? Math.round((Date.parse(d) - Date.parse(todayAEST())) / 86400000) : 999;
   const throttle = earliest.length > 0 && earliest.every((e) => days(e.d) > 21);
   const by = (col: string) => rows.filter((r) => BOARD[r.status as keyof typeof BOARD] === col);
+  const pm = await (await import("@/lib/settings")).getSetting("pricing_mode");
   return (
     <AdminShell who={me.name} area="ops">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><h1 style={{ fontSize: 28 }}>Board</h1>
-        <form action={runTimersNow} style={{ display: "flex", gap: 6 }}><button className="btn ghost sm" name="which" value="daily">Run daily timers</button><button className="btn ghost sm" formAction={async (f: FormData) => { "use server"; f.set("which", "cutoff"); await runTimersNow(f); }}>Run 5 pm cut-off</button></form></div>
+        <form action={runTimersNow} style={{ display: "flex", gap: 6 }}><button className="btn ghost sm" name="which" value="daily">Run daily timers</button><button className="btn ghost sm" formAction={async (f: FormData) => { "use server"; f.set("which", "cutoff"); await runTimersNow(f); }}>Run 5 pm cut-off</button><button className="btn ghost sm" formAction={async (f: FormData) => { "use server"; f.set("which", "afternoon"); await runTimersNow(f); }}>Run 3 pm reminder</button></form></div>
+      {pm.allow_test_installer && <div className="note small" style={{ margin: "8px 0", borderColor: "#b00020", color: "#b00020" }}><strong>Test installer can be assigned to real quotes.</strong> Switch it off in <Link href="/ops/settings">Settings → Pricing mode</Link> before launch.</div>}
       <p className="small muted">{counts.map((c) => `${c.status} ${c.n}`).join(" · ")}</p>
       <p className="small">Earliest install: {earliest.map((e) => `${e.name} ${e.d ? longDate(e.d) : "none"}`).join(" · ")}</p>
       {throttle && <div className="note" style={{ margin: "12px 0" }}><strong>Throttle:</strong> every installer&apos;s earliest date is more than 21 days out. Pause creator and paid spend until capacity frees up (O18).</div>}

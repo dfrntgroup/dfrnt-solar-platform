@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookableDates, canTransition, DEFAULT_SCOPE, earliestDate, instantPriceBlockers, refundRule, STATES, TRANSITIONS, type SiteAnswers } from "../src";
+import { bookableDates, canTransition, DEFAULT_SCOPE, earliestDate, instantPriceBlockers, requiredPhotos, refundRule, STATES, TRANSITIONS, type SiteAnswers } from "../src";
 
 const site: SiteAnswers = {
   address: { line1: "9 Example St", unit: "", suburb: "Buderim", state: "QLD", postcode: "4556" },
@@ -21,6 +21,12 @@ describe("instant price (I8 scope)", () => {
   it("in-scope site prices instantly", () => expect(instantPriceBlockers(site, DEFAULT_SCOPE)).toEqual([]));
   it("T3: sub-board goes to the installer", () => expect(instantPriceBlockers({ ...site, switchboard: "needs_subboard" }, DEFAULT_SCOPE)).toEqual(["Switchboard needs a sub-board"]));
   it("missing photo goes to the installer", () => expect(instantPriceBlockers({ ...site, photos: { ...site.photos, meter: false } }, DEFAULT_SCOPE)[0]).toMatch(/meter/));
+  it("battery-only needs the existing inverter photo, not the roof (4 Nov 2026)", () => {
+    expect([...requiredPhotos(false)]).toEqual(["switchboard", "meter", "existing_inverter", "battery_location"]);
+    expect([...requiredPhotos(true)]).toEqual(["switchboard", "meter", "roof", "battery_location"]);
+    expect(instantPriceBlockers(site, DEFAULT_SCOPE, requiredPhotos(false))).toEqual(["Photo missing: existing inverter"]);
+    expect(instantPriceBlockers({ ...site, photos: { ...site.photos, existing_inverter: true } }, DEFAULT_SCOPE, requiredPhotos(false))).toEqual([]);
+  });
   it("three storeys outside a two-storey scope", () => expect(instantPriceBlockers({ ...site, storeys: 3 }, DEFAULT_SCOPE)).toHaveLength(1));
 });
 

@@ -3,6 +3,10 @@ import { db } from "@dfrnt/db";
 import { DEFAULT_STANDARD_TARIFF, DEFAULT_YIELDS, type StandardTariff, type YieldCity } from "@dfrnt/engine";
 
 export interface DesignCheck { fee_on: boolean; amount: number }
+/** Pricing mode (decided 4 Nov 2026). installer_confirms_all: every submitted home goes to the installer's photo check;
+ *  the instant path is skipped but the scope rules are still evaluated so Ops → Pricing can show when a pattern is safe.
+ *  allow_test_installer: test installers may be assigned to real quotes (testing only; off in production). */
+export interface PricingMode { installer_confirms_all: boolean; allow_test_installer: boolean }
 export interface BookingDesk { mode: "off" | "all" | "help" }
 export interface Scheduling { gear_lead_days: number; decline_hours: number; earlier_offer_hours: number }
 export interface ServicePlan { on: boolean; price: number; includes: string }
@@ -24,6 +28,7 @@ export interface Trust { founder_line: string; founder_video: string; licence: s
 
 const DEFAULTS = {
   design_check: { fee_on: false, amount: 99 } as DesignCheck,
+  pricing_mode: { installer_confirms_all: true, allow_test_installer: true } as PricingMode,   // test installer stays allowed until Karl switches it off before launch (red banner in Ops until then)
   booking_desk: { mode: "off" } as BookingDesk,
   scheduling: { gear_lead_days: 3, decline_hours: 24, earlier_offer_hours: 12 } as Scheduling,
   service_plan: { on: false, price: 0, includes: "Yearly health check, panel clean, firmware and settings check, written report on your record." } as ServicePlan,

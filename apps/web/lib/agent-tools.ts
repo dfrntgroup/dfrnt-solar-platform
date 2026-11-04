@@ -32,7 +32,7 @@ async function record(quoteId: string) {
       q.amount_payable::float8 amount_payable, q.payment_method, q.paid_at, q.signed_at, q.site is not null has_site, i.business_name installer, i.phone installer_phone
     from quotes q left join installers i on i.id = q.installer_id where q.id = ${quoteId}`;
   if (!q) return null;
-  const photos = await db()`select kind from quote_photos where quote_id = ${quoteId}`;
+  const photos = await db()`select kind from quote_photos where quote_id = ${quoteId} and superseded_at is null`;
   const msgs = await db()`select author, body, created_at from job_messages where quote_id = ${quoteId} order by created_at desc limit 6`;
   const vars = await db()`select description, sell_inc::float8 amount, status from variations where quote_id = ${quoteId} and status in ('proposed','approved')`;
   const need = ["switchboard", "meter", "roof", "battery_location"].filter((k) => !photos.some((p) => p.kind === k));

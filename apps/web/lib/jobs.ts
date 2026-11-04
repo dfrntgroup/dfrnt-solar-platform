@@ -2,7 +2,7 @@
 import { db, write, type Actor } from "@dfrnt/db";
 import {
   assertTransition, autoStacks, instantPriceBlockers, quote, rebateWindow, variationAmount, variationLine,
-  labourLines, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest, requestFromLine,
+  labourLines, requiredPhotos, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest, requestFromLine,
 } from "@dfrnt/engine";
 import { todayAEST } from "./api";
 import { queueMessage } from "./messages";
@@ -69,13 +69,27 @@ export async function reprice(q: QuoteRow, extra: { site?: SiteAnswers; input?: 
  *  otherwise the first real installer who can, then a test one. */
 async function installerFor(q: QuoteRow, site: SiteAnswers) {
   const pc = parseInt(site.address.postcode, 10);
-  const rows = await db()`select id, scope, capacity, profile from installers where active and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int)
+  // P6 (4 Nov 2026): a test installer is never assigned to a real quote unless Ops has switched that on.
+  const { allow_test_installer } = await (await import("./settings")).getSetting("pricing_mode");
+  const rows = await db()`select id, scope, capacity, profile, email, business_name from installers where active and (${allow_test_installer} or not is_test)
+    and exists (select 1 from unnest(postcode_ranges) r where r @> ${pc}::int)
     order by (id::text = ${q.chosen_installer_id ?? ""}) desc, is_test, created_at`;
   const { profileOf, needsOf } = await import("./schedule");
   const { cannotDo } = await import("@dfrnt/engine");
   const needs = needsOf({ ...q, site });
   const row = rows.find((r) => !cannotDo(profileOf(r as never), needs).length);
-  return row as { id: string; scope: StandardScope } | undefined;
+  return row as { id: string; scope: StandardScope; email: string | null; business_name: string | null } | undefined;
+}
+
+/** Photos this quote needs: battery-only jobs swap the roof for the existing inverter (P3, 4 Nov 2026). */
+export const photosFor = (q: Pick<QuoteRow, "input">) => requiredPhotos((q.input.panelCount ?? 0) > 0);
+
+/** P2: tell the installer a job is waiting for their price (I5), with the 5 pm promise. */
+export async function notifyInstallerToPrice(q: QuoteRow, installerId: string, why: "new" | "reassigned" | "retake") {
+  const [inst] = await db()`select email, business_name from installers where id = ${installerId}`;
+  if (!inst?.email) return;
+  const { placeOf } = await import("./schedule");
+  await queueMessage("I5", q.token, inst.email as string, { name: inst.business_name as string, place: placeOf(q), title: q.title ?? q.result.config.summary, jobId: q.id, why });
 }
 
 async function move(q: QuoteRow, to: JobState, actor: Actor, action: string, set: Record<string, unknown> = {}, rationale?: string, payload?: Record<string, unknown>) {
@@ -100,16 +114,20 @@ export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name
   }
   const inst = await installerFor(q, site);
   const priced = await reprice(q, { site });
-  const reasons = inst ? instantPriceBlockers(site, inst.scope) : ["No installer covers this postcode yet"];
-  if (!priced.config.ok) reasons.push(...priced.config.blockers.map((b) => b.message));
+  // Scope check runs whatever the mode, so Ops → Pricing can show which home patterns would have priced instantly (P7).
+  const scopeReasons = inst ? instantPriceBlockers(site, inst.scope, photosFor(q)) : ["No installer covers this postcode yet"];
+  if (!priced.config.ok) scopeReasons.push(...priced.config.blockers.map((b) => b.message));
+  const { getSetting } = await import("./settings");
+  const mode = await getSetting("pricing_mode");
+  // P1 (decided 4 Nov 2026): at launch every home is confirmed by the installer from the photos before any payment.
+  const reasons = mode.installer_confirms_all && inst && !scopeReasons.length ? ["Installer confirms every job"] : scopeReasons;
   // C8: standard homes are priced instantly and free. A home that needs an installer's photo check can carry a design-check fee,
-  // but only when ops switches it on; the fee comes back as a credit on purchase.
-  if (reasons.length && inst && q.design_fee_status !== "paid" && !opts.feePaid) {
-    const { getSetting } = await import("./settings");
+  // but only when ops switches it on; the fee comes back as a credit on purchase. Never charged when the only reason is the launch rule.
+  if (scopeReasons.length && inst && q.design_fee_status !== "paid" && !opts.feePaid) {
     const dc = await getSetting("design_check");
     if (dc.fee_on) {
       const reference = `DSD${q.token.slice(0, 5).toUpperCase()}`;
-      await db()`update quotes set site_draft = ${db().json(site as never)}, design_fee_status = 'due', pricing_reasons = ${reasons}, updated_at = now() where id = ${q.id}`;
+      await db()`update quotes set site_draft = ${db().json(site as never)}, design_fee_status = 'due', pricing_reasons = ${scopeReasons}, updated_at = now() where id = ${q.id}`;
       await db()`insert into payments (quote_id, kind, method, amount, reference) select ${q.id}, 'report', 'bank', ${dc.amount}, ${reference}
         where not exists (select 1 from payments where quote_id = ${q.id} and kind = 'report' and status = 'pending')`;
       await queueMessage("M15", q.token, contact.email, { name: contact.name, amount: dc.amount, reference });
@@ -118,24 +136,34 @@ export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name
   }
   const common = {
     site: db().json(site as never), customer_name: contact.name, customer_email: contact.email, customer_phone: contact.phone,
-    installer_id: inst?.id ?? null, scope_version: inst?.scope.version ?? null, design_review: reasons.length > 0,
+    installer_id: inst?.id ?? null, scope_version: inst?.scope.version ?? null, design_review: scopeReasons.length > 0,
+    // P7: what the scope check said, kept even when the launch rule sends the job to the installer anyway.
+    scope_result: db().json({ in_scope: scopeReasons.length === 0, reasons: scopeReasons, pattern: patternOf(site) } as never),
   };
   { const { trackConversion } = await import("./conversions"); await trackConversion(q.id, "SubmitApplication", priced.stack.amount_payable); }
   if (!reasons.length) {
     await move(q, "pricing_instant", CUSTOMER, "quotes.submit_site", common);
     q = (await getQuote(q.token))!;
-    await freezePrice(q, priced, SYSTEM, "Instant price: site inside the installer's standard scope");
-  } else {
-    await move(q, "pricing_installer", CUSTOMER, "quotes.submit_site", { ...common, pricing_reasons: reasons }, undefined, { reasons });
+    await freezePrice(q, priced, SYSTEM, "Instant price: site inside the installer's standard scope", { by: "instant", changed: false });
+  } else if (!inst) {
+    // P5: nobody covers this address. Straight to Ops, not a day in a queue no installer will open.
+    await move(q, "tech_review", CUSTOMER, "quotes.submit_site", { ...common, pricing_reasons: reasons }, "No installer covers this postcode", { reasons });
     await queueMessage("M1", q.token, contact.email, { name: contact.name });
+  } else {
+    await move(q, "pricing_installer", CUSTOMER, "quotes.submit_site", { ...common, pricing_reasons: reasons, pricing_requested_at: new Date() }, undefined, { reasons });
+    await queueMessage("M1", q.token, contact.email, { name: contact.name });
+    await notifyInstallerToPrice((await getQuote(q.token))!, inst.id, "new");
   }
 }
 
+/** The home pattern the scope rules look at, as one short key for Ops → Pricing (P7). */
+export const patternOf = (s: SiteAnswers) => `${s.storeys} storey · ${s.roofType} · switchboard ${s.switchboard} · ${s.phases === "unknown" ? "phases unknown" : `${s.phases}P`}`;
+
 /** Freeze the priced snapshot (v2) that D1, the invoice and installer pay all read. */
-async function freezePrice(q: QuoteRow, p: Quote, actor: Actor, rationale: string) {
+async function freezePrice(q: QuoteRow, p: Quote, actor: Actor, rationale: string, who: { by: "instant" | "installer" | "ops"; changed: boolean }) {
   await move(q, "priced", actor, "quotes.price", {
     snapshot: db().json(p as never), priced_at: new Date(), amount_payable: p.stack.amount_payable, price_inc_gst: p.stack.price_inc_gst,
-    stcs: p.stack.stcs, checkout_allowed: p.checkout_allowed, pricing_reasons: null,
+    stcs: p.stack.stcs, checkout_allowed: p.checkout_allowed, pricing_reasons: null, priced_by: who.by, price_changed: who.changed,
   }, rationale, { amount_payable: p.stack.amount_payable });
   await queueMessage("M2", q.token, q.customer_email, { name: q.customer_name, amount: p.stack.amount_payable });
 }
@@ -146,7 +174,8 @@ export async function installerPrice(q: QuoteRow, actor: Actor, extraCodes: stri
   // "CODE" or "CODE:qty" (per-metre / per-km items carry a quantity)
   const extraLabour = extraCodes.filter(Boolean).map((c) => { const [code, q] = c.split(":"); return { code: code!, qty: Math.min(500, Math.max(1, Math.round(Number(q) || 1))) }; });
   const p = await reprice(q, { extraLabour });
-  await freezePrice(q, p, actor, note || (extraCodes.length ? `Installer added ${extraCodes.map((c) => c.replace(":", " × ")).join(", ")}` : "Installer confirmed standard price"));
+  await freezePrice(q, p, actor, note || (extraCodes.length ? `Installer added ${extraCodes.map((c) => c.replace(":", " × ")).join(", ")}` : "Installer confirmed standard price"),
+    { by: actor.type === "staff" ? "ops" : "installer", changed: extraLabour.length > 0 });
 }
 
 const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86400_000);
@@ -448,7 +477,7 @@ export async function answerRevision(q: QuoteRow, accept: boolean) {
   if (fresh.status === "priced") {
     await db()`update quotes set snapshot = ${db().json(rev.priced as never)}, amount_payable = ${rev.priced.stack.amount_payable}, price_inc_gst = ${rev.priced.stack.price_inc_gst}, stcs = ${rev.priced.stack.stcs} where id = ${q.id}`;
   } else {
-    await freezePrice(fresh, rev.priced, CUSTOMER, `Customer accepted the revised design: ${rev.reason}`);
+    await freezePrice(fresh, rev.priced, CUSTOMER, `Customer accepted the revised design: ${rev.reason}`, { by: rev.by.startsWith("staff") ? "ops" : "installer", changed: true });
   }
 }
 

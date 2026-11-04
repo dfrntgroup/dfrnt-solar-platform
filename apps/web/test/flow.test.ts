@@ -42,6 +42,9 @@ run("job lifecycle (real database)", () => {
         ${db().json({ version: 1, phases: [1, 3], roofTypes: ["tin", "tile", "kliplok"], maxStoreys: 2, maxCableRunM: 10, switchboardOk: true, batteryLocations: ["garage", "outdoor_wall", "other"] })},
         ${db().json({ leadDays: 0, blackouts: [], jobsPerDay: 1, workingDays: [1, 2, 3, 4, 5, 6, 0] })}) returning id`;
     installerId = i!.id as string;
+    // The money and booking tests below were written for instant pricing; the launch default (installer confirms every job) has its own tests.
+    const S = await import("@/lib/settings");
+    await S.setSetting("pricing_mode", { installer_confirms_all: false, allow_test_installer: true }, "vitest");
     const [c] = await db()`insert into installer_crews (installer_id, name, source, status) values (${installerId}, 'Vitest crew', 'test', 'connected') returning id`;
     crewId = c!.id as string;
   });
@@ -56,6 +59,7 @@ run("job lifecycle (real database)", () => {
     await db()`delete from quotes where id = any(${ids}::uuid[])`.catch(() => null);
     await db()`delete from installer_crews where installer_id = ${installerId}`.catch(() => null);
     await db()`delete from installers where id = ${installerId}`.catch(() => null);
+    await db()`delete from settings where key = 'pricing_mode' and updated_by = 'vitest'`.catch(() => null);
     await db().end?.();
   });
 
@@ -130,5 +134,132 @@ run("job lifecycle (real database)", () => {
     await recordRefund(q.id, 100, "test refund", STAFF);
     const [p] = await db()`select refund_rule from payments where quote_id = ${q.id} and kind = 'refund'`;
     expect(p!.refund_rule).toBe("full_cooling_off");
+  });
+
+  /* ---- Pricing mode (4 Nov 2026): installer confirms every job at launch ---- */
+  async function securedQuote(name: string, slug = "solax-10kw-15kwh") {
+    const { createQuote } = await import("@/lib/quotes");
+    const { pricingData } = await import("@/lib/pricing-data");
+    const { findSystem } = await import("@dfrnt/engine");
+    const s = findSystem(slug, (await pricingData()).catalogue)!;
+    const out = await createQuote({ type: "customer", id: "anonymous" }, { config: { backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, ...s.config, panelSku: s.config.panelSku ?? "", stacks: s.config.stacks ?? 1, postcode: PC }, title: name, systemSlug: s.slug } as never, { status: "secured" });
+    tokens.push(out.result.token);
+    return (await J.getQuote(out.result.token))!;
+  }
+  async function withMode(mode: { installer_confirms_all: boolean; allow_test_installer: boolean }, fn: () => Promise<void>) {
+    const S = await import("@/lib/settings");
+    await S.setSetting("pricing_mode", mode, "vitest");
+    try { await fn(); } finally { await S.setSetting("pricing_mode", { installer_confirms_all: false, allow_test_installer: true }, "vitest"); }
+  }
+  const msgs = async (quoteId: string, template: string) => db()`select recipient, subject, body from messages where quote_id = ${quoteId} and template = ${template} order by created_at`;
+
+  it("P1: with the switch on, a standard home waits for the installer; off, it prices instantly", async () => {
+    await withMode({ installer_confirms_all: true, allow_test_installer: true }, async () => {
+      let q = await securedQuote("Mode on");
+      await J.submitSite(q, SITE, { name: "Mode on", email: "modeon@example.test", phone: "0400000000" });
+      q = (await J.getQuote(q.token))!;
+      expect(q.status).toBe("pricing_installer");
+      expect(q.pricing_reasons).toEqual(["Installer confirms every job"]);
+      const [row] = await db()`select scope_result, pricing_requested_at from quotes where id = ${q.id}`;
+      expect((row!.scope_result as { in_scope: boolean }).in_scope).toBe(true);
+      expect(row!.pricing_requested_at).toBeTruthy();
+      // P2: the installer is told, with the job link
+      const i5 = await msgs(q.id, "I5");
+      expect(i5.length).toBe(1);
+      expect(i5[0]!.body).toContain(`/installer/job/${q.id}`);
+      // P7: confirming unchanged is recorded as such
+      await J.installerPrice(q, { type: "installer", id: installerId }, [], "");
+      const [p] = await db()`select status, priced_by, price_changed from quotes where id = ${q.id}`;
+      expect(p).toMatchObject({ status: "priced", priced_by: "installer", price_changed: false });
+    });
+    let q = await securedQuote("Mode off");
+    await J.submitSite(q, SITE, { name: "Mode off", email: "modeoff@example.test", phone: "0400000000" });
+    q = (await J.getQuote(q.token))!;
+    expect(q.status).toBe("priced");
+    const [p] = await db()`select priced_by from quotes where id = ${q.id}`;
+    expect(p!.priced_by).toBe("instant");
+  });
+
+  it("P7: an installer who adds a line is recorded as a changed price", async () => {
+    await withMode({ installer_confirms_all: true, allow_test_installer: true }, async () => {
+      let q = await securedQuote("Changed");
+      await J.submitSite(q, SITE, { name: "Changed", email: "changed@example.test", phone: "0400000000" });
+      q = (await J.getQuote(q.token))!;
+      await J.installerPrice(q, { type: "installer", id: installerId }, ["SVC-SWB-HALF"], "");
+      const [p] = await db()`select priced_by, price_changed, amount_payable::float8 amount_payable from quotes where id = ${q.id}`;
+      expect(p).toMatchObject({ priced_by: "installer", price_changed: true });
+      expect(p!.amount_payable).toBeGreaterThan(q.result.stack.amount_payable);
+    });
+  });
+
+  it("P3: a battery-only job asks for the existing inverter, not the roof", async () => {
+    const { photosFor } = await import("@/lib/photos");
+    const b = await securedQuote("Battery only", "solax-battery-15kwh");
+    expect([...photosFor(b)]).toEqual(["switchboard", "meter", "existing_inverter", "battery_location"]);
+    const sb = await securedQuote("Solar battery");
+    expect([...photosFor(sb)]).toEqual(["switchboard", "meter", "roof", "battery_location"]);
+    // In instant mode a roof photo doesn't satisfy a battery-only job: it goes to the installer for the inverter photo.
+    await J.submitSite(b, SITE, { name: "Battery only", email: "bo@example.test", phone: "0400000000" });
+    const q = (await J.getQuote(b.token))!;
+    expect(q.status).toBe("pricing_installer");
+    expect(q.pricing_reasons).toEqual(["Photo missing: existing inverter"]);
+  });
+
+  it("P4: the installer asks for a photo again; the customer re-sends it; the installer is told", async () => {
+    const P = await import("@/lib/photos");
+    await withMode({ installer_confirms_all: true, allow_test_installer: true }, async () => {
+      let q = await securedQuote("Retake");
+      await db()`insert into quote_photos (quote_id, kind, path) values (${q.id}, 'switchboard', 'test/swb.jpg'), (${q.id}, 'meter', 'test/m.jpg'), (${q.id}, 'roof', 'test/r.jpg'), (${q.id}, 'battery_location', 'test/b.jpg')`;
+      await J.submitSite(q, SITE, { name: "Retake", email: "retake@example.test", phone: "0400000000" });
+      q = (await J.getQuote(q.token))!;
+      await P.requestRetake(q, { type: "installer", id: installerId }, "switchboard", "Too dark to read the labels");
+      expect((await P.retakeKinds(q.id)).map((r) => r.kind)).toEqual(["switchboard"]);
+      expect([...(await P.activeKinds(q.id))].sort()).toEqual(["battery_location", "meter", "roof"]);
+      const m16 = await msgs(q.id, "M16");
+      expect(m16.length).toBe(1);
+      expect(m16[0]!.body).toContain("Too dark");
+      await expect(P.requestRetake(q, { type: "installer", id: installerId }, "switchboard", "")).rejects.toThrow(/already/);
+      // customer re-uploads that one photo
+      await db()`insert into quote_photos (quote_id, kind, path) values (${q.id}, 'switchboard', 'test/swb2.jpg')`;
+      await P.retakeReceived(q.id);
+      expect(await P.retakeKinds(q.id)).toEqual([]);
+      const i5 = await msgs(q.id, "I5");
+      expect(i5.length).toBe(2);
+      expect(i5[1]!.subject).toMatch(/^New photo in/);
+      expect((await J.getQuote(q.token))!.status).toBe("pricing_installer");
+    });
+  });
+
+  it("P5: an address nobody covers goes straight to tech review", async () => {
+    let q = await securedQuote("Nowhere");
+    await J.submitSite(q, { ...SITE, address: { ...SITE.address, postcode: "4999" } }, { name: "Nowhere", email: "nowhere@example.test", phone: "0400000000" });
+    q = (await J.getQuote(q.token))!;
+    expect(q.status).toBe("tech_review");
+    expect(q.installer_id).toBeNull();
+  });
+
+  it("P6: a test installer is never assigned when the guard is off", async () => {
+    await withMode({ installer_confirms_all: true, allow_test_installer: false }, async () => {
+      let q = await securedQuote("Guard");
+      await J.submitSite(q, SITE, { name: "Guard", email: "guard@example.test", phone: "0400000000" });
+      q = (await J.getQuote(q.token))!;
+      expect(q.status).toBe("tech_review");
+      expect(q.installer_id).toBeNull();
+    });
+  });
+
+  it("P2: the 3 pm run reminds the installer once about a job waiting since before 2 pm", async () => {
+    const { runAfternoon } = await import("@/lib/timers");
+    await withMode({ installer_confirms_all: true, allow_test_installer: true }, async () => {
+      let q = await securedQuote("Nudge");
+      await J.submitSite(q, SITE, { name: "Nudge", email: "nudge@example.test", phone: "0400000000" });
+      q = (await J.getQuote(q.token))!;
+      await db()`update quotes set pricing_requested_at = now() - interval '3 hours' where id = ${q.id}`;
+      const r = await runAfternoon();
+      if ("weekend" in r) { expect(r.nudged).toBe(0); return; }
+      expect((await msgs(q.id, "I6")).length).toBe(1);
+      await runAfternoon();
+      expect((await msgs(q.id, "I6")).length).toBe(1);
+    });
   });
 });
