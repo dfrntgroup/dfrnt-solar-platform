@@ -73,7 +73,7 @@ export function Builder(props: { postcode: string; initial: Opts; served: boolea
           <div className="bopts bfull">
             {o.brands.map((b) => (
               <button key={b.family} type="button" className={`bopt${c.family === b.family ? " on" : ""}`} aria-pressed={c.family === b.family} onClick={() => { setWant({ phases: c.phases, family: b.family }); setOpen(null); }}>
-                <strong>{b.brand}</strong><span>10 yr inverter warranty{b.from ? ` · systems from ${aud(b.from)}` : ""}</span></button>))}
+                <strong>{b.brand}</strong><span>10 yr inverter warranty{b.family_price ? ` · Family size (${b.family_title}) ${aud(b.family_price)}` : b.from ? ` · systems from ${aud(b.from)}` : ""}{b.battery_from ? ` · battery only from ${aud(b.battery_from)}` : ""}</span></button>))}
           </div></div>
 
         {c.family && <div className={`bstep${c.inverterSku ? " done" : ""}${open === 3 ? " open" : ""}`}><h3><span className="n">03</span>Inverter</h3>

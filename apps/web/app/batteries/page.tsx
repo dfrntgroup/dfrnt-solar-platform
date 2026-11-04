@@ -16,7 +16,8 @@ export default async function Batteries({ searchParams }: { searchParams: Promis
       <section><div className="wrap">
         <p className="eyebrow">Battery only · {postcode}</p>
         <h1>Add a battery to the solar you have.</h1>
-        <p className="muted">Each comes with its own hybrid inverter, so it works with almost any existing solar. The Cheaper Home Batteries rebate is taken off the price. One battery rebate per home.</p>
+        <p className="muted">Your panels and inverter stay as they are. Each battery comes with its own hybrid inverter, so it works with almost any existing solar. The Cheaper Home Batteries rebate is taken off the price. One battery rebate per home.</p>
+        <p style={{ fontWeight: 700 }}>Every battery here is a starting point: open it to change the size or add backup, and the price follows.</p>
         <div className="grid">{rows.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} earliest={earliest} />)}</div>
       </div></section>
       <Footer />

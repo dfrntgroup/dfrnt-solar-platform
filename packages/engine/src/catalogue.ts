@@ -4,9 +4,23 @@ import type { ConfigInput } from "./config";
 import { quote, type Quote, type QuoteContext } from "./quote";
 import { rebateWindow } from "./rebates";
 
+/** Battery bands: one of four fixed names used on every card so the same name means the same job across brands. */
+export type Band = "evenings" | "overnight" | "overnight_ev" | "big_home";
+export const BANDS: Record<Band, { label: string; kwh: string; why: string }> = {
+  evenings: { label: "Evenings", kwh: "10–12 kWh", why: "Covers dinner to bedtime for most homes. The cheapest way into a battery." },
+  overnight: { label: "Overnight", kwh: "15–18 kWh", why: "Runs most homes from dinner to breakfast. Our pick for a family home." },
+  overnight_ev: { label: "Overnight + EV", kwh: "20–27 kWh", why: "Overnight plus an EV charge or a pool pump. The rebate still pays on every kWh up to 28." },
+  big_home: { label: "Big home", kwh: "30 kWh and up", why: "Long blackouts, two EVs, or a home that never wants to buy evening power. The rebate pays less per kWh past 28." },
+};
+export const BAND_ORDER: Band[] = ["evenings", "overnight", "overnight_ev", "big_home"];
+/** Band for a usable capacity, for configured systems and custom builds. */
+export const bandFor = (usableKwh: number): Band => usableKwh < 13.5 ? "evenings" : usableKwh < 19 ? "overnight" : usableKwh < 28.5 ? "overnight_ev" : "big_home";
+
 export interface CatalogueSystem {
   slug: string; title: string; brand: string; tier: "core" | "brand" | "value" | "premium"; badge?: string;
   kind: "solar_battery" | "battery_only" | "solar_only";
+  /** Battery band (see BANDS); size label (Small / Family / Large / Extra large / Battery); one plain line on who it suits. */
+  band?: Band; size?: string; who?: string;
   config: Pick<ConfigInput, "familyKey" | "panelSku" | "panelCount" | "batteryModules" | "stacks" | "phases"> & Partial<ConfigInput>;
 }
 export interface Catalogue { version: string; systems: CatalogueSystem[] }

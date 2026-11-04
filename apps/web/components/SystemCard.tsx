@@ -1,8 +1,7 @@
 import Link from "next/link";
-import type { CatalogueSystem, Quote } from "@dfrnt/engine";
+import { BANDS, bandFor, type CatalogueSystem, type Quote } from "@dfrnt/engine";
 import { aud } from "@/lib/site";
 import { imageFor } from "@/lib/images";
-import { outcome } from "@/lib/capacity";
 import { longDate } from "@/lib/site";
 
 export function Media({ s, q, className = "card-media" }: { s: CatalogueSystem; q: Quote; className?: string }) {
@@ -19,20 +18,41 @@ export function Media({ s, q, className = "card-media" }: { s: CatalogueSystem; 
   );
 }
 
-export function SystemCard({ s, q, compare, earliest }: { s: CatalogueSystem; q: Quote; compare?: boolean; earliest?: string | null }) {
+/** Band pill: one of four fixed names, so the same name means the same job across brands. */
+export function BandPill({ s, q }: { s: CatalogueSystem; q: Quote }) {
+  const band = s.band ?? bandFor(q.config.usable_kwh);
+  return <span className={`band ${band}`}>{BANDS[band].label}</span>;
+}
+
+/** kW the way Australians say it: 14 × 475 W is "6.6 kW", 21 × 475 W is "10 kW" (round half down to one decimal). */
+export const kwLabel = (kw: number) => String(Math.ceil(kw * 10 - 0.5) / 10);
+
+/** The four facts, always in the same order: panels, inverter, battery, backup. Battery-only cards answer "do I keep my solar?" first. */
+export function Facts({ s, q, backup }: { s: CatalogueSystem; q: Quote; backup?: string }) {
   const c = q.config;
+  const panelW = c.bom.find((b) => b.serial === "panel") ? 475 : 0;
+  const inv = c.inverter ? `${Math.round(c.inverter.ac_w / 100) / 10} kW hybrid` : "";
   return (
-    <div className="card">
+    <ul className="facts">
+      {s.kind === "battery_only"
+        ? <><li><span>Works with</span><span>Any existing solar</span></li><li><span>Includes</span><span>Its own hybrid inverter{inv ? ` (${inv})` : ""}</span></li></>
+        : <><li><span>Panels</span><span>{s.config.panelCount} × {panelW} W = {kwLabel(c.panel_kw)} kW</span></li>{inv && <li><span>Inverter</span><span>{inv}</span></li>}</>}
+      {c.usable_kwh > 0 && <li><span>Battery</span><span>{c.usable_kwh} kWh usable</span></li>}
+      <li><span>Backup</span><span>{backup ?? "Optional"}</span></li>
+      {s.config.phases === 3 && <li><span>Power</span><span>Three phase</span></li>}
+    </ul>
+  );
+}
+
+export function SystemCard({ s, q, compare, earliest, highlight }: { s: CatalogueSystem; q: Quote; compare?: boolean; earliest?: string | null; highlight?: boolean }) {
+  return (
+    <div className={`card${highlight || s.badge ? " pick" : ""}`}>
       <Media s={s} q={q} />
-      <div className="tag"><span>{s.brand} · {s.kind === "battery_only" ? "Battery only" : "Solar + battery"}</span>{s.badge && <span className="badge">{s.badge}</span>}</div>
+      <BandPill s={s} q={q} />
+      <div className="tag"><span>{s.brand} · {s.kind === "battery_only" ? "Battery only" : s.size ? s.size : "Solar + battery"}</span>{s.badge && <span className="badge">{s.badge}</span>}</div>
       <h3>{s.title}</h3>
-      {outcome(c.usable_kwh, c.panel_kw) && <p className="small" style={{ margin: "-4px 0 0", color: "var(--teal-dark)", fontWeight: 700 }}>{outcome(c.usable_kwh, c.panel_kw)}</p>}
-      <div className="chips">
-        {c.panel_kw > 0 && <span>{s.config.panelCount} × 475 W panels</span>}
-        {c.inverter && <span>{Math.round(c.inverter.ac_w / 100) / 10} kW inverter</span>}
-        {c.usable_kwh > 0 && <span>{c.usable_kwh} kWh usable</span>}
-        <span>{s.config.phases === 3 ? "Three phase" : "Single phase"}</span>
-      </div>
+      {s.who && <p className="who">{s.who}</p>}
+      <Facts s={s} q={q} />
       <div style={{ borderTop: "1px solid var(--line)", paddingTop: 12 }}>
         <div className="pay"><small>You pay, installed</small>{aud(q.stack.amount_payable)}</div>
         <div className="before">{aud(q.stack.price_inc_gst)} before {aud(q.stack.less_stcs)} rebates · inc GST</div>
@@ -40,7 +60,7 @@ export function SystemCard({ s, q, compare, earliest }: { s: CatalogueSystem; q:
       </div>
       <div className="card-foot" style={compare ? undefined : { gridTemplateColumns: "1fr" }}>
         {compare && <label className="cmp"><input type="checkbox" name="s" value={s.slug} /> Compare</label>}
-        <Link className="btn" href={`/systems/${s.slug}`}>View system</Link>
+        <Link className="btn" href={`/systems/${s.slug}`}>See and adjust{compare ? "" : " →"}</Link>
       </div>
     </div>
   );

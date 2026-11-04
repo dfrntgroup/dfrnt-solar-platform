@@ -5,8 +5,10 @@ import { track } from "./Analytics";
 import { outcome } from "@/lib/outcome";
 import { friendlySummary, friendlyWarning } from "@/lib/images";
 
-interface Price { ok: boolean; summary: string; solar_kw: number; usable_kwh: number; inverter?: string; towers: number; you_pay: number; before_rebates: number; rebates: number; gst: number; equipment: number; installation: number; solar_stcs: number; battery_stcs: number; warnings: string[]; blockers: string[] }
+interface Price { ok: boolean; summary: string; solar_kw: number; usable_kwh: number; inverter?: string; towers: number; you_pay: number; before_rebates: number; rebates: number; gst: number; equipment: number; installation: number; solar_stcs: number; battery_stcs: number; warnings: string[]; blockers: string[];
+  lines?: { label: string; amount: number }[]; steps?: { panel: { down: number | null; up: number | null }; modules: Record<number, number> } | null }
 const aud = (n: number, d = 0) => n.toLocaleString("en-AU", { style: "currency", currency: "AUD", maximumFractionDigits: d, minimumFractionDigits: d });
+const delta = (n: number | null | undefined) => n == null ? "" : n === 0 ? "same price" : `${n > 0 ? "+" : "−"}${aud(Math.abs(n))}`;
 
 export function Configurator(props: {
   slug: string; postcode: string; panels: number[]; modules: number[]; backupAvailable: boolean; moduleKwh: number; panelW: number;
@@ -50,24 +52,25 @@ export function Configurator(props: {
   }, [p, panels, modules, props.start.panels, props.start.modules]);
 
   const step = (list: number[], v: number, dir: 1 | -1) => { const i = list.indexOf(v); return list[Math.min(list.length - 1, Math.max(0, (i < 0 ? 0 : i) + dir))] ?? v; };
-  const Stepper = ({ label, value, sub, list, set }: { label: string; value: number; sub: string; list: number[]; set: (n: number) => void }) => (
+  const Stepper = ({ label, value, sub, list, set, down, up }: { label: string; value: number; sub: string; list: number[]; set: (n: number) => void; down?: number | null; up?: number | null }) => (
     <div className="cfg-row">
       <div><strong>{label}</strong><div className="small muted">{sub}</div></div>
       <div className="stepper">
-        <button type="button" aria-label={`Fewer ${label}`} disabled={list.indexOf(value) <= 0} onClick={() => set(step(list, value, -1))}>−</button>
+        <button type="button" aria-label={`Fewer ${label}${down != null ? `, ${delta(down)}` : ""}`} disabled={list.indexOf(value) <= 0} onClick={() => set(step(list, value, -1))}>−{down != null && <small>{delta(down)}</small>}</button>
         <output>{value}</output>
-        <button type="button" aria-label={`More ${label}`} disabled={list.indexOf(value) >= list.length - 1} onClick={() => set(step(list, value, 1))}>+</button>
+        <button type="button" aria-label={`More ${label}${up != null ? `, ${delta(up)}` : ""}`} disabled={list.indexOf(value) >= list.length - 1} onClick={() => set(step(list, value, 1))}>+{up != null && <small>{delta(up)}</small>}</button>
       </div>
     </div>);
+  const modDelta = (m: number) => { const v = p.steps?.modules[m]; return v == null || m === modules ? null : Math.round(v - p.you_pay); };
 
   return (
     <div>
-      {props.panels.length > 0 && <Stepper label="Solar panels" value={panels} sub={`${(panels * props.panelW / 1000).toFixed(2)} kW`} list={props.panels} set={setPanels} />}
+      {props.panels.length > 0 && <Stepper label="Solar panels" value={panels} sub={`${(panels * props.panelW / 1000).toFixed(2)} kW · the buttons show the price change after rebates (the inverter is re-sized to fit)`} list={props.panels} set={setPanels} down={p.steps?.panel.down} up={p.steps?.panel.up} />}
       {props.modules.length > 0 && (
         <div className="cfg-row" style={{ display: "block" }}>
-          <div><strong>Battery size</strong><div className="small muted">{modules} module{modules === 1 ? "" : "s"} · usable capacity{p.towers > 1 ? ` · ${p.towers} towers` : ""}</div></div>
+          <div><strong>Battery size</strong><div className="small muted">{modules} module{modules === 1 ? "" : "s"} of {props.moduleKwh} kWh · usable capacity{p.towers > 1 ? ` · ${p.towers} towers` : ""} · each size shows what it adds or saves</div></div>
           <div className="pills" role="group" aria-label="Battery size">{props.modules.map((m) => (
-            <button key={m} type="button" className={m === modules ? "on" : ""} onClick={() => setModules(m)} aria-pressed={m === modules}>{Math.round(m * props.moduleKwh * 10) / 10}<small>kWh</small></button>))}</div>
+            <button key={m} type="button" className={m === modules ? "on" : ""} onClick={() => setModules(m)} aria-pressed={m === modules}>{Math.round(m * props.moduleKwh * 10) / 10}<small>kWh</small>{m === modules ? <span className="delta">current</span> : modDelta(m) != null && <span className="delta">{delta(modDelta(m))}</span>}</button>))}</div>
         </div>)}
       {props.backupAvailable && (
         <label style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderTop: "1px solid var(--line)", cursor: "pointer" }}>
@@ -82,8 +85,9 @@ export function Configurator(props: {
         {!p.ok && <div className="note small">{p.blockers.join(" · ")}</div>}
         <details className="small" style={{ margin: "8px 0" }}><summary>How the price is made</summary>
           <table className="lines"><tbody>
-            <tr><td>Equipment</td><td className="r">{aud(p.equipment, 2)}</td></tr>
-            <tr><td>Installation</td><td className="r">{aud(p.installation, 2)}</td></tr>
+            {p.lines?.length ? p.lines.map((l, i) => <tr key={i}><td>{l.label}</td><td className="r">{aud(l.amount, 2)}</td></tr>) : <>
+              <tr><td>Equipment</td><td className="r">{aud(p.equipment, 2)}</td></tr>
+              <tr><td>Installation</td><td className="r">{aud(p.installation, 2)}</td></tr></>}
             <tr><td>GST (on the full price before rebates)</td><td className="r">{aud(p.gst, 2)}</td></tr>
             <tr><td>Less assignment of STCs ({p.solar_stcs + p.battery_stcs})</td><td className="r">−{aud(p.rebates, 2)}</td></tr>
           </tbody></table></details>

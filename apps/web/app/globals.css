@@ -336,3 +336,24 @@ details.menu[open] > summary::after { content: "✕"; font-size: 22px; }
   .bsum .link { background: none; border: 0; color: var(--teal); font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; padding: 8px 0 8px 12px; }
 }
 .bsum .link::after { content: ""; }
+
+/* Shelf by Size × Battery band × Brand (4 Nov 2026) */
+.band { display: inline-block; align-self: flex-start; color: #fff; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; font-weight: 700; padding: 4px 9px; border-radius: 999px; background: var(--teal); }
+.band.evenings { background: #5f9a45; } .band.overnight { background: var(--teal); } .band.overnight_ev { background: #2a5d9f; } .band.big_home { background: #5b3a8a; }
+.card.pick { border: 2px solid var(--ink); }
+.who { color: var(--teal-dark); font-weight: 700; font-size: 14px; margin: -6px 0 0; }
+.facts { list-style: none; padding: 0; margin: 0; font-size: 14px; }
+.facts li { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px dashed var(--line); }
+.facts li span:first-child { color: var(--muted); }
+.bandrow { margin: 26px 0 0; }
+.bandrow h2 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 22px; margin-bottom: 4px; }
+.bandrow .why { color: var(--muted); margin: 0 0 14px; }
+.empty { border: 1px dashed var(--line); border-radius: var(--r); padding: 18px; color: var(--muted); font-size: 14px; display: flex; align-items: center; justify-content: center; text-align: center; min-height: 140px; }
+.filters .lab { font-size: 13px; color: var(--muted); align-self: center; min-width: 76px; }
+.filterrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+.stepper button small { display: block; font-size: 10px; line-height: 1; color: var(--muted); margin-top: 2px; }
+.stepper button { padding: 4px 0; width: 54px; }
+.pills button .delta { display: block; font-size: 11px; font-weight: 500; color: var(--muted); }
+.steps3 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); margin-top: 18px; }
+.steps3 .num { color: var(--teal-soft); }
+@media (max-width: 600px) { .empty { min-height: 0; padding: 10px 12px; } }

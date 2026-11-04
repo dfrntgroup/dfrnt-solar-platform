@@ -19,6 +19,9 @@ import { friendlyInverter, friendlyPanel, imageFor } from "@/lib/images";
 import { nextDays, outcome } from "@/lib/capacity";
 import { Trust } from "@/components/Trust";
 import { CallBack } from "@/components/CallBack";
+import { componentLines } from "@/lib/price-lines";
+import { stepPrices } from "@/lib/steps";
+import { BandPill, Facts } from "@/components/SystemCard";
 
 export const dynamic = "force-dynamic";
 
@@ -63,6 +66,8 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
     .map((d) => ({ d, bf: batteryFactor(d, data.rebates), dy: deemingYears(d, data.rebates) }));
   const rebateLine = rebateLineFor(q.window, site.rebateFrom);
   const parts = c.bom.filter((b) => !b.included && !b.sku.startsWith("BOS") && !b.sku.startsWith("MNT"));
+  const lines = componentLines(q, usePanels);
+  const steps = stepPrices(s.slug, { panels: usePanels, modules: useModules, backup: "none" }, postcode, data, site.rebateFrom);
   return (
     <>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({ "@context": "https://schema.org", "@type": "Product", name: `${s.brand} ${s.title}, installed`, brand: { "@type": "Brand", name: s.brand },
@@ -74,9 +79,12 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
           <div>
             <Media s={s} q={q} className="gallery" />
             <div className="gallery-note">Manufacturer product imagery. Final configuration is confirmed from your photos before you pay.</div>
-            <p className="eyebrow" style={{ marginTop: 26 }}>{s.brand} · {s.kind === "battery_only" ? "Battery only" : "Supply + installation"}</p>
+            <div style={{ marginTop: 26 }}><BandPill s={s} q={q} /></div>
+            <p className="eyebrow" style={{ marginTop: 8 }}>{s.brand} · {s.kind === "battery_only" ? "Battery only" : "Supply + installation"}{s.size ? ` · ${s.size}` : ""}</p>
             <h1 id="sys-title" style={{ fontSize: "clamp(30px, 6vw, 44px)" }}>{custom ? (c.usable_kwh ? `${c.panel_kw ? `${Math.round(c.panel_kw * 10) / 10} kW solar + ` : ""}${Math.round(c.usable_kwh * 10) / 10} kWh battery` : `${Math.round(c.panel_kw * 10) / 10} kW solar`) : s.title}</h1>
-            <p id="sys-outcome" style={{ color: "var(--teal-dark)", fontWeight: 700, marginTop: -6 }}>{outcome(c.usable_kwh, c.panel_kw)}</p>
+            <p id="sys-outcome" style={{ color: "var(--teal-dark)", fontWeight: 700, marginTop: -6 }}>{s.who && !custom ? s.who : outcome(c.usable_kwh, c.panel_kw)}</p>
+            <div style={{ maxWidth: 420 }}><Facts s={{ ...s, config: { ...s.config, panelCount: usePanels } }} q={q} /></div>
+            <p className="small muted" style={{ margin: "8px 0 0" }}>A starting point, not a fixed package: change the panels, the battery and the backup on the right and the price follows.</p>
             <h3 style={{ marginTop: 18 }}>What it does for you</h3>
             <ul className="plain">
               {c.panel_kw > 0 && <li><strong>Makes about {Math.round(c.panel_kw * yieldFor(postcode, (await energySettings()).yields).kwh_per_kw)} kWh of power on an average day</strong><span className="small muted">Enough to run most homes through the day, with the extra charging your battery.</span></li>}
@@ -91,10 +99,9 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
               <tr><td className="k">Materials</td><td>{c.panel_kw > 0 ? "Racking, " : ""}isolators, cabling, breakers and standard materials</td></tr>
               <tr><td className="k">Installation</td><td>Licensed local electrician, grid connection and rebate paperwork. Anything non-standard is priced from your photos for your approval before you pay.</td></tr>
             </tbody></table></details>
-            <h2 style={{ marginTop: 28 }}>How the price is made <span className="small muted">(as listed)</span></h2>
+            <h2 style={{ marginTop: 28 }}>How the price is made <span className="small muted">(every part, as listed)</span></h2>
             <table className="lines"><tbody>
-              <tr><td>Equipment</td><td className="r">{aud2(st.hardware_ex_gst)}</td></tr>
-              <tr><td>Installation</td><td className="r">{aud2(st.installation_ex_gst)}</td></tr>
+              {lines.map((l, i) => <tr key={i}><td>{l.label}</td><td className="r">{aud2(l.amount)}</td></tr>)}
               <tr><td>GST</td><td className="r">{aud2(st.gst)}</td></tr>
               <tr><td><strong>Price before rebates</strong></td><td className="r"><strong>{aud2(st.price_inc_gst)}</strong></td></tr>
               {r.solar_stcs > 0 && <tr><td>Less assignment of STCs, solar ({r.solar_stcs} certificates)</td><td className="r">−{aud2(r.solar_rebate)}</td></tr>}
@@ -111,12 +118,12 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
           <aside className="buybox">
             <p className="eyebrow" style={{ marginBottom: 6 }}>Size it to your home</p>
             <h3>Panels and battery, your way.</h3>
-            <p className="small muted" style={{ marginTop: 0 }}>Change the counts. The inverter, parts, rebates and installation follow, and every change shows on the price.</p>
+            <p className="small muted" style={{ marginTop: 0 }}>Change the counts. The inverter, parts, rebates and installation follow, and each button shows what the step costs you after rebates.</p>
             <Configurator slug={s.slug} postcode={postcode} panels={opts.panels} modules={opts.modules} backupAvailable={opts.backup} moduleKwh={opts.moduleKwh} panelW={opts.panelW}
               start={{ panels: usePanels, modules: useModules }} lockUntil={longDate(q.window.lock_until)} secure={secureSystem} served={next !== null}
               initial={{ ok: q.config.ok, summary: c.summary, solar_kw: c.panel_kw, usable_kwh: c.usable_kwh, inverter: c.inverter?.model, towers: c.stacks?.physical_towers ?? 0,
                 you_pay: st.amount_payable, before_rebates: st.price_inc_gst, rebates: st.less_stcs, gst: st.gst, equipment: st.hardware_ex_gst, installation: st.installation_ex_gst,
-                solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message) }} />
+                solar_stcs: r.solar_stcs, battery_stcs: r.battery_stcs, warnings: c.warnings.map((w) => w.message), blockers: c.blockers.map((b) => b.message), lines, steps }} />
             <p className="small" style={{ margin: "4px 0 8px" }}>Want a different inverter or panel? <Link href={buildHref({ ...s.config, inverterSku: c.inverter?.sku, batteryModules: useModules, panelCount: usePanels }, postcode)}>Build your own</Link></p>
             <table className="incl" style={{ marginTop: 6 }}><tbody>
               <tr><td className="k">Next free days</td><td>{next?.length ? <strong>{next.map((d) => longDate(d)).join(" · ")}</strong> : next === null ? "Not in your area yet — join the waitlist" : "Confirmed when you book"}<br /><span className="small muted">{next?.length ? "From installers' live calendars. You pick your day after paying." : "From your installer's real free days"}</span></td></tr>

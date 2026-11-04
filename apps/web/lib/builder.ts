@@ -36,7 +36,7 @@ function resolveWithStacks(i: ConfigInput, rules: ConfigRules) {
 }
 
 export interface BuildOptions {
-  brands: { family: string; brand: string; battery: string; from?: number }[];
+  brands: { family: string; brand: string; battery: string; from?: number; family_price?: number; family_title?: string; battery_from?: number }[];
   inverters: { sku: string; model: string; kw: number; batteryKw: number | null; backup: boolean; maxPanels: number | null; batteryOnly: boolean }[];
   modules: { n: number; kwh: number; ok: boolean; why?: string }[];
   moduleName: string; moduleKwh: number;
@@ -56,11 +56,17 @@ export function buildOptions(raw: BuildChoice, postcode: string, rebateDate: str
   const c: BuildChoice = { ...raw };
   // Brands (families) that have an inverter we sell in this phase.
   const fams = [...new Set([...sold.values()])].filter((f) => rules.families[f]?.phases === c.phases);
-  const brands = fams.map((f) => ({ family: f, brand: rules.families[f]!.brand, battery: rules.battery_families[rules.families[f]!.battery_family]?.module.model ?? "" }))
+  const brands: BuildOptions["brands"] = fams.map((f) => ({ family: f, brand: rules.families[f]!.brand, battery: rules.battery_families[rules.families[f]!.battery_family]?.module.model ?? "" }))
     .sort((a, b) => BRAND_ORDER.indexOf(a.brand) - BRAND_ORDER.indexOf(b.brand));
   for (const b of brands) {
-    const cheapest = data.catalogue.systems.filter((s) => s.config.familyKey === b.family).map((s) => priceSystem(s, site, data).stack.amount_payable);
-    if (cheapest.length) (b as { from?: number }).from = Math.min(...cheapest);
+    // Anchor each brand on its Family-size system (not a battery-only "from" price) and state the battery-only floor separately.
+    const mine = data.catalogue.systems.filter((s) => s.config.familyKey === b.family);
+    const fam = mine.find((s) => s.kind === "solar_battery" && s.size === "Family") ?? mine.find((s) => s.kind === "solar_battery");
+    if (fam) { const q = priceSystem(fam, site, data); b.family_price = q.stack.amount_payable; b.family_title = fam.title; }
+    const bats = mine.filter((s) => s.kind === "battery_only").map((s) => priceSystem(s, site, data).stack.amount_payable);
+    if (bats.length) b.battery_from = Math.min(...bats);
+    const all = mine.map((s) => priceSystem(s, site, data).stack.amount_payable);
+    if (all.length) b.from = Math.min(...all);
   }
   if (!c.family || !fams.includes(c.family)) { c.family = undefined; c.inverterSku = undefined; }
   const invList = c.family ? [...sold.entries()].filter(([, f]) => f === c.family).map(([sku]) => sku).filter((sku) => rules.inverters[sku]) : [];

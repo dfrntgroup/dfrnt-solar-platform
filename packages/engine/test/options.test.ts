@@ -13,7 +13,7 @@ describe("configurator options", () => {
     console.log("solax panels", o.panels.join(","), "modules", o.modules.join(","));
   });
   it("Sungrow modules only in allowed equal stacks", () => {
-    const o = configOptions(base("sungrow-10kw-20kwh"));
+    const o = configOptions(base("sungrow-13kw-20kwh"));
     expect(o.modules).not.toContain(7);
     console.log("sungrow modules", o.modules.join(","));
   });

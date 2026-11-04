@@ -26,7 +26,7 @@ export default async function Suburb({ params, searchParams }: { params: Promise
   const s = await find(suburb);
   if (!s) notFound();
   const all = await priced(s.postcode);
-  const top = all.filter(({ s: x }) => ["solax-10kw-15kwh", "goodwe-10kw-18kwh", "sungrow-10kw-20kwh"].includes(x.slug));
+  const top = all.filter(({ s: x }) => ["solax-6kw-10kwh", "solax-10kw-15kwh", "solax-13kw-20kwh"].includes(x.slug));
   const days = await nextDaysFor(s.postcode, undefined, 3).catch(() => null);
   const reviews = await db()`select r.rating, r.body, r.first_name, r.suburb from reviews r where r.status = 'published' and lower(r.suburb) = lower(${s.name}) order by r.published_at desc limit 6`;
   const installs = await db()`select q.title, (select p.path from quote_photos p where p.quote_id = q.id and p.public order by p.created_at limit 1) photo
