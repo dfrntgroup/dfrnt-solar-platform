@@ -480,10 +480,10 @@ export async function addonSave(f: FormData) {
     const code = s(f, "code").toUpperCase().replace(/[^A-Z0-9-]/g, "").slice(0, 20);
     if (!code || s(f, "name").length < 2) throw new Error("Code and name are needed");
     const n = (k: string) => Math.max(0, Number(s(f, k)) || 0);
-    await db()`insert into addons (code, name, description, supplier_cost_ex, installer_labour_ex, extra_days, active, sort)
-      values (${code}, ${s(f, "name")}, ${s(f, "description")}, ${n("supplier")}, ${n("labour")}, ${Math.round(n("days") * 2) / 2}, ${f.get("active") === "on"}, ${n("sort")})
+    await db()`insert into addons (code, name, description, supplier_cost_ex, installer_labour_ex, extra_days, active, sort, requires_brand)
+      values (${code}, ${s(f, "name")}, ${s(f, "description")}, ${n("supplier")}, ${n("labour")}, ${Math.round(n("days") * 2) / 2}, ${f.get("active") === "on"}, ${n("sort")}, ${s(f, "brand").trim() || null})
       on conflict (code) do update set name = excluded.name, description = excluded.description, supplier_cost_ex = excluded.supplier_cost_ex,
-        installer_labour_ex = excluded.installer_labour_ex, extra_days = excluded.extra_days, active = excluded.active, sort = excluded.sort`;
+        installer_labour_ex = excluded.installer_labour_ex, extra_days = excluded.extra_days, active = excluded.active, sort = excluded.sort, requires_brand = excluded.requires_brand`;
   });
 }
 

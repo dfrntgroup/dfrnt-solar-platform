@@ -357,7 +357,6 @@ export function resolveConfig(inputArg: ConfigInput, ctx: { rules?: ConfigRules 
     if (b) b.parts.forEach((p) => raw.push(/GATEWAY/.test(p) ? { sku: p, qty: 1, serial: "gateway" } : { sku: p, qty: 1 }));
     else warnings.push({ step: "bom", message: `${inv.model} has no ${input.backup.replace("_", " ")} backup kit in the rules` });
   }
-  raw.push({ sku: "BOS-KIT", qty: 1 });
   if (nStrings > inv.mppts) raw.push({ sku: "PRT-DC-ISOLATOR", qty: nStrings - inv.mppts, included: "SVC-EXTRA-STRING" });
   if (barrierRequired) raw.push({ sku: "PRT-BARRIER-CFC-6MM", qty: barrierM, included: "SVC-BARRIER" });
   if (hasBattery && input.vehicleExposure) raw.push({ sku: "PRT-BOLLARD-PAIR", qty: 1 });

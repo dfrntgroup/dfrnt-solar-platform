@@ -1,0 +1,116 @@
+{
+  "version": "2026-11-03.2",
+  "notes": "Ported from Solar Ops config-rules.default.json 2026-10-30.1 (Lovable commit 6bff73a). Changes: Anker XE removed (dropped by decision); SVC-BAT-MODULE trigger retired (battery labour is per stack). Items in verify[] need manufacturer confirmation before go-live.",
+  "design_limits": { "domestic_max_dc_v": 600, "cell_temp_min_c": -10, "cell_temp_max_c": 75, "isc_design_factor": 1.25, "no_battery_array_ratio_max": 1.33, "preferred_max_oversize": 1.33, "with_battery_array_rule": "manufacturer_max_dc_w" },
+  "panels": {
+    "PNL-RISEN-475": { "model": "RSM96-11-475BNDG", "watts": 475, "voc": 36.42, "vmp": 30.78, "isc": 16.52, "imp": 15.46, "tc_voc_pct": -0.25, "tc_pmax_pct": -0.29, "w_mm": 1134, "h_mm": 1762, "kg": 21.5, "cec_until": "2028-07-02", "default": true },
+    "PNL-LONGI-475": { "model": "LR7-54HVH-475M", "watts": 475, "voc": 40.18, "vmp": 33.16, "isc": 15.03, "imp": 14.33, "tc_voc_pct": -0.2, "tc_pmax_pct": -0.26, "w_mm": 1134, "h_mm": 1800, "kg": 21.6, "upgrade": true },
+    "PNL-TRINA-475": { "model": "TSM-475NEG9RH.28", "watts": 475, "voc": 37.6, "vmp": 31.65, "isc": 15.97, "imp": 15.01, "tc_voc_pct": -0.24, "tc_pmax_pct": -0.29, "w_mm": 1134, "h_mm": 1762, "kg": 21.5, "cec_until": null, "verify": ["voc (estimated from Vmp)", "cec_until", "Trina electricals"] },
+    "PNL-LONGI-475-BLACK": { "model": "LR7-54HVB-475M", "watts": 475, "voc": 40.18, "vmp": 33.16, "isc": 15.03, "imp": 14.33, "tc_voc_pct": -0.2, "tc_pmax_pct": -0.26, "w_mm": 1134, "h_mm": 1800, "kg": 21.6, "upgrade": true, "toggle_of": "PNL-LONGI-475", "status": "verify", "all_black": true, "verify": ["HVB electricals (copied from HVH)", "cec_until"] }
+  },
+  "families": {
+    "solax_x1vast": { "brand": "SolaX", "grammar": "tower", "phases": 1, "battery_family": "solax_hs51", "launch": "core", "default_panel": "PNL-RISEN-475" },
+    "solax_x3hybrid_g4": { "brand": "SolaX", "grammar": "tower_series", "phases": 3, "battery_family": "solax_hs51", "launch": "core", "default_panel": "PNL-LONGI-475" },
+    "sungrow_shrs": { "brand": "Sungrow", "grammar": "tower", "phases": 1, "battery_family": "sungrow_sbh", "launch": "brand", "default_panel": "PNL-RISEN-475" },
+    "goodwe_ehb": { "brand": "GoodWe", "grammar": "tower", "phases": 1, "battery_family": "goodwe_lynx_f_g2", "launch": "value_pending_price", "default_panel": "PNL-RISEN-475" },
+    "sigen_sp": { "brand": "Sigenergy", "grammar": "integrated", "phases": 1, "battery_family": "sigen_bat", "launch": "premium_pending_cec", "default_panel": "PNL-LONGI-475" },
+    "sigen_tp": { "brand": "Sigenergy", "grammar": "integrated", "phases": 3, "battery_family": "sigen_bat", "launch": "premium_pending_cec", "default_panel": "PNL-LONGI-475" },
+    "goodwe_esa_1p": { "brand": "GoodWe", "grammar": "column", "phases": 1, "battery_family": "goodwe_lynx_d_g2", "launch": "value", "default_panel": "PNL-RISEN-475" },
+    "goodwe_esa_3p": { "brand": "GoodWe", "grammar": "column", "phases": 3, "battery_family": "goodwe_lynx_d_g2", "launch": "value", "default_panel": "PNL-RISEN-475" }
+  },
+  "inverters": {
+    "INV-SOLAX-VAST-5K": { "family": "solax_x1vast", "model": "X1-VAST-5K", "ac_w": 4999, "max_dc_w": 10000, "max_dc_v": 600, "fault_v": 570, "mppt_v": [40, 560], "mppts": 3, "strings_per_mppt": 1, "a_per_mppt": 20, "isc_per_mppt": 25, "bat_v": [80, 480], "bat_ports": 2, "bat_a_one_tower": 30, "bat_a_two_towers": 25, "bat_a_splitter": 50, "backup_w": 4999, "backup": { "whole_home": { "parts": ["PRT-SOLAX-CHANGEOVER"], "labour": "SVC-EPS-WH-1P" } }, "cec_until": "2028-05-16", "battery_only": true },
+    "INV-SOLAX-VAST-8K": { "family": "solax_x1vast", "model": "X1-VAST-8K", "ac_w": 8000, "max_dc_w": 16000, "max_dc_v": 600, "fault_v": 570, "mppt_v": [40, 560], "mppts": 4, "strings_per_mppt": 1, "a_per_mppt": 20, "isc_per_mppt": 25, "bat_v": [80, 480], "bat_ports": 2, "bat_a_one_tower": 30, "bat_a_two_towers": 25, "bat_a_splitter": 50, "backup_w": 8000, "backup": { "whole_home": { "parts": ["PRT-SOLAX-CHANGEOVER"], "labour": "SVC-EPS-WH-1P" } }, "cec_until": "2028-05-16" },
+    "INV-SOLAX-VAST-10K": { "family": "solax_x1vast", "model": "X1-VAST-10K", "ac_w": 9999, "max_dc_w": 20000, "max_dc_v": 600, "fault_v": 570, "mppt_v": [40, 560], "mppts": 4, "strings_per_mppt": 1, "a_per_mppt": 20, "isc_per_mppt": 25, "bat_v": [80, 480], "bat_ports": 2, "bat_a_one_tower": 30, "bat_a_two_towers": 25, "bat_a_splitter": 50, "backup_w": 9999, "backup": { "whole_home": { "parts": ["PRT-SOLAX-CHANGEOVER"], "labour": "SVC-EPS-WH-1P" } }, "cec_until": "2028-05-16" },
+    "INV-SOLAX-HYB-8K": { "family": "solax_x3hybrid_g4", "model": "X3-Hybrid-8.0-D", "ac_w": 8000, "max_dc_w": 16000, "max_dc_v": 1000, "mppt_v": [180, 950], "start_v": 200, "mppts": 2, "strings_per_mppt": [2, 1], "a_per_mppt": [28, 16], "isc_per_mppt": [35, 20], "mppt_max_w": [10500, 6000], "same_string_per_mppt": true, "bat_v": [120, 800], "bat_ports": 1, "bat_a_one_tower": 30, "unbalance_w_per_phase": 5000, "backup_w": 8000, "backup": { "whole_home": { "parts": ["PRT-SOLAX-X3-MATEBOX"], "labour": "SVC-EPS-WH-3P" } }, "status": "verify", "verify": ["mppt_max_w", "max_dc_w", "cec_until"] },
+    "INV-SOLAX-HYB-10K": { "family": "solax_x3hybrid_g4", "model": "X3-Hybrid-10.0-D", "ac_w": 9999, "max_dc_w": 20000, "max_dc_v": 1000, "mppt_v": [180, 950], "start_v": 200, "mppts": 2, "strings_per_mppt": [2, 1], "a_per_mppt": [28, 16], "isc_per_mppt": [35, 20], "mppt_max_w": [10500, 6000], "same_string_per_mppt": true, "bat_v": [120, 800], "bat_ports": 1, "bat_a_one_tower": 30, "unbalance_w_per_phase": 5000, "backup_w": 10000, "backup": { "whole_home": { "parts": ["PRT-SOLAX-X3-MATEBOX"], "labour": "SVC-EPS-WH-3P" } }, "cec_until": "2027-05-19", "verify": ["mppt_max_w", "bat_v_min (120 vs 180)", "Matebox requirement AU"] },
+    "INV-SOLAX-HYB-15K": { "family": "solax_x3hybrid_g4", "model": "X3-Hybrid-15.0-D", "ac_w": 15000, "max_dc_w": 30000, "max_dc_v": 1000, "mppt_v": [180, 950], "start_v": 200, "mppts": 2, "strings_per_mppt": [2, 1], "a_per_mppt": [28, 16], "isc_per_mppt": [35, 20], "mppt_max_w": [15000, 9000], "same_string_per_mppt": true, "bat_v": [120, 800], "bat_ports": 1, "bat_a_one_tower": 30, "unbalance_w_per_phase": 5000, "backup_w": 15000, "backup": { "whole_home": { "parts": ["PRT-SOLAX-X3-MATEBOX"], "labour": "SVC-EPS-WH-3P" } }, "status": "verify", "verify": ["mppt_max_w", "max_dc_w", "a_per_mppt", "cec_until"] },
+    "INV-SGR-SH5.0RS": { "family": "sungrow_shrs", "model": "SH5.0RS", "ac_w": 5000, "max_dc_w": 10000, "max_dc_v": 600, "mppt_v": [40, 560], "full_power_v": 235, "recommended_max_v": 500, "mppts": 2, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 25, "bat_v": [80, 460], "bat_ports": 1, "bat_a_one_tower": 30, "bat_w": 5000, "backup_w": 5000, "backup_bypass_w": 7250, "backup": { "whole_home": { "parts": ["PRT-SGR-CHANGEOVER-63A"], "labour": "SVC-EPS-WH-1P" } }, "status": "verify", "battery_only": true, "verify": ["max_dc_w", "bat current 30 A", "cec_until"] },
+    "INV-SGR-SH8.0RS": { "family": "sungrow_shrs", "model": "SH8.0RS", "ac_w": 8000, "max_dc_w": 16000, "max_dc_v": 600, "mppt_v": [40, 560], "full_power_v": 235, "recommended_max_v": 500, "mppts": 4, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 25, "bat_v": [80, 460], "bat_ports": 1, "bat_a_one_tower": 50, "bat_w": 8000, "backup_w": 8000, "backup_bypass_w": 11600, "backup": { "whole_home": { "parts": ["PRT-SGR-CHANGEOVER-63A"], "labour": "SVC-EPS-WH-1P" } }, "status": "verify", "verify": ["max_dc_w", "mppts", "cec_until"] },
+    "INV-SGR-SH10RS": { "family": "sungrow_shrs", "model": "SH10RS", "ac_w": 9999, "max_dc_w": 20000, "max_dc_v": 600, "mppt_v": [40, 560], "full_power_v": 235, "recommended_max_v": 500, "mppts": 4, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 25, "bat_v": [80, 460], "bat_ports": 1, "bat_a_one_tower": 50, "bat_w": 10000, "backup_w": 10000, "backup_bypass_w": 14500, "backup": { "whole_home": { "parts": ["PRT-SGR-CHANGEOVER-63A"], "labour": "SVC-EPS-WH-1P" } }, "cec_until": "2029-06-29" },
+    "INV-GW-EHB-9.99K": { "family": "goodwe_ehb", "model": "GW9.99K-EHB-AU-G11", "ac_w": 9990, "max_dc_w": 20000, "max_dc_v": 600, "stop_v": 585, "mppt_v": [80, 550], "mppts": 4, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 24, "bat_v": [80, 495], "bat_ports": 1, "bat_a_one_tower": 50, "backup_w": 9990, "backup_bypass_a": 50, "backup": { "whole_home": { "parts": [], "labour": "SVC-EPS-WH-1P", "note": "Integrated 50 A bypass; main <= 50 A" } }, "cec_until": "2027-03-23", "status": "pending_price" },
+    "INV-SIGEN-EC10-SP": { "family": "sigen_sp", "model": "EC 10.0 SP V2", "ac_w": 9999, "max_dc_w": 20000, "max_dc_v": 600, "mppt_v": [50, 550], "start_v": 100, "mppts": 4, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 20, "bat_v": [300, 600], "modules_per_ec": [1, 6], "backup_w": 9999, "backup": { "any": { "parts": ["PRT-SIGEN-GATEWAY-HOME-SP"], "labour": "SVC-EPS-WH-1P", "note": "Backup of any kind needs the Gateway" } }, "status": "pending_cec", "verify": ["V2 CEC model string"] },
+    "INV-SIGEN-EC10-TP": { "family": "sigen_tp", "model": "EC 10.0 TP", "ac_w": 9999, "max_dc_w": 16000, "max_dc_v": 1100, "mppt_v": [160, 1000], "start_v": 180, "mppts": 3, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 20, "bat_v": [600, 900], "modules_per_ec": [1, 6], "backup_w": 9999, "backup": { "any": { "parts": ["PRT-SIGEN-GATEWAY-HOME-TP"], "labour": "SVC-EPS-WH-3P" } }, "status": "pending_cec" },
+    "INV-SIGEN-EC15-TP": { "family": "sigen_tp", "model": "EC 15.0 TP", "ac_w": 15000, "max_dc_w": 24000, "max_dc_v": 1100, "mppt_v": [160, 1000], "start_v": 180, "mppts": 3, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 20, "bat_v": [600, 900], "modules_per_ec": [1, 6], "backup_w": 15000, "backup": { "any": { "parts": ["PRT-SIGEN-GATEWAY-HOME-TP"], "labour": "SVC-EPS-WH-3P" } }, "status": "pending_cec" },
+    "INV-GW-EHA-5K": { "family": "goodwe_esa_1p", "model": "GW5K-EHA-G20", "ac_w": 5000, "max_dc_w": 10000, "max_dc_v": 600, "stop_v": 585, "mppt_v": [80, 550], "mppts": 2, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 24, "bat_v": [350, 550], "bat_ports": 1, "bat_w": 5000, "backup_w": 5000, "backup": { "whole_home": { "parts": [], "labour": "SVC-EPS-WH-1P", "note": "Changeover supplied in the AU ESA kit" } }, "osw_sku": "GW-GW5K-EHA-G20", "cec_until": null, "status": "verify", "verify": ["mppt_v", "a_per_mppt / isc_per_mppt", "bat_w", "cec_until", "changeover included on 5K"] },
+    "INV-GW-EHA-10K": { "family": "goodwe_esa_1p", "model": "GW9.999K-EHA-G20", "ac_w": 9999, "max_dc_w": 20000, "max_dc_v": 600, "stop_v": 585, "mppt_v": [80, 550], "mppts": 4, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 24, "bat_v": [350, 550], "bat_ports": 1, "bat_w": 10000, "backup_w": 9999, "backup": { "whole_home": { "parts": [], "labour": "SVC-EPS-WH-1P", "note": "Changeover supplied in the AU ESA kit" } }, "osw_sku": "GW-GW9.999K-EHA-G20", "cec_until": null, "status": "verify", "verify": ["mppt_v", "a_per_mppt / isc_per_mppt", "bat_w", "cec_until"] },
+    "INV-GW-ETA-10K": { "family": "goodwe_esa_3p", "model": "GW9.999K-ETA-G20", "ac_w": 9990, "max_dc_w": 20000, "max_dc_v": 1000, "mppt_v": [120, 950], "start_v": 160, "mppts": 4, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 24, "bat_v": [700, 950], "bat_ports": 1, "bat_w": 9990, "backup_w": 9990, "backup": { "whole_home": { "parts": [], "labour": "SVC-EPS-WH-3P", "note": "3-pole manual transfer switch included in AU" } }, "osw_sku": "GW-GW9.99K-ETA-G20", "cec_until": null, "status": "verify", "verify": ["mppt_v / start_v", "a_per_mppt / isc_per_mppt", "bat_w", "cec_until"] },
+    "INV-GW-ETA-15K": { "family": "goodwe_esa_3p", "model": "GW15K-ETA-G20", "ac_w": 15000, "max_dc_w": 30000, "max_dc_v": 1000, "mppt_v": [120, 950], "start_v": 160, "mppts": 4, "strings_per_mppt": 1, "a_per_mppt": 16, "isc_per_mppt": 24, "bat_v": [700, 950], "bat_ports": 1, "bat_w": 15000, "backup_w": 15000, "backup": { "whole_home": { "parts": [], "labour": "SVC-EPS-WH-3P", "note": "3-pole manual transfer switch included in AU" } }, "osw_sku": "GW-GW15K-ETA-G20", "cec_until": null, "status": "verify", "verify": ["mppt_v / start_v", "a_per_mppt / isc_per_mppt", "bat_w", "cec_until"] }
+  },
+  "battery_families": {
+    "solax_hs51": {
+      "module": { "sku": "PRT-SOLAX-TB-HS51", "model": "TB-HS51", "kwh_nominal": 5.1, "kwh_usable_cec": 5.1, "kwh_usable_datasheet": 4.6, "v": 51.2, "kg": 47, "h_mm": 168, "w_mm": 600, "d_mm": 376 },
+      "stack_parts": { "first": ["PRT-SOLAX-TBMS-S51-8", "PRT-SOLAX-HS51-BASE"], "additional": ["PRT-SOLAX-TBMS-S51-8", "PRT-SOLAX-HS51-BASE"] },
+      "products_by_modules": { "2": "BAT-SOLAX-THS10.2", "3": "BAT-SOLAX-THS15.3", "4": "BAT-SOLAX-THS20.4" },
+      "rules": {
+        "solax_x1vast": { "modules_per_stack": [2, 8], "max_stacks": 2, "stack2_parts": ["PRT-SOLAX-TBMS-S51-8", "PRT-SOLAX-HS51-BASE"], "same_model_required": true, "power_kw_by_modules": { "2": 3.1, "3": 4.6, "4": 6.1, "5": 7.7, "6": 9.2, "7": 10, "8": 10 }, "splitter_part": "PRT-SOLAX-2IN1-SPLITTER" },
+        "solax_x3hybrid_g4": { "modules_per_stack": [3, 13], "max_stacks": 1, "series_box_from_modules": 9, "series_box_part": "PRT-SOLAX-SERIES-BOX-TB-HS51", "power_kw_by_modules": { "3": 4.6, "4": 6.1, "5": 7.7, "6": 9.2, "7": 10, "8": 10 } }
+      },
+      "expansion_window_months": 12, "warranty": "10 yr / 70% / 30.2-60.4 MWh", "cec_until": "2027-12-31", "verify": ["kW limits per inverter", "CEC usable = nominal on official list"]
+    },
+    "sungrow_sbh": {
+      "module": { "sku": "PRT-SGR-SMR050", "model": "SMR050", "kwh_nominal": 5, "kwh_usable_cec": 5, "v": 70.4, "kg": 45, "h_mm": 160, "w_mm": 675, "d_mm": 350 },
+      "stack_parts": { "first": ["PRT-SGR-SBH-ACCESSORY-KIT"], "additional": ["PRT-SGR-SBH-ACCESSORY-KIT"] },
+      "products_by_modules": { "3": "BAT-SGR-SBH150", "4": "BAT-SGR-SBH200", "5": "BAT-SGR-SBH250", "6": "BAT-SGR-SBH300" },
+      "rules": {
+        "sungrow_shrs": { "modules_per_stack": [2, 6], "allowed_modules": [3, 4, 5], "allowed_on_confirmation": [6], "max_stacks": 4, "equal_stacks_required": true, "stack2_parts": ["PRT-SGR-Y-CONNECTOR-B0B01253"], "stack3plus_parts": ["PRT-SGR-SJR050-04-COMBINER"], "power_kw_by_modules": { "3": 10, "4": 10, "5": 10, "6": 10 }, "not_allowed": ["SBH350", "SBH400"], "max_modules_by_inverter": { "INV-SGR-SH5.0RS": 3, "INV-SGR-SH8.0RS": 4, "INV-SGR-SH10RS": 6 } }
+      },
+      "expansion_window_months": 0, "warranty": "10 yr / 70% / 2.8 MWh per kWh", "cec_until": "2027-01-04", "verify": ["SBH300 AU firmware", "CHBP listing per size", "SH5.0RS and SH8.0RS SBH caps"]
+    },
+    "goodwe_lynx_f_g2": {
+      "module": { "sku": "PRT-GW-LX-F3.2-20", "model": "LX F3.2-20", "kwh_nominal": 3.2, "kwh_usable_cec": 3.2, "v": 64, "kg": 34, "h_mm": 156, "w_mm": 600, "d_mm": 380 },
+      "stack_parts": { "first": ["PRT-GW-LYNX-F-PCU", "PRT-GW-LYNX-F-BASE"], "additional": ["PRT-GW-LYNX-F-PCU", "PRT-GW-LYNX-F-BASE", "PRT-GW-DC-BREAKER-100A"] },
+      "rules": {
+        "goodwe_ehb": { "modules_per_stack": [2, 7], "max_stacks": 8, "equal_stacks_required": true, "stack2_parts": ["PRT-GW-DC-BREAKER-100A"], "stack3plus_parts": ["PRT-GW-DC-BREAKER-125A"] }
+      },
+      "expansion_window_months": 12, "warranty": "10 yr / 70% / 3.65 MWh per kWh", "cec_until": "2027-12-31", "status": "pending_price"
+    },
+    "sigen_bat": {
+      "module": { "sku": "PRT-SIGEN-BAT-10.0", "model": "BAT 10.0", "kwh_nominal": 9.04, "kwh_usable_cec": 8.76, "kw": 4.6, "h_mm": 270, "w_mm": 767, "d_mm": 260 },
+      "alt_modules": { "PRT-SIGEN-BAT-8.0": { "model": "BAT 8.0", "kwh_nominal": 8.06, "kwh_usable_cec": 7.8, "kw": 4, "kg": 70 } },
+      "stack_parts": { "first": [], "additional": ["second_energy_controller"] },
+      "rules": {
+        "sigen_sp": { "modules_per_stack": [1, 6], "wall_max_modules": 2, "max_stacks": 2, "stack2_parts": ["INV-SIGEN-EC10-SP"], "power_rule": "sum_of_module_kw", "mixing_allowed": true },
+        "sigen_tp": { "modules_per_stack": [1, 6], "wall_max_modules": 2, "max_stacks": 2, "stack2_parts": ["same_ec_model"], "power_rule": "sum_of_module_kw", "mixing_allowed": true }
+      },
+      "expansion_window_months": 0, "warranty": "10 yr / 70% / 26.68 MWh (BAT 10.0)", "status": "pending_cec"
+    },
+    "goodwe_lynx_d_g2": {
+      "module": { "sku": "PRT-GW-LX-D-9.0-G20", "model": "GW9.0-BAT-D-G20", "kwh_nominal": 9.0, "kwh_usable_cec": 8.85, "kw": 4.5, "c_rate": 0.5, "kg": 77, "h_mm": 326, "w_mm": 800, "d_mm": 270, "osw_sku": "GW-GW9.0-BAT-D-G20", "cec_until": "2027-12-31", "note": "Default from 3 Nov 2026: in stock at OSW ($2,100, $237/usable kWh), CEC-listed 8.85 kWh usable (9 Jul 2026), same module competitors quote. 0.5C → 4.5 kW per module." },
+      "alt_modules": {
+        "PRT-GW-LX-D-5.1-G20": { "model": "GW5.1-BAT-D-G20", "kwh_nominal": 5.12, "kwh_usable_cec": 5.0, "kw": 5.1 },
+        "PRT-GW-LX-D-8.3-G20": { "model": "GW8.3-BAT-D-G20", "kwh_nominal": 8.32, "kwh_usable_cec": 8.0, "kw": 8.3, "note": "Default until 3 Nov 2026 (OSW on request). Terry Meany job." }
+      },
+      "stack_parts": { "first": [], "additional": ["PRT-GW-ESA-EXPANSION-KIT"] },
+      "rules": {
+        "goodwe_esa_1p": { "modules_per_stack": [2, 6], "max_stacks": 1, "power_rule": "sum_of_module_kw" },
+        "goodwe_esa_3p": { "modules_per_stack": [3, 6], "max_stacks": 1, "power_rule": "sum_of_module_kw" }
+      },
+      "expansion_window_months": 0, "warranty": "10 yr / 70%", "cec_until": "2028-07-31", "status": "verify"
+    }
+  },
+  "dnsp": [
+    { "name": "Energex", "state": "QLD", "postcodes": [[4000, 4299], [4300, 4399], [4500, 4699]], "inverter_kva_1p": 10, "inverter_kva_3p": 30, "export_kw_per_phase": 5, "hybrid_cap_1p": 10 },
+    { "name": "Ergon", "state": "QLD", "postcodes": [[4700, 4899]], "inverter_kva_1p": 10, "inverter_kva_3p": 30, "export_kw_per_phase": 5, "hybrid_cap_1p": 10 },
+    { "name": "Ausgrid", "state": "NSW", "postcodes": [[2000, 2339]], "inverter_kva_1p": 10, "inverter_kva_3p": 30, "export_kw_per_phase": 10 },
+    { "name": "Endeavour", "state": "NSW", "postcodes": [[2500, 2599], [2745, 2799]], "inverter_kva_1p": 10, "inverter_kva_3p": 30, "export_kw_per_phase": 5 },
+    { "name": "AusNet", "state": "VIC", "postcodes": [[3099, 3199], [3700, 3999]], "inverter_kva_1p": 10, "inverter_kva_3p": 30, "export_kw_per_phase": 5 },
+    { "name": "SA Power Networks", "state": "SA", "postcodes": [[5000, 5799]], "inverter_kva_1p": 10, "inverter_kva_3p": 30, "export_kw_per_phase": 1.5 },
+    { "name": "Western Power", "state": "WA", "postcodes": [[6000, 6799]], "inverter_kva_aggregate": 30, "export_kw_per_phase": 1.5 },
+    { "name": "TasNetworks", "state": "TAS", "postcodes": [[7000, 7999]], "inverter_kva_1p": 10, "inverter_kva_3p": 30, "export_kw_per_phase": 10 }
+  ],
+  "parts_needed": {
+    "PRT-SOLAX-TB-HS51": "TB-HS51 5.1 kWh module", "PRT-SOLAX-TBMS-S51-8": "TBMS-S51-8 BMS", "PRT-SOLAX-HS51-BASE": "HS51 floor base",
+    "PRT-SOLAX-SERIES-BOX-TB-HS51": "Series Box TB-HS51 (X3, 9+ modules)", "PRT-SOLAX-2IN1-SPLITTER": "X1-VAST 2-in-1 battery splitter cable",
+    "PRT-SOLAX-CHANGEOVER": "SolaX EPS changeover 1P", "PRT-SOLAX-X3-MATEBOX": "SolaX EPS box 3P",
+    "PRT-SGR-SMR050": "SBH SMR050 5 kWh module", "PRT-SGR-SBH-ACCESSORY-KIT": "SBH base + switchgear", "PRT-SGR-Y-CONNECTOR-B0B01253": "Sungrow Y-connector",
+    "PRT-SGR-SJR050-04-COMBINER": "SJR050-04 battery combiner box", "PRT-SGR-CHANGEOVER-63A": "63 A changeover",
+    "PRT-GW-LX-F3.2-20": "Lynx F G2 3.2 kWh module", "PRT-GW-LYNX-F-PCU": "Lynx F G2 PCU", "PRT-GW-LYNX-F-BASE": "Lynx F G2 base",
+    "PRT-GW-DC-BREAKER-100A": "DC breaker 100 A", "PRT-GW-DC-BREAKER-125A": "DC breaker 125 A",
+    "PRT-SIGEN-BAT-10.0": "Sigen BAT 10.0", "PRT-SIGEN-BAT-8.0": "Sigen BAT 8.0", "PRT-SIGEN-GATEWAY-HOME-SP": "Gateway Home SP AU", "PRT-SIGEN-GATEWAY-HOME-TP": "Gateway Home TP AU",
+    "PRT-BARRIER-CFC-6MM": "Non-combustible barrier sheet, 6 mm CFC, per m2", "PRT-BOLLARD-PAIR": "Impact bollards, pair",
+    "PRT-GW-LX-D-8.3-G20": "GoodWe Lynx D G2 8.3 kWh module", "PRT-GW-LX-D-9.0-G20": "GoodWe Lynx D G2 9.0 kWh module", "PRT-GW-ESA-EXPANSION-KIT": "GoodWe ESA expansion kit",
+    "PRT-DC-ISOLATOR": "DC isolator (extra string)", "BOS-KIT": "Balance of system kit",
+    "MNT-TIN-PP": "Racking, tin roof, per panel", "MNT-TILE-PP": "Racking, tile roof, per panel", "MNT-KLIPLOK-PP": "Racking, Klip-Lok roof, per panel"
+  }
+}

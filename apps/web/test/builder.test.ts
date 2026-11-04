@@ -61,8 +61,8 @@ describe("build your own", () => {
     const exact = go({ phases: 1, family: "goodwe_esa_1p", inverterSku: "INV-GW-EHA-10K", modules: 2, panelSku: "PNL-RISEN-475", panels: 21 });
     expect(exact.nearest).toBeNull();
     const o = go({ phases: 1, family: "goodwe_esa_1p", inverterSku: "INV-GW-EHA-10K", modules: 3, panelSku: "PNL-RISEN-475", panels: 22, backup: true });
-    expect(o.nearest?.slug).toBe("goodwe-10kw-18kwh");
-    expect(o.nearest?.diff).toEqual(["1 battery module fewer (17.7 kWh)", "1 panel fewer", "no whole-home backup"]);
+    expect(o.nearest?.slug).toBe("goodwe-10kw-27kwh");
+    expect(o.nearest?.diff).toEqual(["1 panel fewer", "no whole-home backup"]);
     expect(o.nearest!.you_pay).toBeLessThan(o.price!.you_pay);
   });
 });

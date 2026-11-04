@@ -6,10 +6,10 @@ import { aud } from "@/lib/site";
 
 export async function AddOns({ q, add, remove }: { q: QuoteRow; add: (f: FormData) => Promise<void>; remove: (f: FormData) => Promise<void> }) {
   if (!PRE_SIGN.includes(q.status) && !AFTER_PAY.includes(q.status)) return null;
-  const all = await activeAddons();
+  const { margins, rules } = await pricingDataFor(q.result.versions);
+  const all = await activeAddons(rules.families[q.input.familyKey]?.brand);
   if (!all.length) return null;
   const mine = await quoteAddons(q.id);
-  const { margins } = await pricingDataFor(q.result.versions);
   const pre = PRE_SIGN.includes(q.status);
   return (
     <div className="card" style={{ marginTop: 16 }}>

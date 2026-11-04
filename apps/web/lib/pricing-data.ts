@@ -2,7 +2,7 @@
 // A quote is always re-priced with the versions it was secured on, so an admin change never moves a locked price.
 import { db } from "@dfrnt/db";
 import {
-  ARCHIVED_CATALOGUES, ARCHIVED_RULES, DEFAULT_CATALOGUE, DEFAULT_COSTS, DEFAULT_MARGINS, DEFAULT_MENU, DEFAULT_REBATE_SETTINGS, DEFAULT_RULES,
+  ARCHIVED_CATALOGUES, ARCHIVED_COSTS, ARCHIVED_MENUS, ARCHIVED_RULES, DEFAULT_CATALOGUE, DEFAULT_COSTS, DEFAULT_MARGINS, DEFAULT_MENU, DEFAULT_REBATE_SETTINGS, DEFAULT_RULES,
   type Catalogue, type ComponentCosts, type ConfigRules, type LabourMenu, type Margins, type PricingData, type RebateSettings,
 } from "@dfrnt/engine";
 
@@ -54,6 +54,8 @@ export async function pricingDataFor(versions: Record<string, string> | undefine
     } else if (DEFAULTS[k].version === v) docs[k] = DEFAULTS[k];
     else if (k === "rules" && ARCHIVED_RULES[v]) docs[k] = { ...(ARCHIVED_RULES[v] as never as Record<string, unknown>), version: v };
     else if (k === "catalogue" && ARCHIVED_CATALOGUES[v]) docs[k] = { ...(ARCHIVED_CATALOGUES[v] as never as Record<string, unknown>), version: v };
+    else if (k === "costs" && ARCHIVED_COSTS[v]) docs[k] = { ...(ARCHIVED_COSTS[v] as never as Record<string, unknown>), version: v };
+    else if (k === "menu" && ARCHIVED_MENUS[v]) docs[k] = { ...(ARCHIVED_MENUS[v] as never as Record<string, unknown>), version: v };
   }
   if (!Object.keys(docs).length) return live;
   const base = Object.fromEntries(KINDS.map((k) => [k, { ...(live[k] as never as Record<string, unknown>), version: live.versions[k] }]));

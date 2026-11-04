@@ -1,6 +1,6 @@
 {
- "version": "2026-11-01.1",
- "notes": "Exported from Solar Ops component_costs 1 Nov 2026. cost_ex_gst null = price pending (quote ok, checkout blocked). PRT-SOLAX-HS51-BASE 0 = included with BMS. source=estimate rows are placeholders to replace before go-live.",
+ "version": "2026-11-04.1",
+ "notes": "Costs locked 4 Nov 2026. SolaX, Sungrow, LONGi and racking parts: Raystech (one_pager = negotiated July 2026 sheet, catalogue = Raystech public list). Risen and GoodWe: OSW trade price 30 Oct 2026. Racking is our per-panel line built from Raystech Neway parts (rail, clamps, feet/hooks/clips, earthing); replace with a Raystech kit quote. Balance of system is the installer's, inside the install fee: no BOS line. cost_ex_gst null = price pending (quote ok, checkout blocked). source=estimate rows are placeholders to replace before go-live.",
  "included_zero_cost": [
   "PRT-SOLAX-HS51-BASE"
  ],
@@ -39,11 +39,6 @@
    "cost_ex_gst": 5365,
    "margin_class": "hardware",
    "source": "one_pager"
-  },
-  "BOS-KIT": {
-   "cost_ex_gst": 150,
-   "margin_class": "bos",
-   "source": "estimate"
   },
   "EV-SGR-AC22E-01": {
    "cost_ex_gst": 750,
@@ -126,19 +121,22 @@
    "source": "one_pager"
   },
   "MNT-KLIPLOK-PP": {
-   "cost_ex_gst": 28,
+   "cost_ex_gst": 26.6,
    "margin_class": "bos",
-   "source": "estimate"
+   "source": "catalogue",
+   "note": "Raystech Neway: as tin but 2 clip locks $10.80 in place of feet. Negotiate a kit price."
   },
   "MNT-TILE-PP": {
-   "cost_ex_gst": 25,
+   "cost_ex_gst": 25.6,
    "margin_class": "bos",
-   "source": "estimate"
+   "source": "catalogue",
+   "note": "Raystech Neway: as tin but 2 tile hooks $9.80 in place of feet. Negotiate a kit price."
   },
   "MNT-TIN-PP": {
-   "cost_ex_gst": 18,
+   "cost_ex_gst": 19.8,
    "margin_class": "bos",
-   "source": "estimate"
+   "source": "catalogue",
+   "note": "Raystech Neway: 2.31 m rail $11.79 + clamps $2.83 + splice $0.77 + 2 L-feet $3.20 + fixings $0.80 + earthing $0.40. Negotiate a kit price."
   },
   "PNL-LONGI-475": {
    "cost_ex_gst": 118.75,
@@ -152,11 +150,6 @@
   },
   "PNL-RISEN-475": {
    "cost_ex_gst": 99.75,
-   "margin_class": "hardware",
-   "source": "catalogue"
-  },
-  "PNL-TRINA-475": {
-   "cost_ex_gst": 104.5,
    "margin_class": "hardware",
    "source": "catalogue"
   },
@@ -274,6 +267,12 @@
    "cost_ex_gst": 358,
    "margin_class": "hardware",
    "source": "one_pager"
+  },
+  "INV-SGR-SH15T": {
+   "cost_ex_gst": 3995,
+   "margin_class": "hardware",
+   "source": "catalogue",
+   "note": "Raystech and OSW both list $3,995; not on the negotiated one-pager — ask Raystech"
   }
  }
 }

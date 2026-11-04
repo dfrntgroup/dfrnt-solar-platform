@@ -197,10 +197,10 @@ describe("config engine", () => {
 
 describe("launch range resolves", () => {
   const cases: [string, Partial<ConfigInput>][] = [
-    ["goodwe_esa_1p EHA-5K", { familyKey: "goodwe_esa_1p", inverterSku: "INV-GW-EHA-5K", panelSku: "PNL-TRINA-475", panelCount: 13, batteryModules: 2 }],
-    ["goodwe_esa_1p EHA-10K", { familyKey: "goodwe_esa_1p", inverterSku: "INV-GW-EHA-10K", panelSku: "PNL-TRINA-475", panelCount: 21, batteryModules: 2 }],
-    ["goodwe_esa_3p ETA-10K", { familyKey: "goodwe_esa_3p", inverterSku: "INV-GW-ETA-10K", panelSku: "PNL-TRINA-475", panelCount: 21, batteryModules: 3, phases: 3 }],
-    ["goodwe_esa_3p ETA-15K", { familyKey: "goodwe_esa_3p", inverterSku: "INV-GW-ETA-15K", panelSku: "PNL-TRINA-475", panelCount: 30, batteryModules: 4, phases: 3 }],
+    ["goodwe_esa_1p EHA-5K", { familyKey: "goodwe_esa_1p", inverterSku: "INV-GW-EHA-5K", panelSku: "PNL-RISEN-475", panelCount: 13, batteryModules: 2 }],
+    ["goodwe_esa_1p EHA-10K", { familyKey: "goodwe_esa_1p", inverterSku: "INV-GW-EHA-10K", panelSku: "PNL-RISEN-475", panelCount: 21, batteryModules: 2 }],
+    ["goodwe_esa_3p ETA-10K", { familyKey: "goodwe_esa_3p", inverterSku: "INV-GW-ETA-10K", panelSku: "PNL-RISEN-475", panelCount: 21, batteryModules: 3, phases: 3 }],
+    ["goodwe_esa_3p ETA-15K", { familyKey: "goodwe_esa_3p", inverterSku: "INV-GW-ETA-15K", panelSku: "PNL-RISEN-475", panelCount: 30, batteryModules: 4, phases: 3 }],
     ["sungrow SH5.0RS battery only", { familyKey: "sungrow_shrs", inverterSku: "INV-SGR-SH5.0RS", panelSku: "PNL-LONGI-475", panelCount: 0, batteryModules: 3 }],
     ["sungrow SH8.0RS", { familyKey: "sungrow_shrs", inverterSku: "INV-SGR-SH8.0RS", panelSku: "PNL-LONGI-475", panelCount: 18, batteryModules: 4 }],
     ["solax HYB-8K", { familyKey: "solax_x3hybrid_g4", inverterSku: "INV-SOLAX-HYB-8K", panelSku: "PNL-LONGI-475", panelCount: 17, batteryModules: 3, phases: 3 }],

@@ -1,27 +1,135 @@
 {
-  "version": "2026-11-01.1",
-  "notes": "menu_rate = Solar Ops labour_menu.customer_rate_ex_gst verbatim (export 1 Nov 2026). Installer cost ex GST = Notion menu rate / 1.1 (menu is subcontractor x 1.1). Sell = installer cost / 0.9 (10% margin on sell). Rate 0 = price pending: quotable, checkout blocked. SVC-BAT-MODULE retired: battery labour is per stack.",
-  "items": [
-    {"code":"SVC-SOLAR-INSTALL","description":"Solar installation, per 100 W or part thereof","per":"per_100w_ceil","menu_rate":30.8},
-    {"code":"SVC-BATTERY-INSTALL","description":"Battery installation, first stack","per":"unit","menu_rate":2145},
-    {"code":"SVC-BAT-ADD","description":"Battery installation, each additional stack","per":"unit","menu_rate":1100},
-    {"code":"SVC-METER-1P","description":"Inverter smart meter / CT integration, single phase","per":"unit","menu_rate":220},
-    {"code":"SVC-METER-3P","description":"Inverter smart meter / CT integration, three phase","per":"unit","menu_rate":275},
-    {"code":"SVC-3P-PROPERTY","description":"Three-phase property","per":"unit","menu_rate":272.73},
-    {"code":"SVC-EPS-WH-1P","description":"Whole-home backup single phase","per":"unit","menu_rate":1100},
-    {"code":"SVC-EPS-WH-3P","description":"Whole-home backup three phase","per":"unit","menu_rate":1430},
-    {"code":"SVC-TERRACOTTA","description":"Terracotta roof","per":"unit","menu_rate":363.64},
-    {"code":"SVC-TILT","description":"Tilt frames","per":"panel","menu_rate":18.18},
-    {"code":"SVC-INST-2STY","description":"Two-storey install","per":"unit","menu_rate":275},
-    {"code":"SVC-BARRIER","description":"Non-combustible battery backing supply/install allowance per installation","per":"unit","menu_rate":424.24,"installer_cost":318.18},
-    {"code":"SVC-BOLLARDS","description":"Impact bollards","per":"unit","menu_rate":0},
-    {"code":"SVC-EXTRA-STRING","description":"Extra string and isolator","per":"unit","menu_rate":0},
-    {"code":"SVC-BAT-SLAB","description":"Battery slab","per":"unit","menu_rate":1181.82},
-    {"code":"SVC-CABLE-1P","description":"Extra cable single phase, per metre after 5 m","per":"m_after_5","menu_rate":13.64},
-    {"code":"SVC-CABLE-3P","description":"Extra cable three phase, per metre after 5 m","per":"m_after_5","menu_rate":45.45},
-    {"code":"SVC-SWB-HALF","description":"Switchboard half upgrade","per":"unit","menu_rate":681.82},
-    {"code":"SVC-SWB-FULL","description":"Switchboard full upgrade","per":"unit","menu_rate":1363.64},
-    {"code":"SVC-TRAVEL","description":"Travel beyond 50 km, per km","per":"km_after_50","menu_rate":1.65},
-    {"code":"SVC-EV-STD","description":"EV charger standard install","per":"unit","menu_rate":700}
-  ]
+ "version": "2026-11-04.1",
+ "notes": "menu_rate = Solar Ops labour_menu.customer_rate_ex_gst verbatim (export 1 Nov 2026). Installer cost ex GST = Notion menu rate / 1.1 (menu is subcontractor x 1.1). Sell = installer cost / 0.9 (10% margin on sell). Rate 0 = price pending: quotable, checkout blocked. SVC-BAT-MODULE retired: battery labour is per stack. 4 Nov 2026: SVC-BOLLARDS and SVC-EXTRA-STRING given placeholder rates so jobs that need them can check out; the install fee covers balance of system (cable, isolators, breakers, conduit, labels) — racking is a separate per-panel hardware line we supply.",
+ "items": [
+  {
+   "code": "SVC-SOLAR-INSTALL",
+   "description": "Solar installation, per 100 W or part thereof",
+   "per": "per_100w_ceil",
+   "menu_rate": 30.8
+  },
+  {
+   "code": "SVC-BATTERY-INSTALL",
+   "description": "Battery installation, first stack",
+   "per": "unit",
+   "menu_rate": 2145
+  },
+  {
+   "code": "SVC-BAT-ADD",
+   "description": "Battery installation, each additional stack",
+   "per": "unit",
+   "menu_rate": 1100
+  },
+  {
+   "code": "SVC-METER-1P",
+   "description": "Inverter smart meter / CT integration, single phase",
+   "per": "unit",
+   "menu_rate": 220
+  },
+  {
+   "code": "SVC-METER-3P",
+   "description": "Inverter smart meter / CT integration, three phase",
+   "per": "unit",
+   "menu_rate": 275
+  },
+  {
+   "code": "SVC-3P-PROPERTY",
+   "description": "Three-phase property",
+   "per": "unit",
+   "menu_rate": 272.73
+  },
+  {
+   "code": "SVC-EPS-WH-1P",
+   "description": "Whole-home backup single phase",
+   "per": "unit",
+   "menu_rate": 1100
+  },
+  {
+   "code": "SVC-EPS-WH-3P",
+   "description": "Whole-home backup three phase",
+   "per": "unit",
+   "menu_rate": 1430
+  },
+  {
+   "code": "SVC-TERRACOTTA",
+   "description": "Terracotta roof",
+   "per": "unit",
+   "menu_rate": 363.64
+  },
+  {
+   "code": "SVC-TILT",
+   "description": "Tilt frames",
+   "per": "panel",
+   "menu_rate": 18.18
+  },
+  {
+   "code": "SVC-INST-2STY",
+   "description": "Two-storey install",
+   "per": "unit",
+   "menu_rate": 275
+  },
+  {
+   "code": "SVC-BARRIER",
+   "description": "Non-combustible battery backing supply/install allowance per installation",
+   "per": "unit",
+   "menu_rate": 424.24,
+   "installer_cost": 318.18
+  },
+  {
+   "code": "SVC-BOLLARDS",
+   "description": "Impact bollards",
+   "per": "unit",
+   "menu_rate": 198,
+   "note": "Placeholder set 4 Nov 2026 (installer $180): confirm with the installer"
+  },
+  {
+   "code": "SVC-EXTRA-STRING",
+   "description": "Extra string and isolator",
+   "per": "unit",
+   "menu_rate": 132,
+   "note": "Placeholder set 4 Nov 2026 (installer $120): confirm with the installer"
+  },
+  {
+   "code": "SVC-BAT-SLAB",
+   "description": "Battery slab",
+   "per": "unit",
+   "menu_rate": 1181.82
+  },
+  {
+   "code": "SVC-CABLE-1P",
+   "description": "Extra cable single phase, per metre after 5 m",
+   "per": "m_after_5",
+   "menu_rate": 13.64
+  },
+  {
+   "code": "SVC-CABLE-3P",
+   "description": "Extra cable three phase, per metre after 5 m",
+   "per": "m_after_5",
+   "menu_rate": 45.45
+  },
+  {
+   "code": "SVC-SWB-HALF",
+   "description": "Switchboard half upgrade",
+   "per": "unit",
+   "menu_rate": 681.82
+  },
+  {
+   "code": "SVC-SWB-FULL",
+   "description": "Switchboard full upgrade",
+   "per": "unit",
+   "menu_rate": 1363.64
+  },
+  {
+   "code": "SVC-TRAVEL",
+   "description": "Travel beyond 50 km, per km",
+   "per": "km_after_50",
+   "menu_rate": 1.65
+  },
+  {
+   "code": "SVC-EV-STD",
+   "description": "EV charger standard install",
+   "per": "unit",
+   "menu_rate": 700
+  }
+ ]
 }

@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function Addons({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const me = await requireStaff();
   const sp = await searchParams;
-  const rows = await db()`select code, name, description, supplier_cost_ex::float8 s, installer_labour_ex::float8 l, extra_days::float8 d, active, sort,
+  const rows = await db()`select code, name, description, supplier_cost_ex::float8 s, installer_labour_ex::float8 l, extra_days::float8 d, active, sort, requires_brand,
     (select count(*)::int from quote_addons q where q.code = addons.code and q.status <> 'removed') used from addons order by sort, name`;
   const { margins } = await pricingData();
   const Row = ({ r }: { r?: Record<string, unknown> }) => (
@@ -24,6 +24,7 @@ export default async function Addons({ searchParams }: { searchParams: Promise<{
         <label className="small">Installer labour ex GST<input name="labour" defaultValue={(r?.l as number) ?? ""} style={input} /></label>
         <label className="small">Extra crew-days<input name="days" defaultValue={(r?.d as number) ?? 0} style={input} /></label>
         <label className="small">Order<input name="sort" defaultValue={(r?.sort as number) ?? 0} style={input} /></label>
+        <label className="small">Only with brand<input name="brand" placeholder="blank = any" defaultValue={(r?.requires_brand as string) ?? ""} style={input} /></label>
       </div>
       <input name="description" placeholder="One line for the customer" defaultValue={(r?.description as string) ?? ""} style={input} />
       <span className="small">{r ? <>Customer pays <strong>{aud(addonPrice({ supplier_cost_ex: r.s as number, installer_labour_ex: r.l as number }, margins).sell_inc)}</strong> inc GST · used on {r.used as number} job(s)</> : "New add-on"}</span>

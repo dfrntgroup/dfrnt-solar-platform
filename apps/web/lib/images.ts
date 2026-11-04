@@ -16,6 +16,7 @@ export function friendlyInverter(model: string | undefined, acW?: number) {
   const kw = acW ? `${Math.round(acW / 100) / 10} kW` : "";
   if (model.startsWith("X1-VAST")) return `SolaX X1-VAST ${kw} hybrid`;
   if (model.startsWith("X3-Hybrid")) return `SolaX X3-Hybrid ${kw} three-phase`;
+  if (/^SH\d+T$/.test(model)) return `Sungrow ${model} ${kw} three-phase`;
   if (model.startsWith("SH")) return `Sungrow ${model} ${kw} hybrid`;
   if (model.includes("EHA")) return `GoodWe ESA ${kw} hybrid`;
   if (model.includes("ETA")) return `GoodWe ESA ${kw} three-phase`;
@@ -39,7 +40,7 @@ export function friendlySummary(summary: string | undefined) {
     .replace(/X1-VAST-(\d+)K/g, "SolaX X1-VAST $1 kW inverter").replace(/X3-Hybrid-([\d.]+)-D/g, "SolaX X3-Hybrid $1 kW inverter")
     .replace(/(\d+)× TB-HS51/g, "$1 SolaX battery modules").replace(/TB-HS51/g, "SolaX battery module")
     .replace(/GW([\d.]+)K-EHA-G20/g, "GoodWe ESA $1 kW inverter").replace(/GW([\d.]+)K-ETA-G20/g, "GoodWe ESA $1 kW three-phase inverter")
-    .replace(/SH([\d.]+)RS/g, "Sungrow SH$1RS inverter");
+    .replace(/SH([\d.]+)RS/g, "Sungrow SH$1RS inverter").replace(/\bSH(\d+)T\b/g, "Sungrow SH$1T three-phase inverter");
 }
 
 /** Plain-words version of engine warnings shown to customers. */

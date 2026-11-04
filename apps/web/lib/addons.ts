@@ -5,7 +5,7 @@ import { db, write } from "@dfrnt/db";
 import { DEFAULT_MARGINS, type Margins, type PriceLine } from "@dfrnt/engine";
 import type { QuoteRow } from "./jobs";
 
-export interface Addon { code: string; name: string; description: string; supplier_cost_ex: number; installer_labour_ex: number; extra_days: number }
+export interface Addon { code: string; name: string; description: string; supplier_cost_ex: number; installer_labour_ex: number; extra_days: number; requires_brand?: string | null }
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
 export function addonPrice(a: Pick<Addon, "supplier_cost_ex" | "installer_labour_ex">, m: Margins = DEFAULT_MARGINS, qty = 1) {
@@ -20,10 +20,11 @@ export function addonLines(a: Addon & { qty?: number }, m: Margins = DEFAULT_MAR
   return out;
 }
 
-export async function activeAddons(): Promise<Addon[]> {
-  const rows = await db()`select code, name, description, supplier_cost_ex::float8 supplier_cost_ex, installer_labour_ex::float8 installer_labour_ex, extra_days::float8 extra_days
+/** Add-ons offered to customers; pass the system's brand to drop ones that only suit another brand (e.g. the Sungrow charger). */
+export async function activeAddons(brand?: string): Promise<Addon[]> {
+  const rows = await db()`select code, name, description, supplier_cost_ex::float8 supplier_cost_ex, installer_labour_ex::float8 installer_labour_ex, extra_days::float8 extra_days, requires_brand
     from addons where active order by sort, name`;
-  return rows as unknown as Addon[];
+  return (rows as unknown as Addon[]).filter((a) => !a.requires_brand || !brand || a.requires_brand.toLowerCase() === brand.toLowerCase());
 }
 
 export async function quoteAddons(quoteId: string) {

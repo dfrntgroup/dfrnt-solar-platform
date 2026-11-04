@@ -4,10 +4,11 @@ import { autoStacks, configOptions, DEFAULT_CATALOGUE, type ConfigInput } from "
 const base = (slug: string): ConfigInput => ({ backup: "none", roofType: "tin", storeys: 1, tilt: false, batteryLocation: "other", vehicleExposure: false, postcode: "4551", installDate: "2026-11-15", ...DEFAULT_CATALOGUE.systems.find((s) => s.slug === slug)!.config } as ConfigInput);
 
 describe("configurator options", () => {
-  it("SolaX VAST offers 2–16 HS51 modules and a panel range", () => {
+  it("SolaX VAST offers 2–11 HS51 modules (60 kWh home cap; the rule allows 16) and a panel range", () => {
     const o = configOptions(base("solax-10kw-15kwh"));
     expect(o.modules[0]).toBe(2);
-    expect(o.modules).toContain(16);
+    expect(o.modules).toContain(11);
+    expect(o.modules).not.toContain(12);
     expect(o.panels).toContain(21);
     console.log("solax panels", o.panels.join(","), "modules", o.modules.join(","));
   });

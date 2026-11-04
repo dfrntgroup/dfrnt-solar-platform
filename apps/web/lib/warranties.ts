@@ -10,6 +10,7 @@ export const WARRANTIES: Record<string, Warranty> = {
   "INV-SOLAX-VAST": { part: "Inverter", brand: "SolaX", product: "X1-VAST", years: 10, note: "Keep it connected to SolaX Cloud (we set this up)", confirmed: true, source: "SolaX Warranty Terms & Conditions (Australia)" },
   "INV-SOLAX-HYB": { part: "Inverter", brand: "SolaX", product: "X3-Hybrid G4", years: 10, note: "Keep it connected to SolaX Cloud (we set this up)", confirmed: true, source: "SolaX Warranty Terms & Conditions (Australia)" },
   "INV-SGR-SH": { part: "Inverter", brand: "Sungrow", product: "SH-RS hybrid", years: 10, confirmed: true, source: "Sungrow Inverters 10-Year Limited Warranty (Australia)" },
+  "INV-SGR-SH15T": { part: "Inverter", brand: "Sungrow", product: "SH-T three-phase hybrid", years: 10, confirmed: true, source: "Sungrow Inverters 10-Year Limited Warranty (Australia)" },
   "INV-GW-EHA": { part: "Inverter", brand: "GoodWe", product: "ESA single phase (EHA)", years: 10, confirmed: true, source: "GoodWe Limited Warranty for ESA 3–10 kW (AU/NZ)" },
   "INV-GW-ETA": { part: "Inverter", brand: "GoodWe", product: "ESA three phase (ETA)", years: 10, confirmed: true, source: "GoodWe Limited Warranty for Inverter System (AU/NZ)" },
   "BAT-SOLAX-HS51": { part: "Battery", brand: "SolaX", product: "T-BAT HS51", years: 10, performance: "70% of capacity at 10 years", confirmed: true, source: "SolaX warranty table, T-BAT HS" },
@@ -23,6 +24,7 @@ export function warrantyFor(sku: string): Warranty | null {
   if (sku.startsWith("PNL-LONGI-475")) return WARRANTIES["PNL-LONGI-475"]!;
   if (sku.startsWith("INV-SOLAX-VAST")) return WARRANTIES["INV-SOLAX-VAST"]!;
   if (sku.startsWith("INV-SOLAX-HYB")) return WARRANTIES["INV-SOLAX-HYB"]!;
+  if (sku.startsWith("INV-SGR-SH15T")) return WARRANTIES["INV-SGR-SH15T"]!;
   if (sku.startsWith("INV-SGR-SH")) return WARRANTIES["INV-SGR-SH"]!;
   if (sku.startsWith("INV-GW-EHA")) return WARRANTIES["INV-GW-EHA"]!;
   if (sku.startsWith("INV-GW-ETA")) return WARRANTIES["INV-GW-ETA"]!;

@@ -21,6 +21,9 @@ export interface ConfigOptions { panels: number[]; modules: number[]; backup: bo
  * Modules: every count that resolves with the base panels (stacks chosen automatically).
  * CEC-pending blockers don't remove options (they block checkout, not quoting).
  */
+/** Biggest battery offered on the site (usable kWh). The rebate stops growing at 50 kWh; 60 keeps every brand's full single-column size (6 × GoodWe 9.0 = 53 kWh) and drops the 80–160 kWh multi-tower ends that are a commercial conversation, not a product page. */
+export const HOME_MAX_USABLE_KWH = 60;
+
 export function configOptions(base: ConfigInput, rules: ConfigRules = DEFAULT_RULES): ConfigOptions {
   const fam = rules.families[base.familyKey]!;
   const bf = rules.battery_families[fam.battery_family];
@@ -31,7 +34,9 @@ export function configOptions(base: ConfigInput, rules: ConfigRules = DEFAULT_RU
   if (base.panelCount > 0) for (let n = 6; n <= 40; n++) if (real(resolveConfig({ ...withPanels, panelCount: n }, { rules }))) panels.push(n);
   const modules: number[] = [];
   const maxMods = rule ? rule.modules_per_stack[1] * rule.max_stacks : 0;
+  const perModule = bf?.module.kwh_usable_cec ?? 0;
   for (let m = 1; m <= maxMods; m++) {
+    if (perModule && m * perModule > HOME_MAX_USABLE_KWH) break;
     const i = { ...withPanels, batteryModules: m };
     const s = autoStacks(i, rules);
     if (s != null && real(resolveConfig({ ...i, stacks: s }, { rules }))) modules.push(m);

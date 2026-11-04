@@ -52,7 +52,7 @@ export default async function SystemPage({ params, searchParams }: { params: Pro
   const q = custom ? priceSystem(configured(s, { panels: usePanels, modules: useModules, backup: "none" }, postcode, data, site.rebateFrom), site, data) : q0;
   const st = q.stack, c = q.config, r = q.rebate;
   const { activeAddons } = await import("@/lib/addons");
-  const addons = await activeAddons().catch(() => []);
+  const addons = await activeAddons(s.brand).catch(() => []);
   const jobNeeds = { brand: s.brand, kind: s.kind === "battery_only" ? "battery_only" as const : "solar_battery" as const, panelKw: c.panel_kw };
   const next = await nextDays(postcode, jobNeeds, 3);
   const earliest = next === null ? null : next?.[0];

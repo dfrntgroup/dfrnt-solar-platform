@@ -1,7 +1,7 @@
 // Build your own (approved 3 Nov 2026): the customer picks phase → brand → inverter → battery → panels → backup.
 // Everything is checked by the same engine as the product pages. What's offered is what we already sell:
 // the inverters the catalogue systems use, the battery module each brand family uses, Risen and LONGi panels.
-import { autoStacks, priceSystem, resolveConfig, type CatalogueSystem, type ConfigInput, type ConfigRules, type Quote } from "@dfrnt/engine";
+import { autoStacks, HOME_MAX_USABLE_KWH, priceSystem, resolveConfig, type CatalogueSystem, type ConfigInput, type ConfigRules, type Quote } from "@dfrnt/engine";
 import type { FullData } from "./pricing-data";
 
 export const BUILD_PANELS = ["PNL-RISEN-475", "PNL-LONGI-475"] as const;
@@ -87,6 +87,7 @@ export function buildOptions(raw: BuildChoice, postcode: string, rebateDate: str
     const rule = bf?.rules[c.family];
     const max = rule ? rule.modules_per_stack[1] * rule.max_stacks : 0;
     for (let n = 1; n <= max; n++) {
+      if (n * moduleKwh > HOME_MAX_USABLE_KWH) break;
       const { o, stacks } = resolveWithStacks(input({ ...c, family: c.family, inverterSku: c.inverterSku, modules: n, panelSku: null }, postcode, rebateDate), rules);
       const good = stacks != null && ok(o);
       modules.push({ n, kwh: Math.round(n * moduleKwh * 100) / 100, ok: good, why: good ? undefined : o.blockers.filter((b) => b.step !== "cec")[0]?.message });

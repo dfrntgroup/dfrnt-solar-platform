@@ -1,8 +1,9 @@
 // Money acceptance tests from the build book (§7 tests T1, T2, T4, T7, T8) using the #1002 figures.
 // #1002: 21 × Risen 475, X1-VAST-10K, 3 × HS51, single phase, tin roof, postcode 4551.
-import { describe, expect, it } from "vitest";
 import {
-  computeRebate, hardwareLine, installDateAllowed, labourLines, priceStack, quote, rebateWindow, variationAmount, variationLine,
+  describe, expect, it } from "vitest";
+import {
+  DEFAULT_MENU, computeRebate, hardwareLine, installDateAllowed, labourLines, priceStack, quote, rebateWindow, variationAmount, variationLine,
   type ConfigInput, type PriceLine,
 } from "../src";
 
@@ -113,15 +114,16 @@ describe("End to end from component costs", () => {
     expect(q.stack.installation_ex_gst).toBe(5500);
     expect(q.stack.less_stcs).toBe(6216);
   });
-  it("hardware from the exported cost table is $11,374.33 ex (snapshot used $11,454.83 — see docs/open-questions.md)", () => {
-    expect(q.stack.hardware_ex_gst).toBe(11374.33);
+  it("hardware from the cost table is $11,224.73 ex (no BOS line from 4 Nov 2026; was $11,374.33 with the $150 kit)", () => {
+    expect(q.stack.hardware_ex_gst).toBe(11224.73);
     expect(q.checkout_allowed).toBe(true);
   });
   it("hardware line is cost ÷ 0.75", () => {
     expect(hardwareLine("INV-SOLAX-VAST-10K", 1, "inv").sell_ex_gst).toBe(2337.33);
   });
   it("a zero-cost labour line blocks checkout but still quotes", () => {
-    const b = quote({ ...job1002, batteryLocation: "garage", vehicleExposure: true }, { asOf: "2026-11-01" });
+    const menu = { ...DEFAULT_MENU, items: DEFAULT_MENU.items.map((i) => (i.code === "SVC-BOLLARDS" ? { ...i, menu_rate: 0 } : i)) };
+    const b = quote({ ...job1002, batteryLocation: "garage", vehicleExposure: true }, { asOf: "2026-11-01", menu });
     expect(b.ok).toBe(true);
     expect(b.stack.price_pending).toContain("SVC-BOLLARDS");
     expect(b.checkout_allowed).toBe(false);
