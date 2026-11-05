@@ -43,7 +43,7 @@ const DEFAULTS = {
   trust: { founder_line: "Built by the team that grew InStyle Solar to 29,000+ installs.", founder_video: "", licence: "", insurance: "", accreditations: "", callback_to: "hello@dfrntsolar.com.au",
     founder_quote: "I spent ten years selling solar the old way: sales visits, a price on the night, pressure to sign. DFRNT Solar is the opposite. Every price is published, every installer is checked, and you decide in your own time.",
     address: "", hours: "", callback_minutes: "",
-    team: "Karl Brown | Founder | Founded InStyle Solar, which installed 29,000+ systems and ranked #3 on the AFR Fast 100.\nMel | Operations and accounts | Makes sure every job, payment and document is right.\nJeremy | Customer care | The person who answers when you call.\nJayden |  | " } as Trust,
+    team: "Karl Brown | Founder | Founded InStyle Solar in 2014 with $2,500. 29,000+ installs, #3 on the AFR Fast 100, sold to Hanwha in 2023.\nJonah Hicks | Built InStyle Solar with Karl | Ran the business through 29,000 installs. Back for the one we'd buy from.\nTehbyn Nova | Built InStyle Solar with Karl | Ran the business through 29,000 installs. Back for the one we'd buy from." } as Trust,
 };
 type Key = keyof typeof DEFAULTS;
 
