@@ -5,7 +5,7 @@ import { SELLER } from "@/lib/legal";
 import { contactUs } from "./actions";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Talk to us", description: "Talk to DFRNT Solar: ask a question or book a call-back with a real person." };
+export const metadata = { title: "Talk to a human", description: "Talk to DFRNT Solar: ask a question or book a call-back with a real person." };
 
 /** The next five business days in Brisbane time. */
 function days() {
@@ -28,7 +28,7 @@ export default async function Contact({ searchParams }: { searchParams: Promise<
     <>
       <Header postcode={postcode} back="/contact" />
       <section><div className="wrap" style={{ maxWidth: 560 }}>
-        <p className="eyebrow">Talk to us</p><h1>Ask us anything, or book a call.</h1>
+        <p className="eyebrow">Talk to a human</p><h1>Ask us anything, or book a call.</h1>
         <p className="lead">A real person replies within one business day. No salespeople: we&apos;ll answer the question, not chase a sale.</p>
         <div className="card" style={{ marginBottom: 18 }}>
           <strong>Talk to a real person</strong>

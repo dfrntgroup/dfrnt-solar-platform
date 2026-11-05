@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import "@fontsource-variable/inter";
+import "@fontsource/caveat/700.css";
 import "./globals.css";
 import { Analytics } from "@/components/Analytics";
 import { Tags } from "@/components/Tags";

@@ -8,135 +8,184 @@ import { aud, priced, rebateDate, sitePostcode, windowEnd, longDate } from "@/li
 import { energyVisible } from "@/lib/energy";
 
 export const dynamic = "force-dynamic";
-export const metadata = { description: "Solar and home batteries for South East Queensland at one fixed installed price, rebate already taken off. Price it, send photos, pay online and pick your install day.", alternates: { canonical: "/" } };
+export const metadata = { description: "Solar and home batteries for South East Queensland. The price is on the page: every system, your postcode, installed, with the rebate already taken off. No sales call to get a number.", alternates: { canonical: "/" } };
 
+// Homepage order from the Website Brand Guideline, Platform theme v1.1 (5 Nov 2026), section 10. Locked lines verbatim.
 export default async function Home({ searchParams }: { searchParams: Promise<Record<string, string>> }) {
-  const postcode = await sitePostcode(await searchParams);
+  const sp = await searchParams;
+  const postcode = await sitePostcode(sp);
   const earliest = await earliestFor(postcode);
   const reviews = await publishedReviews(3);
   const all = await priced(postcode);
-  // The homepage ladder: one brand (the core range), three sizes. Brand is the second decision.
   const ladder = ["solax-6kw-10kwh", "solax-10kw-15kwh", "solax-13kw-20kwh"].map((slug) => all.find(({ s }) => s.slug === slug)).filter(Boolean) as typeof all;
   const family = (brand: string) => all.find(({ s }) => s.brand === brand && s.kind === "solar_battery" && s.config.phases === 1 && s.size === "Family");
-  const batteryFrom = Math.min(...all.filter(({ s }) => s.kind === "battery_only").map(({ q }) => q.stack.amount_payable));
-  const meter = await energyVisible(await searchParams);
+  const count = all.length;
+  const meter = await energyVisible(sp);
   const end = await windowEnd();
   const t = await getSetting("trust");
   const { rebateFromFor } = await import("@/lib/rebate-from");
   const forward = await rebateFromFor(postcode);
-  const anchor = all.find(({ s }) => s.slug === "solax-10kw-15kwh") ?? ladder[1] ?? ladder[0];
+
+  const Estimator = ({ dark = false }: { dark?: boolean }) => (
+    <form action="/estimate" method="get" className="finder" style={dark ? { marginTop: 0 } : undefined}>
+      <div className="row">
+        <label>Postcode<input name="postcode" defaultValue={postcode} inputMode="numeric" pattern="\d{4}" maxLength={4} className="field" /></label>
+        <label>Last quarterly bill ($)<input name="bill" inputMode="numeric" placeholder="e.g. 750" className="field" required /></label>
+      </div>
+      <div className="pills" role="radiogroup" aria-label="What do you need?" style={{ paddingTop: 10 }}>
+        <label><input type="radio" name="solar" value="no" defaultChecked style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">Solar + battery</span></label>
+        <label><input type="radio" name="solar" value="yes" style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">Battery for the solar I have</span></label>
+      </div>
+      <button className="btn block" style={{ marginTop: 12 }} type="submit">Show me my system</button>
+      <p className="small muted" style={{ margin: "10px 0 0" }}>That&apos;s all we need. Nobody rings you.</p>
+    </form>);
+
   return (
     <>
       <Header postcode={postcode} />
-      <div className="hero"><div className="wrap split">
-        <div>
-          <p className="eyebrow hide-sm">DFRNT Solar · Solar and home batteries</p>
-          <h1 className="hero-h1">Keep more of your money.<span className="teal hide-sm">Make more of your own power.</span></h1>
-          <p className="lead hide-sm">Every system priced for your postcode, installed, with the rebate already taken off. One contract, one price, one payment.</p>
-          <p className="lead show-sm" style={{ margin: "-8px 0 0" }}>Installed price, rebate off, for your postcode.</p>
-          <form action="/estimate" method="get" className="finder">
-            {meter ? <>
-              <strong style={{ display: "block", marginBottom: 4 }}>Don&apos;t guess your size. Use your own meter data.</strong>
-              <p className="small muted" style={{ margin: "0 0 10px" }}>Connect your electricity meter and we size your system on a year of your real half-hour usage. Two minutes, nothing to upload.</p>
-              <Link className="btn block" href={`/estimate?postcode=${postcode}#usage`}>Connect my meter →</Link>
-              <p className="small muted" style={{ margin: "12px 0 6px" }}>No meter handy? Start from your bill instead.</p>
-            </> : <strong style={{ display: "block", marginBottom: 10 }}>Find my system in 30 seconds</strong>}
-            <div className="row">
-              <label>Postcode<input name="postcode" defaultValue={postcode} inputMode="numeric" pattern="\d{4}" maxLength={4} className="field" /></label>
-              <label>Last quarterly bill ($)<input name="bill" inputMode="numeric" placeholder="e.g. 750" className="field" required /></label>
-            </div>
-            <div className="pills" role="radiogroup" aria-label="What do you need?" style={{ paddingTop: 10 }}>
-              <label><input type="radio" name="solar" value="no" defaultChecked style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">Panels + battery</span></label>
-              <label><input type="radio" name="solar" value="yes" style={{ position: "absolute", opacity: 0 }} /><span className="pill-r">Battery only (I have solar)</span></label>
-            </div>
-            <button className={`btn block${meter ? " ghost" : ""}`} style={{ marginTop: 12 }} type="submit">{meter ? "Estimate from my bill" : "Find my system →"}</button>
-            {anchor && <p className="small muted" style={{ margin: "8px 0 0" }}>Family-home system <strong>{aud(anchor.q.stack.amount_payable)}</strong> installed, rebate off. Battery only from {aud(batteryFrom)}.</p>}
-          </form>
-        </div>
-        <div className="hero-img"><img src="/img/hero-home.webp" alt="A Queensland home with rooftop solar" /><span className="cap">Concept image. Not a DFRNT Solar installation.</span></div>
-      </div></div>
 
+      {/* 1 · Hero with the estimator inside it */}
+      <div className="hero">
+        <div className="bg" aria-hidden><img src="/img/hero-home.webp" alt="" /></div>
+        <div className="wrap split">
+          <div>
+            <p className="eyebrow">DFRNT Solar /// South East Queensland</p>
+            <h1 className="hero-h1">Most solar companies want you confused.<span className="teal">We want you confident.</span></h1>
+            <p className="lead hide-sm">So the price is on the page. Every system, your postcode, installed, with the rebate already taken off. No sales call to get a number. No number that changes after you sign.</p>
+            <p className="lead show-sm" style={{ fontSize: 17 }}>So the price is on the page. Your postcode, installed, rebate off.</p>
+            <p className="cta-row" style={{ flexDirection: "row", flexWrap: "wrap" }}><Link className="btn" href="/systems">See my price</Link><Link className="btn ghost" href="/beat-my-quote" style={{ color: "#fff" }}>Beat my quote</Link></p>
+            <span className="cap">Concept image · not a DFRNT install yet</span>
+          </div>
+          <div><Estimator /></div>
+        </div>
+      </div>
+
+      {/* 2 · Proof strip: the hard break under the hero */}
       <div className="checks"><div className="wrap"><ul>
-        <li>Licensed electricians, SAA-accredited</li><li>10 business days to change your mind, full refund</li><li>One price, nothing added later without your OK</li><li>Sunshine Coast family business</li>
+        <li>29,000+ roofs</li><li>$275M built, then sold</li><li>#3 AFR Fast 100</li><li>2023 exit to Hanwha</li><li>2026 back, differently</li>
       </ul></div></div>
 
+      {/* 3 · Trust tiles */}
+      <section><div className="wrap">
+        <div className="tiles4">
+          <div className="tile"><div className="line">Licensed. Accredited. Checked by us.</div><p className="sub">Every installer holds an SAA accreditation and a current electrical licence, and we&apos;ve seen both.</p></div>
+          <div className="tile"><div className="line">Ten business days to change your mind.</div><p className="sub">Full refund. Any reason. No form.</p></div>
+          <div className="tile"><div className="line">Nothing added without your yes.</div><p className="sub">If your switchboard or roof needs extra work, you see the line and the dollars before you agree.</p></div>
+          <div className="tile"><div className="line">Family-owned. The team is back.</div><p className="sub">The people who built InStyle Solar, now building the one they&apos;d buy from. When you call 1300 1 DFRNT, you get one of us.</p></div>
+        </div>
+      </div></section>
+
+      {/* 4 · Three systems, price cards */}
       <section className="shade"><div className="wrap">
         <p className="eyebrow">Our pick · {postcode} · rebates as at {rebateDate()}</p>
-        <h2>Three sizes. One price each.</h2>
-        <p className="muted">Pick the size that matches your home. Every price is installed, inc GST, with the rebate already off.{forward ? ` Installs up to ${longDate(end!)} are fully booked in ${postcode}; prices now include the rebate for installs from ${longDate(forward)}.` : end ? ` Battery rebates step down after ${longDate(end)}.` : ""}</p>
-        <p style={{ fontWeight: 700, margin: "6px 0 0" }}>These are starting points, not fixed packages. Open any one and change the panels, the battery and the backup. The price updates as you go.</p>
+        <h2>Three systems. Three prices. Pick one in a minute.</h2>
+        <p className="sub">Small, Family and Large. Each is the installed price for your postcode after the federal battery rebate. Tap one and change the panels or the battery; the price updates in front of you.{forward ? ` Installs up to ${longDate(end!)} are fully booked in ${postcode}, so prices include the rebate for installs from ${longDate(forward)}.` : end ? ` Battery rebates step down after ${longDate(end)}.` : ""}</p>
         <div className="grid" style={{ marginTop: 20 }}>{ladder.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} earliest={earliest} />)}</div>
-        <p className="small muted" style={{ marginTop: 12 }}>Shown in our core range, SolaX. Same three sizes in GoodWe and Sungrow below.</p>
-        <p style={{ marginTop: 14 }}><Link className="btn ghost" href="/systems">See all {all.filter(({ s }) => s.kind === "solar_battery" && s.config.phases === 1).length} systems for single-phase homes →</Link> <Link className="link" href="/systems?phase=3" style={{ marginLeft: 10 }}>Three-phase</Link></p>
+        <p style={{ marginTop: 18 }}><span className="hand">Need something else?</span> &nbsp;<Link className="link" href="/systems">{count} systems. All priced.</Link></p>
       </div></section>
 
+      {/* 5 · Quote comparison */}
+      <section><div className="wrap">
+        <div className="grid g2">
+          <div>
+            <p className="eyebrow">Beat my quote</p>
+            <h2>A quote is a number with a deadline. A price is a number with everything behind it.</h2>
+            <p className="sub">Theirs: one figure, a logo, &ldquo;valid for 7 days&rdquo;. Ours: one figure, every component named with model number and warranty, around 35 inclusions, 14 days to think. Same roof. Only one lets you check the maths.</p>
+            <p><Link className="btn" href="/beat-my-quote">Bring us their quote</Link></p>
+          </div>
+          <div className="card dark">
+            <h3>Things you won&apos;t find here.</h3>
+            <p style={{ margin: 0, color: "var(--on-ground-muted)" }}>No door knockers. No &ldquo;ends Friday&rdquo;. No zero-bill fairy tales. No price that moves after you sign. No lead sold to four strangers. No system we wouldn&apos;t put on our own roof.</p>
+          </div>
+        </div>
+      </div></section>
+
+      {/* 6 · Manifesto band */}
+      <div className="wave teal" />
+      <section className="manifesto"><div className="wrap">
+        <h2>One price. Everything behind it named.</h2>
+      </div></section>
+      <div className="wave teal down" />
+
+      {/* 7 · Sizing + three brands */}
+      <section><div className="wrap">
+        <div className="grid g2" style={{ alignItems: "start" }}>
+          <div>
+            <p className="eyebrow">Sizing</p>
+            <h2>We don&apos;t guess your usage. We read it.</h2>
+            <p className="sub">Connect your smart meter through the Consumer Data Right and we replay a year of half-hourly usage against the sun on your roof. {meter ? "Two minutes, nothing to upload." : "Not live for every retailer yet; until it is, your bill and four photos get the same answer."}</p>
+            <p>{meter ? <Link className="btn" href={`/estimate?postcode=${postcode}#usage`}>Connect my meter</Link> : <Link className="btn" href="/estimate">Start with my bill</Link>}</p>
+            <p className="hand">No home visit to get a number</p>
+          </div>
+          <div>
+            <p className="eyebrow">Brands</p>
+            <h2 style={{ fontSize: 30 }}>Three battery brands. On purpose.</h2>
+            <p className="sub">GoodWe for one box and one number. SolaX for the flexible core range at the sharpest price. Sungrow for the proven all-rounder. We don&apos;t carry twenty brands because you don&apos;t need twenty decisions.</p>
+            <div className="grid" style={{ gridTemplateColumns: "repeat(3, 1fr)", gap: 10 }}>
+              {(["SolaX", "Sungrow", "GoodWe"] as const).map((brand) => { const f = family(brand); return (
+                <Link key={brand} href={`/brands/${brand.toLowerCase()}`} className="card" style={{ textDecoration: "none", padding: 14, gap: 4 }}>
+                  <strong>{brand}</strong>{f && <span className="small muted">Family size {aud(f.q.stack.amount_payable)}</span>}
+                </Link>); })}
+            </div>
+          </div>
+        </div>
+      </div></section>
+
+      {/* 8 · Founder note */}
+      <section className="shade"><div className="wrap">
+        <div className="quote">{t.founder_quote || "I started InStyle Solar in 2014 with $2,500. By 2023 it had put solar on 29,000 roofs and I sold it. I know exactly how a solar quote gets built, and I know why most companies won't show you. So the price is on the page. Every one of them, every postcode, installed, after rebates. If that costs us a sale to someone who wanted to haggle, fine."}</div>
+        <p className="sub" style={{ marginTop: 14 }}>The founder · {t.founder_video ? <a className="link" href={t.founder_video} target="_blank" rel="noreferrer">Watch: why we built this</a> : <Link className="link" href="/about">Our story</Link>}</p>
+      </div></section>
+
+      {/* 9 · Process, five steps */}
+      <section><div className="wrap">
+        <p className="eyebrow">How it works</p>
+        <h2>One price, one contract, one payment.</h2>
+        <div className="grid" style={{ marginTop: 20, gridTemplateColumns: "repeat(auto-fit, minmax(190px, 1fr))" }}>
+          {[["Pick it, adjust it", "Start from a size, change the panels and battery, watch the price."], ["Lock it for 14 days", "Rebate included. Nothing to pay."], ["Send four photos", "Switchboard, meter, roof, inverter spot. Your installer confirms the price from them."], ["One contract, one payment", "Bank transfer keeps about 1%."], ["Installed, then kept", "Your System Record: serials, documents, warranties, support. Yours from day one."]].map(([h, d], i) => (
+            <div key={h} className="card" style={{ gap: 6 }}><span className="num">0{i + 1}</span><h3 style={{ fontSize: 20 }}>{h}</h3><p className="small muted" style={{ margin: 0 }}>{d}</p></div>))}
+        </div>
+        <p style={{ marginTop: 22 }}><Link className="btn ghost" href="/how-it-works">How it works, in full</Link></p>
+      </div></section>
+
+      {/* 10 · Refusals + orphans */}
+      <div className="wave" />
       <section className="dark"><div className="wrap">
-        <p className="eyebrow" style={{ color: "var(--teal-soft)" }}>Sized on your data, not a guess</p>
-        <h2>Your meter already knows what size you need.</h2>
-        <div className="steps3">
-          <div><span className="num">01</span><h3 style={{ marginTop: 6 }}>Connect your meter</h3><p style={{ opacity: .85, margin: 0 }}>Two minutes, through the government&apos;s Consumer Data Right. We only see your usage, never your bank or your bills.</p></div>
-          <div><span className="num">02</span><h3 style={{ marginTop: 6 }}>We replay a year of your usage</h3><p style={{ opacity: .85, margin: 0 }}>Every half hour of the last twelve months, against the sun at your postcode. No typical-home averages.</p></div>
-          <div><span className="num">03</span><h3 style={{ marginTop: 6 }}>One recommended system, priced</h3><p style={{ opacity: .85, margin: 0 }}>Panels and battery sized to your home, with the installed price and what it saves you a year. Adjust it if you like.</p></div>
-        </div>
-        <p style={{ marginTop: 24 }}>{meter ? <Link className="btn" href={`/estimate?postcode=${postcode}#usage`}>Connect my meter →</Link> : <Link className="btn" href="/estimate">Size my system →</Link>} <Link className="link" href="/estimate" style={{ marginLeft: 12, color: "#fff", opacity: .85 }}>{meter ? "No meter handy? Estimate from your bill." : "Start from your last bill."}</Link></p>
-        {!meter && <p className="small" style={{ opacity: .7, marginTop: 10 }}>Meter connection is coming online for everyone shortly. Until then we size from your bill and confirm from your photos.</p>}
-      </div></section>
-
-      <section><div className="wrap">
-        <p className="eyebrow">Step two</p>
-        <h2>Prefer a different brand? Same three sizes.</h2>
-        <div className="grid" style={{ marginTop: 20 }}>
-          {([
-            ["SolaX", "Core range", "Best price per kWh of the three, Australian support office, battery grows 5.1 kWh at a time."],
-            ["GoodWe", "Value", "Biggest battery for the money. Modules are 8.85 kWh, so sizes jump in bigger steps."],
-            ["Sungrow", "Brand", "Australia's most installed residential inverter and the inverter installers voted to put on their own homes in 2026. The brand your sparky would choose."],
-          ] as const).map(([brand, tier, line]) => { const f = family(brand); return (
-            <Link key={brand} href={`/brands/${brand.toLowerCase()}`} className="card mint" style={{ textDecoration: "none" }}>
-              <div className="tag"><span>{tier}</span></div><h3>{brand}</h3><p className="small" style={{ margin: 0 }}>{line}</p>
-              {f && <p className="small muted" style={{ margin: 0 }}>Family size <strong>{aud(f.q.stack.amount_payable)}</strong>{f.q.config.usable_kwh !== 15.3 ? ` (${f.q.config.usable_kwh} kWh)` : ""}</p>}
-            </Link>); })}
-        </div>
-        <div className="grid g4" style={{ marginTop: 18 }}>
-          <div className="card"><h3>All systems</h3><p className="muted">Every size and brand, grouped by battery band.</p><Link className="link" href="/systems">Browse</Link></div>
-          <div className="card"><h3>Battery only</h3><p className="muted">Already have solar? Add a battery with the Cheaper Home Batteries discount taken off.</p><Link className="link" href="/batteries">See batteries</Link></div>
-          <div className="card"><h3>Compare</h3><p className="muted">Put up to three systems side by side: price, battery, inverter, cost per kWh.</p><Link className="link" href="/systems">Pick systems</Link></div>
-          <div className="card"><h3>Build your own</h3><p className="muted">Pick each part and watch the price.</p><Link className="link" href="/build">Start</Link></div>
+        <div className="grid g2" style={{ alignItems: "start" }}>
+          <div>
+            <p className="eyebrow">What you keep</p>
+            <h2>196,471 Queensland solar systems have no one to call.</h2>
+            <p className="sub">Eighty-three companies gone. Here&apos;s what you keep if we&apos;re not here: every manufacturer warranty, enforceable by you. Your logbook, certificate and monitoring, yours from day one. A founder whose last company is still trading three years on.</p>
+          </div>
+          <div>
+            <p className="eyebrow">Three ways in</p>
+            <div style={{ display: "grid", gap: 12 }}>
+              <Link href="/batteries" className="card dark" style={{ textDecoration: "none", gap: 4 }}><div className="line" style={{ fontSize: 24 }}>Already have solar?</div><span className="sub">Add the battery.</span></Link>
+              <Link href="/systems" className="card dark" style={{ textDecoration: "none", gap: 4 }}><div className="line" style={{ fontSize: 24 }}>Starting fresh?</div><span className="sub">Pick a system.</span></Link>
+              <Link href="/estimate" className="card dark" style={{ textDecoration: "none", gap: 4 }}><div className="line" style={{ fontSize: 24 }}>Not sure?</div><span className="sub">Send us your bill. If you don&apos;t need solar, we&apos;ll tell you that too.</span></Link>
+            </div>
+          </div>
         </div>
       </div></section>
+      <div className="wave down" />
 
-      <section className="shade"><div className="wrap"><div className="grid g2">
-        <div className="card founder">
-          <div className="face"><span className="avatar" aria-hidden>KB</span><div><strong>Karl Brown, founder</strong><br /><span className="small muted">Founded InStyle Solar: 29,000+ installs, AFR Fast 100 #3</span></div></div>
-          {t.founder_quote && <p style={{ margin: "12px 0 0" }}>&ldquo;{t.founder_quote}&rdquo;</p>}
-          <p className="small" style={{ margin: "10px 0 0" }}>{t.founder_video ? <a className="link" href={t.founder_video} target="_blank" rel="noreferrer">Watch: why we built this</a> : <Link className="link" href="/about">Our story</Link>}</p>
-        </div>
-      </div></div></section>
-
-      <section><div className="wrap">
-        <p className="eyebrow">Where to start</p>
-        <h2>Pick the path that fits your home.</h2>
-        <div className="grid" style={{ marginTop: 20 }}>
-          <div className="card"><span className="num">01</span><h3>Add a battery to existing solar</h3><p className="muted">Store your daytime solar for the evening. Each battery comes with its own hybrid inverter.</p><Link className="link" href="/batteries">Explore batteries</Link></div>
-          <div className="card mint"><span className="num">02</span><h3>New solar and battery</h3><p className="muted">A complete system with named panels, inverter and battery, priced together with installation.</p><Link className="link" href="/systems">Explore complete systems</Link></div>
-          <div className="card"><span className="num">03</span><h3>Help me choose</h3><p className="muted">Your meter data or your bill. One recommended system, priced.</p><Link className="link" href="/estimate">Find my system</Link></div>
-        </div>
-      </div></section>
-
-      {reviews.count >= 3 && <section className="shade"><div className="wrap">
+      {/* 11 · Reviews, once there are three real ones */}
+      {reviews.count >= 3 && <section><div className="wrap">
         <p className="eyebrow">Reviews{reviews.average != null ? ` · ${reviews.average} / 5 from ${reviews.count}` : ""}</p>
         <h2>From people we&apos;ve installed for.</h2>
         <div className="grid" style={{ marginTop: 16 }}>{reviews.rows.slice(0, 3).map((r) => <div key={r.id} className="card"><p className="stars">{"★".repeat(r.rating)}{"☆".repeat(5 - r.rating)}</p><p>{r.body.length > 220 ? `${r.body.slice(0, 220)}…` : r.body}</p><p className="small muted">{[r.first_name, r.suburb].filter(Boolean).join(", ")}</p></div>)}</div>
         <p style={{ marginTop: 14 }}><Link className="link" href="/reviews">Read every review</Link></p>
       </div></section>}
-      <section className="dark"><div className="wrap">
-        <p className="eyebrow" style={{ color: "var(--teal-soft)" }}>How it works</p>
-        <h2>From price to power in five steps.</h2>
-        <div className="grid" style={{ marginTop: 20 }}>
-          {[["Pick and adjust", "Start from a size, change the panels and battery, watch the price."], ["Secure the price", "Locked for 14 days, rebate included."], ["Send four photos", "Your installer confirms the price, often instantly."], ["Sign and pay once", "Bank transfer saves about 1%."], ["Pick your date", "From your installer's real free days."]].map(([t, d], i) => (
-            <div key={t} style={{ borderTop: "1px solid rgba(255,255,255,.2)", paddingTop: 14 }}><span className="num" style={{ color: "var(--teal-soft)" }}>0{i + 1}</span><h3 style={{ marginTop: 6 }}>{t}</h3><p style={{ opacity: .8, margin: 0 }}>{d}</p></div>))}
+
+      {/* 12 · Closing CTA with the estimator again */}
+      <section className="manifesto"><div className="wrap">
+        <div className="grid g2" style={{ alignItems: "center" }}>
+          <div><h2>Your bill in. Your price out.</h2><p style={{ color: "#fff", fontWeight: 500, fontSize: 19, margin: "12px 0 0" }}>Postcode and last quarterly bill. Thirty seconds. South East Queensland.</p></div>
+          <Estimator dark />
         </div>
-        <p style={{ marginTop: 26 }}><Link className="btn" href="/how-it-works">How it works →</Link></p>
       </div></section>
+
+      {/* 13 · Footer */}
       <Footer />
     </>
   );

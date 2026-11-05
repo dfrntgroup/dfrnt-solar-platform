@@ -84,7 +84,7 @@ export default async function Record({ params, searchParams }: { params: Promise
     const { movedTo } = await import("@/lib/record");
     const moved = await movedTo(token);
     if (moved) return (<><Header postcode="4551" /><section><div className="wrap" style={{ maxWidth: 640 }}><h1 style={{ fontSize: 28 }}>This record has moved</h1>
-      <p>It was passed to the home&apos;s new owner on {moved.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric", timeZone: "Australia/Brisbane" })}, with a new private link. Questions? <Link href="/contact">Talk to us</Link>.</p></div></section><Footer /></>);
+      <p>It was passed to the home&apos;s new owner on {moved.toLocaleDateString("en-AU", { day: "numeric", month: "long", year: "numeric", timeZone: "Australia/Brisbane" })}, with a new private link. Questions? <Link href="/contact">Talk to a human</Link>.</p></div></section><Footer /></>);
   }
   if (q && sp.c && /^[0-9a-f-]{36}$/.test(sp.c)) await db()`update campaign_sends set clicked_at = coalesce(clicked_at, now()) where id = ${sp.c} and quote_id = ${q.id}`;
   const myReview = q ? (await db()`select status, rating, body from reviews where quote_id = ${q.id}`)[0] as { status: string; rating: number; body: string } | undefined : undefined;

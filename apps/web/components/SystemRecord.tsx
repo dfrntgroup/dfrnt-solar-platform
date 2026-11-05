@@ -70,7 +70,7 @@ export async function SystemRecord({ q, report, transfer, sent }: { q: QuoteRow;
           <label className="small"><input type="checkbox" name="confirm" required /> I&apos;ve sold or am selling this home and want to hand this record over</label>
           <button className="btn ghost sm" type="submit">Pass to the buyer</button></form>}
       </details>
-      <p className="small" style={{ marginTop: 10 }}><Link href={`/contact?quote=${token}`}>Anything else? Talk to us</Link></p>
+      <p className="small" style={{ marginTop: 10 }}><Link href={`/contact?quote=${token}`}>Anything else? Talk to a human</Link></p>
     </div>
   );
 }
