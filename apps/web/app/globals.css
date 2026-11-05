@@ -429,3 +429,10 @@ details.menu[open] > summary::after { content: "✕"; font-size: 22px; }
 h2 .small, h1 .small { font-weight: 500; letter-spacing: 0; }
 .card.mint .tag, .shade .eyebrow { color: var(--accent-dark); }
 .bopt.on span, .bopt.on strong { color: var(--ink); }
+/* Stepper never shrinks or clips its + button (phone fix, 5 Nov 2026) */
+.stepper { flex: 0 0 auto; }
+.stepper button { width: 64px; min-width: 64px; }
+.stepper button small { font-size: 10px; font-weight: 700; }
+.cfg-row { flex-wrap: wrap; }
+.cfg-row > div:first-child { flex: 1 1 160px; min-width: 0; }
+@media (max-width: 420px) { .stepper button { width: 58px; min-width: 58px; } .stepper output { min-width: 48px; } }
