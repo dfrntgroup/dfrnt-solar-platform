@@ -80,7 +80,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         <p className="eyebrow">Our pick · {postcode} · rebates as at {rebateDate()}</p>
         <h2>Three systems. Three prices. Pick one in a minute.</h2>
         <p className="sub">Small, Family and Large. Each is the installed price for your postcode after the federal battery rebate. Tap one and change the panels or the battery; the price updates in front of you.{forward ? ` Installs up to ${longDate(end!)} are fully booked in ${postcode}, so prices include the rebate for installs from ${longDate(forward)}.` : end ? ` Battery rebates step down after ${longDate(end)}.` : ""}</p>
-        <div className="grid" style={{ marginTop: 20 }}>{ladder.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} earliest={earliest} />)}</div>
+        <div className="grid sketchy" style={{ marginTop: 20 }}>{ladder.map(({ s, q }) => <SystemCard key={s.slug} s={s} q={q} earliest={earliest} />)}</div>
         <p style={{ marginTop: 18 }}><span className="hand">Need something else?</span> &nbsp;<Link className="link" href="/systems">{count} systems. All priced.</Link></p>
       </div></section>
 
@@ -101,11 +101,9 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
       </div></section>
 
       {/* 6 · Manifesto band */}
-      <div className="wave teal" />
       <section className="manifesto"><div className="wrap">
         <h2>One price. Everything behind it named.</h2>
       </div></section>
-      <div className="wave teal down" />
 
       {/* 7 · Sizing + three brands */}
       <section><div className="wrap">
@@ -133,8 +131,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
 
       {/* 8 · Founder note */}
       <section className="shade"><div className="wrap">
+        <div className="card sketch" style={{ padding: "28px 26px 22px" }}>
         <div className="quote">{t.founder_quote || "I started InStyle Solar in 2014 with $2,500. By 2023 it had put solar on 29,000 roofs and I sold it. I know exactly how a solar quote gets built, and I know why most companies won't show you. So the price is on the page. Every one of them, every postcode, installed, after rebates. If that costs us a sale to someone who wanted to haggle, fine."}</div>
         <p className="sub" style={{ marginTop: 14 }}>The founder · {t.founder_video ? <a className="link" href={t.founder_video} target="_blank" rel="noreferrer">Watch: why we built this</a> : <Link className="link" href="/about">Our story</Link>}</p>
+        </div>
       </div></section>
 
       {/* 9 · Process, five steps */}
@@ -149,7 +149,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
       </div></section>
 
       {/* 10 · Refusals + orphans */}
-      <div className="wave" />
       <section className="dark"><div className="wrap">
         <div className="grid g2" style={{ alignItems: "start" }}>
           <div>
@@ -167,7 +166,6 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
           </div>
         </div>
       </div></section>
-      <div className="wave down" />
 
       {/* 11 · Reviews, once there are three real ones */}
       {reviews.count >= 3 && <section><div className="wrap">

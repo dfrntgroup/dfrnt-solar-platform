@@ -44,10 +44,10 @@ export async function Header({ postcode, back = "/" }: { postcode: string; back?
         <div className="center"><Wordmark /></div>
         <nav className="desk">{links.map(([h, t]) => <Link key={h} href={h!}>{t}</Link>)}</nav>
         <div className="right">
-          <a className="tel" href="tel:1300133768" aria-label="Call us on 1300 133 768"><span className="hide-sm">1300 1 DFRNT</span><span className="show-sm" aria-hidden>☎</span></a>
+          <a className="tel" href="tel:1300133768" aria-label="Call us on 1300 133 768"><span className="hide-sm">1300 1 DFRNT</span><svg className="ico show-sm" viewBox="0 0 24 24" aria-hidden><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z"/></svg></a>
           <Link className="btn cta" href="/estimate">See my price</Link>
           <details style={{ position: "relative" }}>
-            <summary className="pcchip" style={{ listStyle: "none", cursor: "pointer" }}>📍 {postcode}</summary>
+            <summary className="pcchip" style={{ listStyle: "none", cursor: "pointer" }}><svg className="ico" viewBox="0 0 24 24" aria-hidden><path d="M12 21s-6-5.5-6-11a6 6 0 0 1 12 0c0 5.5-6 11-6 11z"/><path d="M12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z"/></svg> {postcode}</summary>
             <form action={setPostcode} style={{ position: "absolute", right: 0, top: 40, background: "#fff", color: "var(--ink)", border: "3px solid var(--ink)", padding: 12, display: "flex", gap: 6, zIndex: 40, width: 220 }}>
               <input name="postcode" defaultValue={postcode} inputMode="numeric" pattern="\d{4}" maxLength={4} aria-label="Your postcode" className="field" style={{ padding: 8 }} />
               <input type="hidden" name="back" value={back} />

@@ -49,7 +49,7 @@ export function SystemCard({ s, q, compare, earliest, highlight }: { s: Catalogu
     <div className={`card${highlight || s.badge ? " pick" : ""}`}>
       <Media s={s} q={q} />
       <BandPill s={s} q={q} />
-      <div className="tag"><span>{s.brand} · {s.kind === "battery_only" ? "Battery only" : s.size ? s.size : "Solar + battery"}</span>{s.badge && <span className="badge">{s.badge}</span>}</div>
+      <div className="tag"><span>{s.brand} · {s.kind === "battery_only" ? "Battery only" : s.size ? s.size : "Solar + battery"}</span>{s.badge && <span className="sticker">{s.badge}</span>}</div>
       <h3>{s.title}</h3>
       {s.who && <p className="who">{s.who}</p>}
       <Facts s={s} q={q} />

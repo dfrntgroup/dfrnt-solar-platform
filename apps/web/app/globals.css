@@ -86,13 +86,12 @@ section { padding: 60px 0; }
 .dark .eyebrow, .onground .eyebrow { color: var(--accent); }
 .dark .muted, .onground .muted, .dark .sub, .onground .sub { color: var(--on-ground-muted); }
 .dark .btn.ghost { color: #fff; }
-/* the one teal band on a page: one locked line and nothing else */
-.manifesto { background: var(--accent); color: #fff; padding: 56px 0; }
+/* the one teal band on a page: one locked line and nothing else. Hard edges, 3 px rules; the wavy divider was struck 6 Nov 2026 (it read as bunting on this palette) */
+.manifesto { background: var(--accent); color: #fff; padding: 80px 0; border-top: 3px solid var(--ink); border-bottom: 3px solid var(--ink); }
+@media (min-width: 900px) { .manifesto { padding: 120px 0; } }
 .manifesto h2 { color: #fff; font-size: clamp(32px, 5.5vw, 60px); max-width: 18ch; margin: 0; }
 .manifesto .eyebrow { color: var(--ink); }
-.wave { height: 28px; background: var(--ground); -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 28' preserveAspectRatio='none'><path d='M0 14 Q15 0 30 14 T60 14 T90 14 T120 14 V28 H0z' fill='black'/></svg>") repeat-x; mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 28' preserveAspectRatio='none'><path d='M0 14 Q15 0 30 14 T60 14 T90 14 T120 14 V28 H0z' fill='black'/></svg>") repeat-x; -webkit-mask-size: 120px 28px; mask-size: 120px 28px; }
-.wave.down { transform: scaleY(-1); }
-.wave.teal { background: var(--accent); }
+.manifesto + footer { border-top: 0; }
 /* hero: black over a darkened photo */
 .hero { background: var(--ground); color: var(--on-ground); position: relative; overflow: hidden; padding: 56px 0 48px; }
 .hero > .bg { position: absolute; inset: 0; }
@@ -116,7 +115,8 @@ section { padding: 60px 0; }
 .checks li + li::before { content: "·"; color: var(--accent); }
 .proof p { font-weight: 800; letter-spacing: -0.02em; font-size: 20px; }
 /* trust tiles, refusals, orphans, founder note */
-.tiles4 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+.tiles4 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); align-items: start; }
+.tile > :last-child { margin-bottom: 0; }
 .tile { border: var(--border); padding: 20px; background: var(--paper); }
 .tile .line { font-size: 22px; }
 .line { font-size: clamp(22px, 3vw, 30px); font-weight: 800; letter-spacing: -0.02em; line-height: 1.15; color: var(--ink); margin: 0 0 6px; }
@@ -128,6 +128,11 @@ section { padding: 60px 0; }
 .bignum { font-weight: 800; font-size: 54px; letter-spacing: -0.03em; line-height: 1; color: var(--ink); }
 .dark .bignum { color: #fff; }
 .sketch { border-radius: var(--sketch) !important; }
+.card.sketch, .sketchy > .card { border-radius: var(--sketch); overflow: hidden; }
+.card .tag .sticker { padding: 4px 8px; font-size: 11px; transform: rotate(-3deg); margin: -2px 0; }
+/* one-colour line icons in the header (no emoji on a three-colour palette) */
+.hdr .ico { width: 18px; height: 18px; display: inline-block; vertical-align: -3px; }
+.hdr .ico path { fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* grid + cards */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
