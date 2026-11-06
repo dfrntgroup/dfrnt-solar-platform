@@ -99,7 +99,8 @@ section { padding: 60px 0; }
 .hero > .bg::after { content: ""; position: absolute; inset: 0; background: #000; opacity: var(--overlay-hero); }
 .hero .wrap { position: relative; }
 .hero h1 { color: #fff; font-size: clamp(40px, 5.4vw, 64px); }
-.hero h1 .teal { display: block; color: var(--accent); }
+.hero h1 .turn { display: block; }   /* second line stays white: one headline, one face (guideline v1.2) */
+.hero .hand { font-size: 26px; }
 .hero .lead { color: var(--on-ground-muted); }
 .hero .cap { display: inline-block; background: #fff; color: var(--ink); border: var(--border); padding: 6px 10px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; margin-top: 18px; }
 @media (min-width: 900px) { .hero .split { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; } }
@@ -369,7 +370,6 @@ table.index td { padding-right: 6px; }
 .switch:checked::after { left: 22px; }
 .switch:focus-visible { outline: 3px solid var(--teal-soft); outline-offset: 2px; }
 @media (max-width: 640px) {
-  .hero h1 .teal.hide-sm { display: none; }
   .hero { padding: 28px 0 24px; }
   .hero .hero-h1 { font-size: 40px; margin-bottom: 10px; }
   .hero .cta-row, .hero .cap, .hero .lead.hide-sm { display: none; }

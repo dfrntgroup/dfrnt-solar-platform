@@ -50,9 +50,10 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
         <div className="wrap split">
           <div>
             <p className="eyebrow">DFRNT Solar /// South East Queensland</p>
-            <h1 className="hero-h1">Most solar companies want you confused.<span className="teal">We want you confident.</span></h1>
+            <h1 className="hero-h1">Most solar companies want you confused.<span className="turn">We want you confident.</span></h1>
             <p className="lead hide-sm">So the price is on the page. Every system, your postcode, installed, with the rebate already taken off. No sales call to get a number. No number that changes after you sign.</p>
             <p className="lead show-sm" style={{ fontSize: 17 }}>So the price is on the page. Your postcode, installed, rebate off.</p>
+            <p className="hand" style={{ margin: "4px 0 0" }}>No sales call to get a number.</p>
             <p className="cta-row" style={{ flexDirection: "row", flexWrap: "wrap" }}><Link className="btn" href="/systems">See my price</Link><Link className="btn ghost" href="/beat-my-quote" style={{ color: "#fff" }}>Beat my quote</Link></p>
             <span className="cap">Concept image · not a DFRNT install yet</span>
           </div>
