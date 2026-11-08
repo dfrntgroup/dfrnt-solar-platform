@@ -100,7 +100,9 @@ section { padding: 60px 0; }
 .hero .wrap { position: relative; }
 .hero h1 { color: #fff; font-size: clamp(40px, 5.4vw, 64px); }
 .hero h1 .turn { display: block; }   /* second line stays white: one headline, one face (guideline v1.2) */
-.hero .hand { font-size: 26px; }
+.hero .hand { font-size: 28px; margin: 6px 0 26px; }
+.hero .lead { margin-bottom: 10px; }
+@media (max-width: 640px) { .hero .hand { margin: 4px 0 6px; } }
 .hero .lead { color: var(--on-ground-muted); }
 .hero .cap { display: inline-block; background: #fff; color: var(--ink); border: var(--border); padding: 6px 10px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; margin-top: 18px; }
 @media (min-width: 900px) { .hero .split { display: grid; grid-template-columns: 1.1fr .9fr; gap: 48px; align-items: center; } }
