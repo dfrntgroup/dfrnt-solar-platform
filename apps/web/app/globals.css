@@ -116,7 +116,8 @@ section { padding: 60px 0; }
 .checks li + li::before { content: "·"; color: var(--accent); }
 .proof p { font-weight: 800; letter-spacing: -0.02em; font-size: 20px; }
 /* trust tiles, refusals, orphans, founder note */
-.tiles4 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); align-items: start; }
+.tiles4 { display: grid; gap: 18px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); align-items: stretch; }   /* equal heights in a row; single column on phones hugs content */
+@media (max-width: 599px) { .tiles4 { align-items: start; } }
 .tile > :last-child { margin-bottom: 0; }
 .tile { border: var(--border); padding: 20px; background: var(--paper); }
 .tile .line { font-size: 22px; }
