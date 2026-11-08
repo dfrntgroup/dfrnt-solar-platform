@@ -132,6 +132,13 @@ section { padding: 60px 0; }
 .bignum { font-weight: 800; font-size: 54px; letter-spacing: -0.03em; line-height: 1; color: var(--ink); }
 .dark .bignum { color: #fff; }
 .sketch { border-radius: var(--sketch) !important; }
+/* refusals: six industry habits, struck through in teal */
+.refusals { justify-content: center; gap: 0; padding: 26px 28px; }
+.refusals .eyebrow { color: var(--accent); margin-bottom: 14px; }
+.refusals ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.refusals li { font-weight: 800; font-size: clamp(20px, 2.2vw, 26px); letter-spacing: -0.02em; line-height: 1.15; color: #fff; }
+.refusals s { text-decoration: line-through; text-decoration-color: var(--accent); text-decoration-thickness: 4px; text-underline-offset: 0; }
+.refusals .hand { margin: 18px 0 0; font-size: 28px; }
 .card.sketch, .sketchy > .card { border-radius: var(--sketch); overflow: hidden; }
 .card .tag .sticker { padding: 4px 8px; font-size: 11px; transform: rotate(-3deg); margin: -2px 0; }
 /* one-colour line icons in the header (no emoji on a three-colour palette) */

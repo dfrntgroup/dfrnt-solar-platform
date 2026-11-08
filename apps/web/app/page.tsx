@@ -93,9 +93,12 @@ export default async function Home({ searchParams }: { searchParams: Promise<Rec
             <p className="sub">Theirs: one figure, a logo, &ldquo;valid for 7 days&rdquo;. Ours: one figure, every component named with model number and warranty, around 35 inclusions, 14 days to think. Same roof. Only one lets you check the maths.</p>
             <p><Link className="btn" href="/beat-my-quote">Bring us their quote</Link></p>
           </div>
-          <div className="card dark">
-            <h3>Things you won&apos;t find here.</h3>
-            <p style={{ margin: 0, color: "var(--on-ground-muted)" }}>No door knockers. No &ldquo;ends Friday&rdquo;. No zero-bill fairy tales. No price that moves after you sign. No lead sold to four strangers. No system we wouldn&apos;t put on our own roof.</p>
+          <div className="card dark refusals">
+            <p className="eyebrow">Things you won&apos;t find here</p>
+            <ul>
+              {["Door knockers", "\u201cEnds Friday\u201d", "Zero-bill fairy tales", "A price that moves after you sign", "Your lead sold to four strangers", "A system we wouldn\u2019t put on our own roof"].map((x) => <li key={x}><s>{x}</s></li>)}
+            </ul>
+            <p className="hand">Crossed out before we started.</p>
           </div>
         </div>
       </div></section>
