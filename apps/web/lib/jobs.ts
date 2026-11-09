@@ -1,9 +1,11 @@
-// Job operations. Every state change goes through `write` (audited, evented, idempotent) and the engine's state machine.
+// Job operations. Every state change goes through transition() (lib/transition.ts): asserted against the engine's machine, owned
+// by the action that does the work, audited, evented with from/to. Nothing in this file writes quotes.status directly.
 import { db, write, type Actor } from "@dfrnt/db";
 import {
-  assertTransition, autoStacks, instantPriceBlockers, quote, rebateWindow, variationAmount, variationLine,
+  autoStacks, instantPriceBlockers, isManualEdge, JOB_SETS, QUOTE, quote, rebateWindow, variationAmount, variationLine,
   labourLines, requiredPhotos, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest, requestFromLine,
 } from "@dfrnt/engine";
+import { manualTransition, registerHook, transition, type Tx } from "./transition";
 import { todayAEST } from "./api";
 import { queueMessage } from "./messages";
 import { pricingData, pricingDataFor } from "./pricing-data";
@@ -92,24 +94,18 @@ export async function notifyInstallerToPrice(q: QuoteRow, installerId: string, w
   await queueMessage("I5", q.token, inst.email as string, { name: inst.business_name as string, place: placeOf(q), title: q.title ?? q.result.config.summary, jobId: q.id, why });
 }
 
-async function move(q: QuoteRow, to: JobState, actor: Actor, action: string, set: Record<string, unknown> = {}, rationale?: string, payload?: Record<string, unknown>) {
-  assertTransition(q.status, to);
-  return write({ actor, action, rationale }, { token: q.token, to, ...set }, async (tx) => {
-    const fields = { ...set, status: to, updated_at: new Date() };
-    const [row] = await tx`update quotes set ${tx(fields as unknown as Record<string, never>)} where id = ${q.id} and status = ${q.status} returning id`;
-    if (!row) throw new Error("Quote changed while you were working; reload and try again");
-    return { entity: "quote", entityId: q.id, event: `quote.${to}`, result: { from: q.status, to }, payload };
-  });
-}
+/** Move a quote through the one door. `via` names the effect this action owns (see JOB_EFFECTS). */
+const move = (q: QuoteRow, to: JobState, actor: Actor, action: string, set: Record<string, unknown> = {}, rationale?: string, payload?: Record<string, unknown>, via?: string, work?: (tx: Tx) => Promise<Record<string, unknown> | void>) =>
+  transition(q, to, actor, { action, set, rationale, payload, via, work });
 
 /* C1–C3: home + photos → instant price or installer pricing */
 export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name: string; email: string; phone: string }, opts: { feePaid?: boolean } = {}) {
-  if (!["saved", "secured", "lapsed"].includes(q.status)) throw new Error("This quote has already been priced");
+  if (!JOB_SETS.OPEN_CHECKOUT.includes(q.status)) throw new Error("This quote has already been priced");
   if (q.status === "saved" || q.status === "lapsed") {
     // A fresh lock from today: new lock date and a rebate date inside today's window (a lapsed quote kept the old ones).
     const { rebateFromFor } = await import("./rebate-from");
     const w = rebateWindow(todayAEST(), (await pricingDataFor(q.result.versions)).rebates, await rebateFromFor(q.postcode));
-    await move(q, "secured", CUSTOMER, "quotes.secure", { lock_until: w.lock_until, input: db().json({ ...q.input, installDate: w.rebate_date } as never) });
+    await move(q, "secured", CUSTOMER, "quotes.secure", { lock_until: w.lock_until, input: db().json({ ...q.input, installDate: w.rebate_date } as never) }, undefined, undefined, "secure");
     q = (await getQuote(q.token))!;
   }
   const inst = await installerFor(q, site);
@@ -142,15 +138,15 @@ export async function submitSite(q: QuoteRow, site: SiteAnswers, contact: { name
   };
   { const { trackConversion } = await import("./conversions"); await trackConversion(q.id, "SubmitApplication", priced.stack.amount_payable); }
   if (!reasons.length) {
-    await move(q, "pricing_instant", CUSTOMER, "quotes.submit_site", common);
+    await move(q, "pricing_instant", CUSTOMER, "quotes.submit_site", common, undefined, undefined, "submitSite");
     q = (await getQuote(q.token))!;
     await freezePrice(q, priced, SYSTEM, "Instant price: site inside the installer's standard scope", { by: "instant", changed: false });
   } else if (!inst) {
     // P5: nobody covers this address. Straight to Ops, not a day in a queue no installer will open.
-    await move(q, "tech_review", CUSTOMER, "quotes.submit_site", { ...common, pricing_reasons: reasons }, "No installer covers this postcode", { reasons });
+    await move(q, "tech_review", CUSTOMER, "quotes.submit_site", { ...common, pricing_reasons: reasons }, "No installer covers this postcode", { reasons }, "submitSite");
     await queueMessage("M1", q.token, contact.email, { name: contact.name });
   } else {
-    await move(q, "pricing_installer", CUSTOMER, "quotes.submit_site", { ...common, pricing_reasons: reasons, pricing_requested_at: new Date() }, undefined, { reasons });
+    await move(q, "pricing_installer", CUSTOMER, "quotes.submit_site", { ...common, pricing_reasons: reasons, pricing_requested_at: new Date() }, undefined, { reasons }, "submitSite");
     await queueMessage("M1", q.token, contact.email, { name: contact.name });
     await notifyInstallerToPrice((await getQuote(q.token))!, inst.id, "new");
   }
@@ -164,13 +160,13 @@ async function freezePrice(q: QuoteRow, p: Quote, actor: Actor, rationale: strin
   await move(q, "priced", actor, "quotes.price", {
     snapshot: db().json(p as never), priced_at: new Date(), amount_payable: p.stack.amount_payable, price_inc_gst: p.stack.price_inc_gst,
     stcs: p.stack.stcs, checkout_allowed: p.checkout_allowed, pricing_reasons: null, priced_by: who.by, price_changed: who.changed,
-  }, rationale, { amount_payable: p.stack.amount_payable });
+  }, rationale, { amount_payable: p.stack.amount_payable }, "freezePrice");
   await queueMessage("M2", q.token, q.customer_email, { name: q.customer_name, amount: p.stack.amount_payable });
 }
 
 /* I2: installer confirms price, optionally adding named lines from the menu */
 export async function installerPrice(q: QuoteRow, actor: Actor, extraCodes: string[], note?: string) {
-  if (q.status !== "pricing_installer" && q.status !== "tech_review") throw new Error("Not waiting for a price");
+  if (!JOB_SETS.AWAITING_PRICE.includes(q.status)) throw new Error("Not waiting for a price");
   // "CODE" or "CODE:qty" (per-metre / per-km items carry a quantity)
   const extraLabour = extraCodes.filter(Boolean).map((c) => { const [code, q] = c.split(":"); return { code: code!, qty: Math.min(500, Math.max(1, Math.round(Number(q) || 1))) }; });
   const p = await reprice(q, { extraLabour });
@@ -197,7 +193,7 @@ export async function sign(q: QuoteRow, name: string) {
     const { gear_lead_days } = await (await import("./settings")).getSetting("scheduling");
     if (end && daysBetween(todayAEST(), end) < gear_lead_days + 2) throw new Error(`The current rebate period ends on ${end} and installers need ${gear_lead_days} days' notice for equipment. Call us on 1300 133 768 and we'll re-price you into the next period before you sign.`);
   }
-  await move(q, "signed", CUSTOMER, "quotes.sign", { signed_at: new Date(), signed_name: name, agreement_version: AGREEMENT_VERSION });
+  await move(q, "signed", CUSTOMER, "quotes.sign", { signed_at: new Date(), signed_name: name, agreement_version: AGREEMENT_VERSION }, undefined, undefined, "sign");
   { const { trackConversion } = await import("./conversions"); await trackConversion(q.id, "SignedAgreement", (q.snapshot ?? q.result).stack.amount_payable); }
 }
 
@@ -206,12 +202,12 @@ export async function chooseBank(q: QuoteRow) {
   if (q.status !== "signed") throw new Error("Sign first");
   const p = await reprice(q, { bank: true, extraLabour: extraFromSnapshot(q) });
   const reference = `DS${q.token.slice(0, 6).toUpperCase()}`;
-  await write({ actor: CUSTOMER, action: "payments.create" }, { token: q.token, method: "bank" }, async (tx) => {
-    const [pay] = await tx`insert into payments (quote_id, kind, method, amount, reference) values (${q.id}, 'system', 'bank', ${p.stack.amount_payable}, ${reference}) returning id`;
-    await tx`update quotes set status = 'payment_pending', payment_method = 'bank', payment_reference = ${reference}, snapshot = ${tx.json(p as never)},
-      amount_payable = ${p.stack.amount_payable}, updated_at = now() where id = ${q.id} and status = 'signed'`;
-    return { entity: "quote", entityId: q.id, event: "quote.payment_pending", result: { payment_id: pay!.id, amount: p.stack.amount_payable, reference } };
-  });
+  await transition(q, "payment_pending", CUSTOMER, { action: "payments.create", via: "createPayment", payload: { method: "bank" },
+    set: { payment_method: "bank", payment_reference: reference, snapshot: db().json(p as never), amount_payable: p.stack.amount_payable },
+    work: async (tx) => {
+      const [pay] = await tx`insert into payments (quote_id, kind, method, amount, reference) values (${q.id}, 'system', 'bank', ${p.stack.amount_payable}, ${reference}) returning id`;
+      return { payment_id: pay!.id, amount: p.stack.amount_payable, reference };
+    } });
 }
 
 /* S1: PayTo or card through Stripe. Amount comes from the signed snapshot; PayTo gets the bank price. */
@@ -223,21 +219,20 @@ export async function startOnlinePayment(q: QuoteRow, method: "payto" | "card") 
   const { PAYTO_MAX } = await import("./stripe");
   if (method === "payto" && p.stack.amount_payable > PAYTO_MAX) throw new Error("PayTo is limited to $10,000 per payment. Please pay by card or bank transfer.");
   const reference = `DS${q.token.slice(0, 6).toUpperCase()}`;
-  const paymentId = await write({ actor: CUSTOMER, action: "payments.create" }, { token: q.token, method }, async (tx) => {
-    const [pay] = await tx`insert into payments (quote_id, kind, method, amount, reference) values (${q.id}, 'system', ${method}, ${p.stack.amount_payable}, ${reference}) returning id`;
-    const [row] = await tx`update quotes set status = 'payment_pending', payment_method = ${method}, payment_reference = ${reference}, snapshot = ${tx.json(p as never)},
-      amount_payable = ${p.stack.amount_payable}, updated_at = now() where id = ${q.id} and status = 'signed' returning id`;
-    if (!row) throw new Error("Quote changed while you were working; reload and try again");
-    return { entity: "quote", entityId: q.id, event: "quote.payment_pending", result: { payment_id: pay!.id as string, amount: p.stack.amount_payable, method } };
-  }).then((r) => r.result.payment_id);
+  const paymentId = (await transition(q, "payment_pending", CUSTOMER, { action: "payments.create", via: "createPayment", payload: { method },
+    set: { payment_method: method, payment_reference: reference, snapshot: db().json(p as never), amount_payable: p.stack.amount_payable },
+    work: async (tx) => {
+      const [pay] = await tx`insert into payments (quote_id, kind, method, amount, reference) values (${q.id}, 'system', ${method}, ${p.stack.amount_payable}, ${reference}) returning id`;
+      return { payment_id: pay!.id as string, amount: p.stack.amount_payable, method };
+    } })).result.payment_id as string;
   try {
     await createIntent({ paymentId, amount: p.stack.amount_payable, method, quoteId: q.id, token: q.token, email: q.customer_email, kind: "system",
       description: `DFRNT Solar ${reference} — ${q.title ?? "solar and battery system"}` });
   } catch (e) {
     // Couldn't reach Stripe: put the customer back at "how would you like to pay" rather than a dead form.
     console.error("stripe intent", (e as Error).message);
-    await db()`update payments set status = 'failed', provider_status = 'create_failed' where id = ${paymentId}`;
-    await db()`update quotes set status = 'signed', payment_method = null, updated_at = now() where id = ${q.id} and status = 'payment_pending'`;
+    await transition({ ...q, status: "payment_pending" }, "signed", SYSTEM, { action: "payments.intent_failed", via: "intentFailed", rationale: (e as Error).message.slice(0, 200), tolerate: true,
+      set: { payment_method: null }, work: async (tx) => { await tx`update payments set status = 'failed', provider_status = 'create_failed' where id = ${paymentId}`; } });
     throw new Error(`We couldn't start the ${method === "payto" ? "PayTo" : "card"} payment just now. Please try again, or pay by bank transfer.`);
   }
 }
@@ -247,8 +242,8 @@ export async function changePayment(q: QuoteRow) {
   if (q.status !== "payment_pending") throw new Error("Nothing to change");
   const { releaseSystemPayment } = await import("./stripe");
   await releaseSystemPayment(q.id);
-  await db()`update payments set status = 'failed' where quote_id = ${q.id} and kind = 'system' and status = 'pending'`;
-  await move(q, "signed", CUSTOMER, "payments.change", { payment_method: null });
+  await transition(q, "signed", CUSTOMER, { action: "payments.change", via: "changePayment", set: { payment_method: null },
+    work: async (tx) => { await tx`update payments set status = 'failed' where quote_id = ${q.id} and kind = 'system' and status = 'pending'`; } });
 }
 
 /* S4: finance link-out. The lender pays us; Ops marks it paid when they confirm. */
@@ -259,12 +254,9 @@ export async function chooseFinance(q: QuoteRow, providerId: string) {
   if (!fp) throw new Error("That finance option isn't available");
   const p = await reprice(q, { extraLabour: extraFromSnapshot(q) });
   const reference = `DS${q.token.slice(0, 6).toUpperCase()}`;
-  await write({ actor: CUSTOMER, action: "payments.create" }, { token: q.token, method: `finance:${fp.id}` }, async (tx) => {
-    await tx`insert into payments (quote_id, kind, method, amount, reference) values (${q.id}, 'system', ${`finance:${fp.id}`}, ${p.stack.amount_payable}, ${reference})`;
-    await tx`update quotes set status = 'payment_pending', payment_method = ${`finance:${fp.id}`}, payment_reference = ${reference}, snapshot = ${tx.json(p as never)},
-      amount_payable = ${p.stack.amount_payable}, updated_at = now() where id = ${q.id} and status = 'signed'`;
-    return { entity: "quote", entityId: q.id, event: "quote.payment_pending", result: { method: fp.id } };
-  });
+  await transition(q, "payment_pending", CUSTOMER, { action: "payments.create", via: "createPayment", payload: { method: `finance:${fp.id}` },
+    set: { payment_method: `finance:${fp.id}`, payment_reference: reference, snapshot: db().json(p as never), amount_payable: p.stack.amount_payable },
+    work: async (tx) => { await tx`insert into payments (quote_id, kind, method, amount, reference) values (${q.id}, 'system', ${`finance:${fp.id}`}, ${p.stack.amount_payable}, ${reference})`; return { method: fp.id }; } });
 }
 export const financeLink = (url: string, ref: string, amount: number) =>
   url.replaceAll("{ref}", encodeURIComponent(ref)).replaceAll("{amount}", amount.toFixed(2));
@@ -294,78 +286,108 @@ function extraFromSnapshot(q: QuoteRow): LabourRequest[] {
 
 /* Ops: funds received → awaiting_date (D5) */
 export async function markPaid(q: QuoteRow, actor: Actor) {
-  if (!["payment_pending", "payment_review"].includes(q.status)) throw new Error("Not awaiting payment");
-  if (actor.type === "staff") {
+  if (!JOB_SETS.AWAITING_PAYMENT.includes(q.status)) throw new Error("Not awaiting payment");
+  if (!(actor.type === "system" && actor.id === "stripe")) {
+    // Nobody but Stripe confirms a card or PayTo payment: not staff, not an approved agent proposal (9 Nov 2026).
     const { isOnline } = await import("./stripe");
     if (isOnline(q.payment_method)) throw new Error("Card and PayTo payments are confirmed by Stripe, not by hand. Use Reconcile on Ops → Payments, or ask the customer to change how they pay.");
   }
-  await db()`update payments set status = 'received', received_at = now() where quote_id = ${q.id} and kind = 'system' and status in ('pending','review')`;
-  await move(q, "awaiting_date", actor, "payments.receive", { paid_at: new Date(), slot_hold_until: new Date(Date.now() + 48 * 3600_000) }, "Funds matched to reference");
-  // Tax invoice number is issued at the moment payment is received.
-  await db()`update quotes set invoice_number = 'INV-' || nextval('invoice_seq') where id = ${q.id} and invoice_number is null`;
+  // One transaction: the payment row, the status, the paid stamp and the invoice number land together or not at all.
+  await transition(q, "awaiting_date", actor, { action: "payments.receive", via: "markPaid", rationale: "Funds matched to reference", set: { paid_at: new Date() },
+    work: async (tx) => {
+      await tx`update payments set status = 'received', received_at = now() where quote_id = ${q.id} and kind = 'system' and status in ('pending','review')`;
+      await tx`update quotes set invoice_number = 'INV-' || nextval('invoice_seq') where id = ${q.id} and invoice_number is null`;
+    } });
   await queueMessage("M3", q.token, q.customer_email, { name: q.customer_name });
   { const { trackConversion } = await import("./conversions"); await trackConversion(q.id, "Purchase", (q.snapshot ?? q.result).stack.amount_payable); }
   const { requestOffer } = await import("./schedule");
   await requestOffer((await getQuote(q.token))!).catch(() => null);   // installer not on a live calendar: ask them for days
 }
 
-/* Stage moves by ops / installer (O2, I4) */
-/** Transitions "Change stage" must never take: each has its own action that moves money or the ledger. */
-export const MONEY_MOVES: [JobState, JobState][] = [
-  ["payment_pending", "awaiting_date"], ["payment_review", "awaiting_date"], ["awaiting_date", "booked"], ["signed", "payment_pending"],
-];
+/* Stage moves by ops / installer (O2, I4): only edges the engine marks manual. Money, price, day and cancel edges name their action. */
+/** Edges "Change stage" never takes, derived from the machine (kept for callers that still import it). */
+export const MONEY_MOVES: [JobState, JobState][] = QUOTE.edges.filter((e) => !isManualEdge(e.from, e.to)).map((e) => [e.from, e.to]);
 export async function advance(q: QuoteRow, to: JobState, actor: Actor, rationale: string) {
-  if (MONEY_MOVES.some(([a, b]) => a === q.status && b === to)) throw new Error(`${q.status} → ${to} moves money or the installer ledger; use "Mark paid" / the booking step instead of Change stage.`);
-  await move(q, to, actor, "jobs.advance", {}, rationale);
-  if (to === "installed") {
-    const st = (q.snapshot ?? q.result);
-    await db()`insert into stc_receivables (quote_id, solar_stcs, battery_stcs, expected_value) values (${q.id}, ${st.rebate.solar_stcs}, ${st.rebate.battery_stcs}, ${st.stack.less_stcs}) on conflict do nothing`;
-    await db()`update pay_ledger set status = 'eligible' where quote_id = ${q.id} and status = 'accrued'`;
-    if (q.discount_code) await db()`insert into payouts (code, quote_id, amount, status) select code, ${q.id}, reward, 'eligible' from codes where code = ${q.discount_code} on conflict do nothing`;
-    const first = (q.customer_name ?? "FRIEND").split(" ")[0]!.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 8) || "FRIEND";
-    // Name + 6 random characters (no 0/O/1/I): about a billion codes per first name, so they can't be guessed.
-    const { randomInt } = await import("node:crypto");
-    const tail = Array.from({ length: 6 }, () => "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"[randomInt(32)]).join("");
-    await db()`insert into codes (code, kind, owner_quote_id) select ${`${first}-${tail}`}, 'referral', ${q.id} where not exists (select 1 from codes where owner_quote_id = ${q.id} and kind = 'referral')`;
-    await queueMessage("M6", q.token, q.customer_email, { name: q.customer_name });
-  }
+  return manualTransition(q, to, actor, rationale);
+}
+
+/* Inline hooks: work an edge always needs, inside the same transaction as the move. */
+registerHook("installed!", async (tx, raw) => {
+  const q = raw as unknown as QuoteRow;
+  const st = (q.snapshot ?? q.result);
+  await tx`insert into stc_receivables (quote_id, solar_stcs, battery_stcs, expected_value) values (${q.id}, ${st.rebate.solar_stcs}, ${st.rebate.battery_stcs}, ${st.stack.less_stcs}) on conflict do nothing`;
+  await tx`update pay_ledger set status = 'eligible' where quote_id = ${q.id} and status = 'accrued'`;
+  if (q.discount_code) await tx`insert into payouts (code, quote_id, amount, status) select code, ${q.id}, reward, 'eligible' from codes where code = ${q.discount_code} on conflict do nothing`;
+  const first = (q.customer_name ?? "FRIEND").split(" ")[0]!.toUpperCase().replace(/[^A-Z]/g, "").slice(0, 8) || "FRIEND";
+  // Name + 6 random characters (no 0/O/1/I): about a billion codes per first name, so they can't be guessed.
+  const { randomInt } = await import("node:crypto");
+  const tail = Array.from({ length: 6 }, () => "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"[randomInt(32)]).join("");
+  await tx`insert into codes (code, kind, owner_quote_id) select ${`${first}-${tail}`}, 'referral', ${q.id} where not exists (select 1 from codes where owner_quote_id = ${q.id} and kind = 'referral')`;
+  return () => queueMessage("M6", q.token, q.customer_email, { name: q.customer_name });
+});
+registerHook("completeCheck!", async (tx, q) => {
+  const [{ open }] = await tx`select count(*)::int open from pay_ledger where quote_id = ${q.id} and status <> 'paid' and amount_ex > 0` as never as [{ open: number }];
+  if (open > 0) throw new Error(`${open} installer pay line(s) are not paid yet; a job completes once the installer has been paid in full`);
+});
+
+/** Tech review → back to an installer who covers the postcode (tech_review is also where "no installer" lands, so find one now). */
+export async function sendToInstaller(q: QuoteRow, actor: Actor, rationale: string) {
+  if (!q.site) throw new Error("No site answers on this job");
+  const inst = await installerFor(q, q.site);
+  if (!inst) throw new Error("No active installer covers this postcode. Price it from here or decline.");
+  await transition(q, "pricing_installer", actor, { action: "jobs.assign_installer", via: "assignInstaller", rationale,
+    set: { installer_id: inst.id, pricing_requested_at: new Date(), scope_version: inst.scope.version } });
+  await notifyInstallerToPrice((await getQuote(q.token))!, inst.id, "reassigned");
 }
 
 /* D6: variation after payment */
 export async function raiseVariation(q: QuoteRow, actor: Actor, code: string, description: string, installerCostEx?: number) {
-  if (!["booked", "gear_ordered", "delivered", "on_site"].includes(q.status)) throw new Error("Variations are raised after payment and before install");
+  if (!JOB_SETS.VARIATION_OK.includes(q.status)) throw new Error("Variations are raised after payment and before install");
   const { menu, margins } = await pricingData();
   const item = menu.items.find((i) => i.code === code);
   const line = installerCostEx != null ? variationLine(code, description, installerCostEx, margins)
     : labourLines([{ code }], { kw: 0, panels: 0 }, { kind: "variation", menu, margins })[0];
   if (!line || line.sell_ex_gst == null) throw new Error("Unknown variation; give an installer cost");
   const amt = variationAmount(line);
-  await write({ actor, action: "variations.raise" }, { token: q.token, code, description, installerCostEx }, async (tx) => {
+  const insert = async (tx: Tx) => {
     const [v] = await tx`insert into variations (quote_id, code, description, installer_cost_ex, sell_ex, gst, sell_inc, raised_by)
       values (${q.id}, ${code}, ${description || item?.description || code}, ${line.cost_ex_gst}, ${amt.ex_gst}, ${amt.gst}, ${amt.inc_gst}, ${actor.id}) returning id`;
-    if (q.status === "on_site") await tx`update quotes set status = 'variation_pending', updated_at = now() where id = ${q.id}`;
-    return { entity: "quote", entityId: q.id, event: "variation.raised", result: { variation_id: v!.id, ...amt } };
-  });
+    return { variation_id: v!.id as string, ...amt };
+  };
+  // On site, the job goes on hold until the customer decides; earlier than that the variation just waits on the record.
+  if (q.status === "on_site") await transition(q, "variation_pending", actor, { action: "variations.raise", via: "raiseVariation", work: insert, payload: { code } });
+  else await write({ actor, action: "variations.raise" }, { token: q.token, code, description, installerCostEx }, async (tx) => ({ entity: "quote", entityId: q.id, event: "variation.raised", result: await insert(tx) }));
   await queueMessage("M8", q.token, q.customer_email, { name: q.customer_name, amount: amt.inc_gst });
 }
 
 export async function decideVariation(q: QuoteRow, variationId: string, approve: boolean) {
-  await write({ actor: CUSTOMER, action: approve ? "variations.approve" : "variations.decline" }, { token: q.token, variationId }, async (tx) => {
+  if (JOB_SETS.CLOSED.includes(q.status) || JOB_SETS.INSTALLED.includes(q.status)) throw new Error("This job has moved on; call us about the change");
+  const action = approve ? "variations.approve" : "variations.decline";
+  const decide = async (tx: Tx) => {
     const [v] = await tx`update variations set status = ${approve ? "approved" : "declined"}, decided_at = now()
       where id = ${variationId} and quote_id = ${q.id} and status = 'proposed' returning id, sell_inc, installer_cost_ex, description`;
     if (!v) throw new Error("Variation not found");
     if (approve) {
       await tx`insert into payments (quote_id, variation_id, kind, method, amount, reference) values (${q.id}, ${variationId}, 'variation', 'bank', ${v.sell_inc}, ${`DSV${q.token.slice(0, 5).toUpperCase()}`})`;
-      if (q.installer_id) await tx`insert into pay_ledger (installer_id, quote_id, variation_id, description, amount_ex) values (${q.installer_id}, ${q.id}, ${variationId}, ${`Variation: ${v.description}`}, ${v.installer_cost_ex})`;
+      // A variation approved after install is pay-eligible straight away; before install it waits with the rest (9 Nov 2026).
+      if (q.installer_id) await tx`insert into pay_ledger (installer_id, quote_id, variation_id, description, amount_ex, status) values (${q.installer_id}, ${q.id}, ${variationId}, ${`Variation: ${v.description}`}, ${v.installer_cost_ex}, ${JOB_SETS.INSTALLED.includes(q.status) ? "eligible" : "accrued"})`;
     }
-    if (q.status === "variation_pending") await tx`update quotes set status = 'on_site', updated_at = now() where id = ${q.id}`;
-    return { entity: "quote", entityId: q.id, event: approve ? "variation.approved" : "variation.declined", result: { variationId } };
-  });
+    const [{ open }] = await tx`select count(*)::int open from variations where quote_id = ${q.id} and status = 'proposed'` as never as [{ open: number }];
+    return { variationId, approved: approve, still_open: open };
+  };
+  if (q.status !== "variation_pending") {
+    await write({ actor: CUSTOMER, action }, { token: q.token, variationId }, async (tx) => ({ entity: "quote", entityId: q.id, event: approve ? "variation.approved" : "variation.declined", result: await decide(tx) }));
+    return;
+  }
+  // On hold: the hold lifts only once every proposed variation has an answer.
+  const [{ others }] = await db()`select count(*)::int others from variations where quote_id = ${q.id} and status = 'proposed' and id <> ${variationId}` as never as [{ others: number }];
+  if (others > 0) await write({ actor: CUSTOMER, action }, { token: q.token, variationId }, async (tx) => ({ entity: "quote", entityId: q.id, event: approve ? "variation.approved" : "variation.declined", result: await decide(tx) }));
+  else await transition(q, "on_site", CUSTOMER, { action, via: "decideVariation", work: decide, payload: { variationId, approved: approve } });
 }
 
 /* D7: cancellation (refund handled by ops; Stripe refunds switch on at go-live) */
 export async function cancel(q: QuoteRow, actor: Actor, reason: string) {
-  await move(q, "cancelled", actor, "jobs.cancel", { cancelled_at: new Date(), cancel_reason: reason, install_date: null, status_before_cancel: q.status }, reason);
+  await move(q, "cancelled", actor, "jobs.cancel", { cancelled_at: new Date(), cancel_reason: reason, install_date: null, status_before_cancel: q.status }, reason, undefined, "cancel");
   // A card/PayTo intent must not stay live on a cancelled job (it would collect with nowhere to go).
   { const { releaseSystemPayment } = await import("./stripe"); await releaseSystemPayment(q.id).catch(() => null); }
   if (q.install_date) {
@@ -383,7 +405,7 @@ export async function cancel(q: QuoteRow, actor: Actor, reason: string) {
 
 /* Referral / creator code: $250 off before GST; the referrer is paid after this job is installed. */
 export async function applyCode(q: QuoteRow, raw: string) {
-  if (!["secured", "pricing_installer", "priced"].includes(q.status)) throw new Error("Codes can be added before you sign");
+  if (!JOB_SETS.CODE_OK.includes(q.status)) throw new Error("Codes can be added before you sign");
   const code = raw.trim().toUpperCase();
   const [credit] = await db()`select code from credits where code = ${code} and status = 'issued' and expires_on >= current_date`;
   if (credit) {
@@ -429,7 +451,7 @@ export async function designFeePaid(q: QuoteRow, actor: Actor) {
 
 /* C6: revised design. Ops or the installer changes panels, battery modules, backup or adds named work; the change is priced on the
    job's own locked versions and rebate date, and the customer accepts or keeps the original. */
-export const REVISABLE: JobState[] = ["pricing_installer", "tech_review", "priced"];
+export const REVISABLE: readonly JobState[] = JOB_SETS.REVISABLE;
 
 export async function proposeRevision(q: QuoteRow, actor: Actor, change: { panels: number; modules: number; backup: "none" | "whole_home"; extraCodes: string[]; reason: string }) {
   if (!REVISABLE.includes(q.status)) throw new Error("A design can be changed while pricing, or once priced before signing");
@@ -482,7 +504,7 @@ export async function answerRevision(q: QuoteRow, accept: boolean) {
 }
 
 /** States in which a customer whose price was for the current rebate window can move to the next one. */
-export const FORWARDABLE: JobState[] = ["secured", "pricing_instant", "pricing_installer", "tech_review", "priced", "signed", "payment_pending"];
+export const FORWARDABLE: readonly JobState[] = JOB_SETS.FORWARDABLE;
 
 /** The installs-before-the-change are full in this area and this price was for them: today's price for the next window. */
 export async function forwardOffer(q: QuoteRow): Promise<{ from: string; was: number; now: number } | null> {

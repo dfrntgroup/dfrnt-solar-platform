@@ -4,6 +4,7 @@
 // either STRIPE_WEBHOOK_SECRET or the one this app stored (sealed) when it registered its own endpoint.
 import Stripe from "stripe";
 import { db, write } from "@dfrnt/db";
+import type { JobState } from "@dfrnt/engine";
 import { getSetting, setSetting } from "./settings";
 import { seal, unseal } from "./secret";
 
@@ -170,11 +171,10 @@ export async function applyIntent(pi: Stripe.PaymentIntent) {
   }
 }
 
-async function setQuote(id: string, from: string, to: string, why: string) {
-  await write({ actor: STRIPE_ACTOR, action: "payments.status", rationale: why }, { id, from, to }, async (tx) => {
-    const [r] = await tx`update quotes set status = ${to}, updated_at = now() where id = ${id} and status = ${from} returning id`;
-    return { entity: "quote", entityId: id, event: `quote.${to}`, result: { changed: !!r } };
-  });
+/** Stripe's processing ↔ pending flips go through the one door as Stripe; a row that already moved is skipped silently. */
+async function setQuote(id: string, from: JobState, to: JobState, why: string) {
+  const { transitionById } = await import("./transition");
+  await transitionById(id, from, to, STRIPE_ACTOR, { action: "payments.status", rationale: why, via: "stripeStatus" });
 }
 
 async function applyRefund(r: Stripe.Refund) {

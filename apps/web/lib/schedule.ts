@@ -2,7 +2,7 @@
 // Google calendars plus our own bookings), booking, declines, moves, earlier-day offers and the installer-offer fallback.
 import { db, write, type Actor } from "@dfrnt/db";
 import {
-  addDays, cannotDo, DEFAULT_PROFILE, DEFAULT_RULES, earliestDate, freeSlots, jobDays, loadFrom, rebateWindow,
+  addDays, cannotDo, DEFAULT_PROFILE, DEFAULT_RULES, earliestDate, freeSlots, jobDays, JOB_SETS, loadFrom, rebateWindow,
   type Capacity, type CrewCalendar, type InstallerProfile, type JobNeeds, type Slot,
 } from "@dfrnt/engine";
 import { dateAEST, todayAEST } from "./api";
@@ -11,8 +11,9 @@ import { queueMessage, siteUrl } from "./messages";
 import { pricingDataFor } from "./pricing-data";
 import { getSetting } from "./settings";
 import { googleBusy, removeEvent, writeEvents } from "./google";
+import { transition, type Tx } from "./transition";
 
-export const BOOKED: string[] = ["booked", "gear_ordered", "delivered", "on_site", "variation_pending"];
+export const BOOKED: readonly string[] = JOB_SETS.BOOKED;
 const SYSTEM: Actor = { type: "system", id: "scheduler" };
 
 /* ---------- profiles, needs, crews ---------- */
@@ -202,23 +203,34 @@ export async function bookDay(q: QuoteRow, date: string, actor: Actor, via: "cus
   const { decline_hours } = await getSetting("scheduling");
   if (choice.mode === "offer" && via === "customer") via = "installer_offer";
   const fields = { install_date: date, crew_id: slot.crewId || null, job_days: choice.days, install_part: slot.part, booked_via: via, booked_at: new Date(),
-    decline_until: new Date(Date.now() + decline_hours * 3600_000), rebook: false, slot_hold_until: null };
+    decline_until: new Date(Date.now() + decline_hours * 3600_000), rebook: false };
   const oldDate = q.install_date, oldCrew = q.crew_id;
-  await write({ actor, action: rebooking ? "jobs.rebook" : "jobs.book" }, { token: q.token, date, via }, async (tx) => {
-    // One booking at a time per crew (or installer): the second of two simultaneous taps waits here, then
-    // re-checks the calendar and finds the day gone. The lock ends with this transaction.
+  // One booking at a time per crew (or installer): the second of two simultaneous taps waits on the advisory lock, then
+  // re-checks the calendar and finds the day gone. The lock ends with the transaction.
+  const hold = async (tx: Tx) => {
     await tx`select pg_advisory_xact_lock(hashtext(${`book:${slot.crewId || q.installer_id || "none"}`}))`;
     const still = (await daysFor(q, { fresh: true, max: 40 })).slots.some((x) => x.date === date && (x.crewId || "") === (slot.crewId || ""));
     if (!still) throw new Error("That day has just gone. Pick another.");
-    const [row] = await tx`update quotes set ${tx({ ...fields, ...(rebooking ? {} : { status: "booked" }), updated_at: new Date() } as never)}
-      where id = ${q.id} and status = ${q.status} returning id`;
-    if (!row) throw new Error("Job changed while you were booking; reload and try again");
-    if (!rebooking && q.installer_id) await tx`insert into pay_ledger (installer_id, quote_id, description, amount_ex)
-      select ${q.installer_id}, ${q.id}, 'Installation (frozen at pricing)', ${(q.snapshot ?? q.result).stack.installer_pay_ex_gst}
-      where not exists (select 1 from pay_ledger where quote_id = ${q.id} and variation_id is null)`;
-    await tx`update date_offers set status = case when kind = 'installer' then 'taken' else status end where quote_id = ${q.id} and status = 'open' and kind = 'installer'`;
-    return { entity: "quote", entityId: q.id, event: rebooking ? "quote.rebooked" : "quote.booked", result: { date, crew: slot.crewId || null, via } };
-  });
+  };
+  if (rebooking) {
+    await write({ actor, action: "jobs.rebook" }, { token: q.token, date, via }, async (tx) => {
+      await hold(tx);
+      const [row] = await tx`update quotes set ${tx({ ...fields, updated_at: new Date() } as never)} where id = ${q.id} and status = ${q.status} returning id`;
+      if (!row) throw new Error("Job changed while you were booking; reload and try again");
+      await tx`update date_offers set status = case when kind = 'installer' then 'taken' else status end where quote_id = ${q.id} and status = 'open' and kind = 'installer'`;
+      return { entity: "quote", entityId: q.id, event: "quote.rebooked", result: { date, crew: slot.crewId || null, via } };
+    });
+  } else {
+    await transition(q, "booked", actor, { action: "jobs.book", via: "bookDay", set: fields, payload: { date, crew: slot.crewId || null, via },
+      work: async (tx) => {
+        await hold(tx);
+        if (q.installer_id) await tx`insert into pay_ledger (installer_id, quote_id, description, amount_ex)
+          select ${q.installer_id}, ${q.id}, 'Installation (frozen at pricing)', ${(q.snapshot ?? q.result).stack.installer_pay_ex_gst}
+          where not exists (select 1 from pay_ledger where quote_id = ${q.id} and variation_id is null)`;
+        await tx`update date_offers set status = case when kind = 'installer' then 'taken' else status end where quote_id = ${q.id} and status = 'open' and kind = 'installer'`;
+        return { date, crew: slot.crewId || null, via };
+      } });
+  }
   let fresh = (await getQuote(q.token))!;
   if (oldCrew && q.google_event_id && oldCrew !== slot.crewId) {
     const [c] = await db()`select dfrnt_calendar_id from installer_crews where id = ${oldCrew}`;
@@ -239,7 +251,7 @@ export async function bookDay(q: QuoteRow, date: string, actor: Actor, via: "cus
 /** Release a booked day: installer declined, rain, sick, parts, customer or ops. The customer picks again; the freed day is
  *  offered to customers booked later with the same installer. */
 export async function releaseDay(q: QuoteRow, reason: string, actor: Actor) {
-  if (!BOOKED.slice(0, 3).includes(q.status) || !q.install_date) throw new Error("This job has no day to move");
+  if (!JOB_SETS.HAS_DAY.includes(q.status) || !q.install_date) throw new Error("This job has no day to move");
   const crewId = q.crew_id;
   const freed = q.install_date;
   await write({ actor, action: "jobs.release_day", rationale: reason }, { token: q.token, reason }, async (tx) => {

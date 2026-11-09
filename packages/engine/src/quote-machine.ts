@@ -77,8 +77,8 @@ export const JOB_SETS = {
   BOOKED: S("booked", "gear_ordered", "delivered", "on_site", "variation_pending"),
   /** Has a day that can be moved or released. */
   HAS_DAY: S("booked", "gear_ordered", "delivered"),
-  /** A variation can be raised. */
-  VARIATION_OK: S("booked", "gear_ordered", "delivered", "on_site"),
+  /** A variation can be raised (a second one while already on hold just joins the first). */
+  VARIATION_OK: S("booked", "gear_ordered", "delivered", "on_site", "variation_pending"),
   /** Work done: the customer's System Record is live. */
   INSTALLED: S("installed", "lodged", "settled", "complete"),
   /** Live, before install, not closed: the pipeline for capacity and rebate-window planning. */

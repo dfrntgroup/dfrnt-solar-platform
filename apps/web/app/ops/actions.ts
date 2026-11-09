@@ -149,7 +149,7 @@ export async function techReview(f: FormData) {
   await run(`/ops/job/${id}`, async () => {
     const q = (await getQuoteById(id))!;
     const d = s(f, "decision");
-    if (d === "installer") await advance(q, "pricing_installer", me.actor, s(f, "note") || "Tech review: back to the installer");
+    if (d === "installer") { const { sendToInstaller } = await import("@/lib/jobs"); await sendToInstaller(q, me.actor, s(f, "note") || "Tech review: to an installer"); }
     else if (d === "decline") await advance(q, "declined", me.actor, s(f, "note") || "Tech review: declined");
     else await installerPrice(q, me.actor, extraCodes(f), s(f, "note") || "Tech review: priced by ops");
   });
@@ -608,6 +608,6 @@ export async function bankSave(f: FormData) {
     if (acct && (acct.length < 6 || acct.length > 10)) throw new Error("Account number must be 6–10 digits");
     const { setSetting } = await import("@/lib/settings");
     await setSetting("bank", { account_name: s(f, "account_name").slice(0, 80), bsb: bsb ? `${bsb.slice(0, 3)}-${bsb.slice(3)}` : "", account_number: acct, bank: s(f, "bank").slice(0, 60) }, me.name);
-    await db()`insert into events (type, entity, entity_id, payload) values ('bank.changed', 'settings', null, ${db().json({ by: me.name })})`;
+    await db()`insert into events (type, entity, entity_id, payload) values ('bank.changed', 'settings', 'bank', ${db().json({ by: me.name })})`;
   });
 }

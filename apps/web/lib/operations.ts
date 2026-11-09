@@ -2,7 +2,7 @@
 // R read · A act (reversible, internal) · P propose (a person approves in O22) · H human only (never exposed).
 import { z } from "zod";
 import { db, type Actor } from "@dfrnt/db";
-import { priceSystem, quote, type JobState } from "@dfrnt/engine";
+import { JOB_LABELS, nextMoves, priceSystem, quote, STATES, statusLabel, type JobState } from "@dfrnt/engine";
 import { pricingData } from "./pricing-data";
 import { ConfigInputSchema, QuoteRequestSchema } from "./schema";
 import { createQuote } from "./quotes";
@@ -39,11 +39,11 @@ export const OPERATIONS: Record<string, Op> = {
   "quotes.get": {
     tier: "R", description: "Read a quote or job by its record token.",
     input: z.object({ token: z.string().regex(/^[0-9a-f]{36}$/) }),
-    run: async ({ token }) => { const q = await getQuote(token); return q && { status: q.status, title: q.title, install_date: q.install_date, amount_payable: (q.snapshot ?? q.result).stack.amount_payable, lock_until: q.lock_until }; },
+    run: async ({ token }) => { const q = await getQuote(token); return q && { status: q.status, status_label: statusLabel(q), next: nextMoves(q.status), title: q.title, install_date: q.install_date, amount_payable: (q.snapshot ?? q.result).stack.amount_payable, lock_until: q.lock_until }; },
   },
   "jobs.list": {
     tier: "R", description: "List jobs by state (e.g. pricing_installer, payment_pending, booked).",
-    input: z.object({ status: z.string().optional(), limit: z.number().int().max(200).default(50) }),
+    input: z.object({ status: z.enum(STATES).optional(), limit: z.number().int().max(200).default(50) }),
     run: async ({ status, limit }) => db()`select id, status, title, customer_name, postcode, amount_payable::float8 amount, install_date::text install_date, updated_at
       from quotes where (${status ?? null}::text is null or status::text = ${status ?? null}) order by updated_at desc limit ${limit}`,
   },
@@ -58,13 +58,13 @@ export const OPERATIONS: Record<string, Op> = {
         db()`select code, description, sell_inc::float8, status from variations where quote_id = ${id}`,
         db()`select template, status, subject, created_at from messages where quote_id = ${id}`,
       ]);
-      return { ...q, input: undefined, result: undefined, payments, variations, messages };
+      return { ...q, input: undefined, result: undefined, status_label: statusLabel(q), next: nextMoves(q.status), payments, variations, messages };
     },
   },
   "jobs.advance": {
-    tier: "P", description: "Move a job to its next stage (e.g. booked → gear_ordered). A person approves.",
-    input: z.object({ id: z.string().uuid(), to: z.string() }),
-    run: async ({ id, to }, actor, rationale) => advance((await getQuoteById(id))!, to as JobState, actor, rationale ?? "Agent proposal"),
+    tier: "P", description: `Move a job to a next stage it can take by hand (e.g. booked → gear_ordered). Moves that price, pay, book or cancel are refused here: use their own operation. A person approves. Stages: ${STATES.join(", ")}.`,
+    input: z.object({ id: z.string().uuid(), to: z.enum(STATES) }),
+    run: async ({ id, to }, actor, rationale) => { const q = (await getQuoteById(id))!; return { ...(await advance(q, to as JobState, actor, rationale ?? "Agent proposal")), label: JOB_LABELS[to as JobState] }; },
   },
   "payments.mark_received": {
     tier: "P", description: "Match a bank transfer to a job and mark it paid. A person approves.",

@@ -3,36 +3,39 @@ import { db, write } from "@dfrnt/db";
 import { todayAEST } from "./api";
 import { queueMessage } from "./messages";
 import { SYSTEM } from "./jobs";
-import { rebateWindow } from "@dfrnt/engine";
+import { rebateWindow, type JobState } from "@dfrnt/engine";
 import { pricingData } from "./pricing-data";
 import { longDate } from "./site";
+import { transitionById } from "./transition";
 
-async function setStatus(id: string, from: string, to: string, why: string, extra: Record<string, unknown> = {}) {
-  await write({ actor: SYSTEM, action: "timers.transition", rationale: why }, { id, from, to }, async (tx) => {
-    const [r] = await tx`update quotes set ${tx({ status: to, updated_at: new Date(), ...extra } as never)} where id = ${id} and status = ${from} returning id`;
-    return { entity: "quote", entityId: id, event: `quote.${to}`, result: { changed: !!r } };
-  });
-}
+/** Timer moves go through the one door; a row that already moved is skipped without an audit row or event. */
+const setStatus = (id: string, from: JobState, to: JobState, why: string, via?: string, extra: Record<string, unknown> = {}) =>
+  transitionById(id, from, to, SYSTEM, { action: "timers.transition", rationale: why, via, set: extra });
 
 export async function runDaily() {
   const today = todayAEST();
   const out: Record<string, unknown> = {};
   // Price locks: secured or priced quotes past their lock lapse (the lock is held while we're pricing).
   const lapsed = await db()`select id, status from quotes where status in ('secured','priced') and lock_until < ${today}`;
-  for (const q of lapsed) await setStatus(q.id as string, q.status as string, "lapsed", "Price lock expired");
+  for (const q of lapsed) await setStatus(q.id as string, q.status as JobState, "lapsed", "Price lock expired");
   out.lapsed = lapsed.length;
   // Saved quotes close after 90 days.
   const expired = await db()`select id from quotes where status = 'saved' and created_at < now() - interval '90 days'`;
   for (const q of expired) await setStatus(q.id as string, "saved", "expired", "Saved quote older than 90 days");
   out.expired = expired.length;
-  // Bank transfer: reminders on day 3 and day 6, released on day 7.
+  // Bank transfer: reminders on day 3 and day 6, released on day 7. Card, PayTo and finance are Stripe's or the lender's to settle:
+  // the 7-day release never touches them (bug fixed 9 Nov 2026; before, every method was released and the Stripe intent left open).
   const pending = await db()`select id, token, customer_email, customer_name, payment_reference, amount_payable::float8 amount, reminders, payment_method,
     extract(day from now() - updated_at)::int age from quotes where status = 'payment_pending'`;
   let reminded = 0, released = 0;
   for (const q of pending) {
     const r = (q.reminders ?? {}) as Record<string, string>;
-    if (q.age >= 7) { await setStatus(q.id as string, "payment_pending", "signed", "Bank transfer not received in 7 days; released"); released++; continue; }
-    if (q.payment_method && q.payment_method !== "bank") continue;   // PayTo/card/finance don't get bank-transfer reminders
+    if (q.payment_method && q.payment_method !== "bank") continue;   // PayTo/card/finance don't get bank-transfer reminders or the release
+    if (q.age >= 7) {
+      const out = await setStatus(q.id as string, "payment_pending", "signed", "Bank transfer not received in 7 days; released", "release", { payment_method: null });
+      if (out.changed) { await db()`update payments set status = 'failed' where quote_id = ${q.id} and kind = 'system' and method = 'bank' and status = 'pending'`; released++; }
+      continue;
+    }
     for (const day of [3, 6]) if (q.age >= day && !r[`bank_${day}`]) {
       await queueMessage("PAY", q.token as string, q.customer_email as string, { name: q.customer_name as string, amount: q.amount, reference: q.payment_reference as string });
       await db()`update quotes set reminders = reminders || ${db().json({ [`bank_${day}`]: today })} where id = ${q.id}`;
@@ -40,9 +43,6 @@ export async function runDaily() {
     }
   }
   out.bank_reminders = reminded; out.bank_released = released;
-  // 48 h date hold after payment.
-  const holds = await db()`update quotes set slot_hold_until = null where status = 'awaiting_date' and slot_hold_until < now() returning id`;
-  out.holds_released = holds.length;
   // M5: the day before install.
   const tomorrow = new Date(Date.now() + 34 * 3600_000).toISOString().slice(0, 10);
   const dayBefore = await db()`select id, token, customer_email, customer_name, reminders from quotes
@@ -111,10 +111,14 @@ export async function runDaily() {
   await step("formbay", () => runFormbaySync());
   await step("energy", async () => (await import("./energy")).runEnergy());
   await step("email_retry", async () => (await import("./email")).retryFailedMessages());
-  // Agent proposals expire after 24 h.
-  const exp = await db()`update approvals set status = 'expired', decided_at = now(), decision_note = 'Expired after 24 h'
-    where status = 'pending' and created_at < now() - interval '24 hours' returning id`;
-  out.proposals_expired = exp.length;
+  // Agent proposals expire after 24 h (system expiry: no decided_by; constraint relaxed in 0025). The matching agent action expires with it.
+  await step("proposals_expired", async () => {
+    const exp = await db()`update approvals set status = 'expired', decided_at = now(), decision_note = 'Expired after 24 h'
+      where status = 'pending' and created_at < now() - interval '24 hours' returning id, agent_action_id`;
+    const ids = exp.map((e) => e.agent_action_id).filter(Boolean) as string[];
+    if (ids.length) await db()`update agent_actions set outcome = 'expired' where id = any(${ids}::uuid[]) and outcome = 'proposed'`;
+    return exp.length;
+  });
   return out;
 }
 
@@ -168,8 +172,9 @@ export async function runCutoff() {
   try { await (await import("./email")).retryFailedMessages(); } catch (e) { await (await import("./report")).report("timers.cutoff.email_retry", e); }
   const dow = new Date(Date.now() + 10 * 3600_000).getUTCDay();
   if (dow === 0 || dow === 6) return { followups, sheets, reassigned: 0, to_ops: 0, weekend: true };
+  // One clock for "the installer is late": the moment the price was asked for (set at submit, reassignment and photo retake).
   const waiting = await db()`select id, installer_id, postcode, pricing_reasons, tried_installers from quotes
-    where status = 'pricing_installer' and updated_at < now() - interval '1 hour'`;
+    where status = 'pricing_installer' and coalesce(pricing_requested_at, updated_at) < now() - interval '1 hour'`;
   let reassigned = 0, toOps = 0;
   const { allow_test_installer: allowTest } = await (await import("./settings")).getSetting("pricing_mode");
   for (const q of waiting) {
@@ -185,9 +190,12 @@ export async function runCutoff() {
       reassigned++;
     } else {
       await setStatus(q.id as string, "pricing_installer", "tech_review", "5 pm cut-off missed and no other installer covers this postcode");
+      // An instant price that never froze is rescued the same way (pricing_instant → tech_review, 9 Nov 2026).
       toOps++;
     }
   }
+  const stuck = await db()`select id from quotes where status = 'pricing_instant' and updated_at < now() - interval '1 hour'`;
+  for (const q of stuck) { const out = await setStatus(q.id as string, "pricing_instant", "tech_review", "Instant price never froze; rescued to tech review"); if (out.changed) toOps++; }
   return { followups, sheets, reassigned, to_ops: toOps };
 }
 
@@ -231,8 +239,9 @@ export async function runFormbaySync() {
         await pullFormbayRecord(j.id as string).catch(() => null);
       }
       if (j.status === "installed" && ["pending_cer_approval", "cer_approved", "sold"].includes(r.status)) {
-        await setStatus(j.id as string, "installed", "lodged", `Formbay status ${r.status}: submitted to the Clean Energy Regulator`);
-        lodged++;
+        const out = await setStatus(j.id as string, "installed", "lodged", `Formbay status ${r.status}: submitted to the Clean Energy Regulator`);
+        // The STC receivable follows the job (bug 9, fixed 9 Nov 2026): Formbay lodging it is the same fact as the Ops "Lodged" button.
+        if (out.changed) { await db()`update stc_receivables set status = 'lodged', updated_at = now() where quote_id = ${j.id} and status = 'expected'`; lodged++; }
       }
     } catch (e) { failed++; await (await import("./report")).report("timers.formbay_sync", e, { quote_id: j.id }); }
   }
