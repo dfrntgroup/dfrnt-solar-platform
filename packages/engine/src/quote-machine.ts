@@ -1,7 +1,7 @@
 // The quote/job lifecycle, declared once (9 Nov 2026). STATES and TRANSITIONS stay in jobs.ts for the code that imports them;
 // everything else about the machine (labels, named sets, the effect each edge needs, who may take it) lives here.
 import { defineMachine, type Tier } from "./machines";
-import { STATES, TRANSITIONS, type JobState } from "./jobs";
+import { BOARD, STATES, TRANSITIONS, type JobState } from "./jobs";
 
 /** One label per state, used everywhere a state is shown (customer record, Ops, installer portal, API, agents). */
 export const JOB_LABELS: Record<JobState, string> = {
@@ -93,14 +93,14 @@ export const JOB_SETS = {
   ON_BOARD: QUOTE.where((s) => !["saved", "expired", "lapsed", "declined", "cancelled"].includes(s)),
 } as const;
 
-/** Groups for the customer's progress chips: the journey in six steps. */
+/** Groups for the customer's progress chips: the journey in six steps (closed states sit in none). */
 export const JOB_STEPS: { label: string; states: readonly JobState[] }[] = [
-  { label: "Price", states: S("saved", "secured", "pricing_instant", "pricing_installer", "tech_review", "priced") },
+  { label: "Your home", states: S("saved", "secured", "lapsed") },
+  { label: "Price", states: S("pricing_instant", "pricing_installer", "tech_review", "priced") },
   { label: "Sign + pay", states: S("signed", "payment_pending", "payment_review") },
   { label: "Book", states: S("awaiting_date") },
   { label: "Install", states: S("booked", "gear_ordered", "delivered", "on_site", "variation_pending") },
-  { label: "Rebate", states: S("installed", "lodged") },
-  { label: "Done", states: S("settled", "complete") },
+  { label: "Done", states: S("installed", "lodged", "settled", "complete") },
 ];
 
 /** Sub-status: things the state column doesn't say but every screen needs to. */
@@ -122,3 +122,21 @@ export function nextMoves(from: JobState, maxTier: Tier = "H"): NextMove[] {
   return QUOTE.next(from).map((to) => ({ to, label: JOB_LABELS[to], via: ownerOf(from, to), tier: QUOTE.tierOf(from, to), manual: isManualEdge(from, to) }))
     .filter((m) => rank[m.tier] <= rank[maxTier]);
 }
+
+/** Ops board columns, in journey order, derived from BOARD for the states that belong on the board. */
+export const BOARD_COLUMNS: readonly string[] = Object.freeze([...new Set(JOB_SETS.ON_BOARD.map((s) => BOARD[s]))]);
+
+/**
+ * One table for "this job is waiting too long" (decided 9 Nov 2026). Hours of wall-clock time since the state's own clock
+ * (pricing_requested_at for installer pricing, paid_at for awaiting a date, updated_at otherwise). The board, the agent sweep
+ * and the crons all read it.
+ */
+export const STALE = {
+  pricing_installer: { nudge_hours: 4, reassign_hours: 24 },
+  pricing_instant: { rescue_hours: 1 },
+  tech_review: { alert_hours: 24 },
+  payment_pending: { remind_days: [3, 6] as readonly number[], release_days: 7 },
+  payment_review: { alert_hours: 0 },
+  awaiting_date: { desk_hours: 48 },
+  booked: { po_days_before_install: 5 },
+} as const;

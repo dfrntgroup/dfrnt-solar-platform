@@ -1,3 +1,4 @@
+import { STALE } from "@dfrnt/engine";
 import Link from "next/link";
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
@@ -23,7 +24,8 @@ export default async function Desk({ searchParams }: { searchParams: Promise<{ e
     from quotes q left join installers i on i.id = q.installer_id
     where (q.status = 'awaiting_date' or q.rebook or (q.status in ('booked','gear_ordered') and q.paid_at > now() - interval '14 days'))
     order by (q.status = 'awaiting_date' or q.rebook) desc, q.paid_at`;
-  const needsHelp = (r: Record<string, unknown>) => r.rebook || r.offer === "requested" || (r.status === "awaiting_date" && Date.now() - new Date(r.paid_at as string).getTime() > 24 * 3600_000);
+  // "Needs help" after the one stale threshold for awaiting a date (engine STALE), the same the board alert uses.
+  const needsHelp = (r: Record<string, unknown>) => r.rebook || r.offer === "requested" || (r.status === "awaiting_date" && Date.now() - new Date(r.paid_at as string).getTime() > STALE.awaiting_date.desk_hours * 3600_000);
   const queue = rows.filter((r) => mode === "all" ? !r.desk_called_at || needsHelp(r) : needsHelp(r));
   const choices: Record<string, DayChoice> = Object.fromEntries(await Promise.all(queue.filter((r) => r.status === "awaiting_date" || r.rebook).slice(0, 15).map(async (r) => [r.id as string, await daysFor((await getQuote(r.token as string))!, { max: 8 })])));
   return (

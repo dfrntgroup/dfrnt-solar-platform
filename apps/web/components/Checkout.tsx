@@ -1,4 +1,5 @@
 // C1: the three-step checkout after "Secure this price": 1 you · 2 your home · 3 photos. Each step saves as it goes.
+import { checkoutStep } from "@/lib/checkout-step";
 import Link from "next/link";
 import QRCode from "qrcode";
 import type { QuoteRow } from "@/lib/jobs";
@@ -25,7 +26,7 @@ const Sel = ({ name, value, opts }: { name: string; value?: string; opts: [strin
 export const photoList = (q: Pick<QuoteRow, "input">): [string, string, string][] => photosFor(q).map((k) => [k, ...PHOTO_COPY[k]] as [string, string, string]);
 
 export function stepFor(q: QuoteRow, asked?: string) {
-  const max = !q.customer_email || !q.checkout_at ? 1 : !q.site_draft?.address ? 2 : 3;
+  const max = checkoutStep(q);
   const want = Number(asked);
   return want >= 1 && want <= max ? want : max;
 }

@@ -7,6 +7,7 @@ import { rebateWindow, type JobState } from "@dfrnt/engine";
 import { pricingData } from "./pricing-data";
 import { longDate } from "./site";
 import { transitionById } from "./transition";
+import { checkoutLeft } from "./checkout-step";
 
 /** Timer moves go through the one door; a row that already moved is skipped without an audit row or event. */
 const setStatus = (id: string, from: JobState, to: JobState, why: string, via?: string, extra: Record<string, unknown> = {}) =>
@@ -124,7 +125,7 @@ export async function runDaily() {
 
 /** C5: someone gave their details but stopped before the photos: a nudge the same day (after 2 hours) and two days later. */
 export async function runCheckoutFollowups() {
-  const rows = await db()`select id, token, customer_email, customer_name, amount_payable::float8 amount, lock_until::text lock_until, reminders, site_draft is not null has_home,
+  const rows = await db()`select id, token, customer_email, customer_name, amount_payable::float8 amount, lock_until::text lock_until, reminders, site_draft, checkout_at, design_fee_status,
       extract(epoch from now() - checkout_at)::int / 3600 hours from quotes
     where status = 'secured' and customer_email is not null and checkout_at is not null and design_fee_status is null and lock_until >= ${todayAEST()}
       and not exists (select 1 from marketing_optout o where o.email = lower(quotes.customer_email))`;
@@ -136,7 +137,7 @@ export async function runCheckoutFollowups() {
     const due = h >= 48 && h < 240 && !r.co_2 ? "co_2" : h >= 2 && h < 30 && !r.co_0 ? "co_0" : null;
     if (!due) continue;
     await queueMessage("M13", q.token as string, q.customer_email as string, { name: String(q.customer_name ?? "").split(" ")[0] || null, amount: q.amount,
-      until: longDate(q.lock_until as string), left: q.has_home ? "four photos" : "two short steps", phone: SELLER.phone, second: due === "co_2" });
+      until: longDate(q.lock_until as string), left: checkoutLeft(q as never), phone: SELLER.phone, second: due === "co_2" });
     await db()`update quotes set reminders = reminders || ${db().json({ [due]: todayAEST(), ...(due === "co_2" ? { co_0: String(r.co_0 ?? "skipped") } : {}) } as never)} where id = ${q.id}`;
     sent++;
   }

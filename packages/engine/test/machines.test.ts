@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BOARD, defineMachine, isManualEdge, JOB_EFFECTS, JOB_LABELS, JOB_SETS, JOB_STEPS, JOB_TIERS, nextMoves, ownerOf, QUOTE, STATES, statusLabel, subStatus, TRANSITIONS } from "../src";
+import { BOARD, BOARD_COLUMNS, defineMachine, isManualEdge, JOB_EFFECTS, JOB_LABELS, JOB_SETS, JOB_STEPS, JOB_TIERS, nextMoves, ownerOf, QUOTE, STATES, statusLabel, subStatus, TRANSITIONS } from "../src";
 
 describe("defineMachine", () => {
   it("rejects unknown targets, missing labels and edge keys that aren't transitions", () => {
@@ -56,6 +56,9 @@ describe("quote machine (golden)", () => {
     expect([...JOB_SETS.CAN_CANCEL].sort()).toEqual(STATES.filter((s) => TRANSITIONS[s].includes("cancelled")).sort());
     expect(JOB_SETS.CAN_CANCEL).toContain("variation_pending");
     expect(JOB_SETS.BOOKED).toEqual(["booked", "gear_ordered", "delivered", "on_site", "variation_pending"]);
+  });
+  it("board columns follow the journey and start at Checkout", () => {
+    expect(BOARD_COLUMNS[0]).toBe("Checkout"); expect(BOARD_COLUMNS).toContain("Complete"); expect(BOARD_COLUMNS).not.toContain("Saved"); expect(BOARD_COLUMNS).not.toContain("Closed");
   });
   it("a stuck instant price can be rescued to tech review", () => expect(QUOTE.can("pricing_instant", "tech_review")).toBe(true));
   it("sub-status and labels", () => {

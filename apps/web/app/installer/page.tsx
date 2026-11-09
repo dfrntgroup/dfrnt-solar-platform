@@ -1,3 +1,4 @@
+import { JOB_SETS, statusLabel, type JobState } from "@dfrnt/engine";
 import Link from "next/link";
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
@@ -14,7 +15,7 @@ export default async function InstallerHome({ searchParams }: { searchParams: Pr
   const me = await requireInstaller(sp.as);
   const q = (id: string) => `/installer/job/${id}${me.viaStaff ? `?as=${me.id}` : ""}`;
   const toPrice = await db()`select id, title, customer_name, postcode, pricing_reasons, updated_at from quotes where installer_id = ${me.id} and status = 'pricing_installer' order by updated_at`;
-  const jobs = await db()`select id, title, customer_name, postcode, status, install_date::text d from quotes where installer_id = ${me.id} and status in ('booked','gear_ordered','delivered','on_site','variation_pending') order by install_date`;
+  const jobs = await db()`select id, title, customer_name, postcode, status, rebook, install_date::text d from quotes where installer_id = ${me.id} and (status = any(${JOB_SETS.BOOKED as string[]}::quote_status[]) or status = 'awaiting_date') order by install_date`;
   const earn = await db()`select status, sum(amount_ex)::float8 total, count(*)::int n from pay_ledger where installer_id = ${me.id} group by 1`;
   const [inst] = await db()`select capacity, scope from installers where id = ${me.id}`;
   const cap = inst!.capacity as { jobsPerDay: number; leadDays: number; workingDays: number[]; blackouts: string[] };
@@ -29,7 +30,7 @@ export default async function InstallerHome({ searchParams }: { searchParams: Pr
         <strong>{r.customer_name as string} · {r.postcode as string}</strong><span className="small">{r.title as string}</span><span className="small muted">{(r.pricing_reasons as string[] | null)?.join(" · ")}</span></Link>)}
       <h2 style={{ marginTop: 28 }}>Upcoming jobs · {jobs.length}</h2>
       {jobs.map((r) => <Link key={r.id as string} href={q(r.id as string)} className="card" style={{ textDecoration: "none", marginBottom: 8 }}>
-        <strong>{r.d ? longDate(r.d as string) : "date tbc"} · {r.customer_name as string} · {r.postcode as string}</strong><span className="small">{r.title as string} · {r.status as string}</span></Link>)}
+        <strong>{r.d ? longDate(r.d as string) : "date tbc"} · {r.customer_name as string} · {r.postcode as string}</strong><span className="small">{r.title as string} · {statusLabel({ status: r.status as JobState, rebook: r.rebook as boolean, install_date: r.d as string | null })}</span></Link>)}
       <h2 style={{ marginTop: 28 }}>Earnings</h2>
       <table className="lines"><tbody>{earn.map((e) => <tr key={e.status as string}><td>{e.status as string} ({e.n as number})</td><td className="r">{aud2(e.total as number)} ex GST</td></tr>)}</tbody></table>
       <div className="grid" style={{ marginTop: 28 }}>

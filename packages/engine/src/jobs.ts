@@ -32,7 +32,7 @@ export const TRANSITIONS: Record<JobState, JobState[]> = {
 
 /** Ops board column for each state (O1). Labels for people live in quote-machine.ts (JOB_LABELS); this is the column grouping. */
 export const BOARD: Record<JobState, string> = {
-  saved: "Saved", secured: "Pricing", pricing_instant: "Pricing", pricing_installer: "Pricing", tech_review: "Tech review",
+  saved: "Saved", secured: "Checkout", pricing_instant: "Pricing", pricing_installer: "Pricing", tech_review: "Tech review",
   priced: "Quoted", signed: "Pending payment", payment_pending: "Pending payment", payment_review: "Payment review",
   awaiting_date: "Awaiting date", booked: "Booked", gear_ordered: "Gear ordered", delivered: "Delivered", on_site: "On site",
   variation_pending: "On hold", installed: "Installed", lodged: "Lodged", settled: "Settled", complete: "Complete",

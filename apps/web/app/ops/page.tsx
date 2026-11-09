@@ -2,7 +2,7 @@ import { rebateWindow } from "@dfrnt/engine";
 import { pricingData } from "@/lib/pricing-data";
 import Link from "next/link";
 import { db } from "@dfrnt/db";
-import { BOARD, earliestDate, type Capacity } from "@dfrnt/engine";
+import { BOARD, BOARD_COLUMNS, earliestDate, JOB_LABELS, JOB_SETS, STALE, statusLabel, type Capacity, type JobState } from "@dfrnt/engine";
 import { todayAEST } from "@/lib/api";
 import { longDate } from "@/lib/site";
 import { AdminShell } from "@/components/Admin";
@@ -13,25 +13,31 @@ import { aud } from "@/lib/site";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Ops board", robots: { index: false } };
 
-const COLUMNS = ["Pricing", "Tech review", "Quoted", "Pending payment", "Payment review", "Awaiting date", "Booked", "Gear ordered", "Delivered", "On site", "On hold", "Installed", "Lodged", "Settled", "Complete"];
+const COLUMNS = BOARD_COLUMNS;
 
 export default async function Board({ searchParams }: { searchParams: Promise<{ stage?: string }> }) {
   const stage = (await searchParams).stage;
   const me = await requireStaff();
-  const rows = await db()`select id, token, status, title, customer_name, postcode, amount_payable::float8 as amount, install_date::text as install_date, updated_at
-    from quotes where status not in ('saved','expired','lapsed','declined','cancelled') order by updated_at desc limit 300`;
+  const rows = await db()`select id, token, status, title, customer_name, postcode, amount_payable::float8 as amount, install_date::text as install_date, rebook, design_fee_status, updated_at
+    from quotes where status = any(${JOB_SETS.ON_BOARD as string[]}::quote_status[]) order by updated_at desc limit 300`;
   const counts = await db()`select status, count(*)::int n from quotes group by 1`;
-  const alerts = await db()`select id, title, status, customer_name from quotes
-    where (status = 'pricing_installer' and updated_at < now() - interval '4 hours') or status = 'payment_review'
-       or (status = 'payment_pending' and updated_at < now() - interval '3 days') order by updated_at limit 20`;
-  const insts = await db()`select business_name, capacity, (select json_object_agg(d, n) from (select install_date::text d, count(*)::int n from quotes q where q.installer_id = i.id and install_date is not null and status in ('booked','gear_ordered','delivered','on_site','variation_pending') group by 1) x) booked from installers i where active`;
+  // "Needs attention" reads the one stale table (engine STALE), the same one the agent sweep and the crons use.
+  const alerts = await db()`select id, title, status, customer_name, rebook, install_date::text install_date from quotes
+    where (status = 'pricing_installer' and coalesce(pricing_requested_at, updated_at) < now() - ${`${STALE.pricing_installer.nudge_hours} hours`}::interval)
+       or (status = 'tech_review' and updated_at < now() - ${`${STALE.tech_review.alert_hours} hours`}::interval)
+       or status = 'payment_review'
+       or (status = 'payment_pending' and payment_method = 'bank' and updated_at < now() - ${`${STALE.payment_pending.remind_days[0]} days`}::interval)
+       or (status = 'awaiting_date' and paid_at < now() - ${`${STALE.awaiting_date.desk_hours} hours`}::interval)
+       or (status = any(${JOB_SETS.BOOKED as string[]}::quote_status[]) and rebook)
+    order by updated_at limit 20`;
+  const insts = await db()`select business_name, capacity, (select json_object_agg(d, n) from (select install_date::text d, count(*)::int n from quotes q where q.installer_id = i.id and install_date is not null and not rebook and status = any(${JOB_SETS.BOOKED as string[]}::quote_status[]) group by 1) x) booked from installers i where active`;
   const earliest = insts.map((i) => ({ name: i.business_name as string, d: earliestDate(todayAEST(), { ...(i.capacity as Omit<Capacity, "booked">), booked: (i.booked ?? {}) as Record<string, number> }) }));
   const failures = await db()`select where_, message, count(*)::int n, max(created_at) last from failures where created_at > now() - interval '7 days' group by 1, 2 order by last desc limit 8`.catch(() => []);
   // December switch-over: areas where installs before the rebate change are fully booked, and who it affects.
   const { rebateFromFor } = await import("@/lib/rebate-from");
   const winEnd = rebateWindow(todayAEST(), (await pricingData()).rebates).window_end;
   const waiting = winEnd ? await db()`select id, postcode, status, customer_name from quotes
-    where status in ('secured','pricing_instant','pricing_installer','tech_review','priced','signed','payment_pending','awaiting_date')
+    where status = any(${JOB_SETS.PIPELINE as string[]}::quote_status[])
       and coalesce(input->>'installDate', '') <= ${winEnd}` : [];
   const fullAreas: { postcode: string; from: string; n: number; paid: number }[] = [];
   for (const pc of [...new Set(waiting.map((w) => w.postcode as string))].slice(0, 40)) {
@@ -41,20 +47,21 @@ export default async function Board({ searchParams }: { searchParams: Promise<{ 
   const days = (d: string | null) => d ? Math.round((Date.parse(d) - Date.parse(todayAEST())) / 86400000) : 999;
   const throttle = earliest.length > 0 && earliest.every((e) => days(e.d) > 21);
   const by = (col: string) => rows.filter((r) => BOARD[r.status as keyof typeof BOARD] === col);
+  const sub = (r: (typeof rows)[number]) => { const l = statusLabel({ status: r.status as JobState, rebook: r.rebook as boolean, install_date: r.install_date as string | null, design_fee_status: r.design_fee_status as string | null }); return l.includes(" · ") ? l.split(" · ")[1] : null; };
   const pm = await (await import("@/lib/settings")).getSetting("pricing_mode");
   return (
     <AdminShell who={me.name} area="ops">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><h1 style={{ fontSize: 28 }}>Board</h1>
         <form action={runTimersNow} style={{ display: "flex", gap: 6 }}><button className="btn ghost sm" name="which" value="daily">Run daily timers</button><button className="btn ghost sm" formAction={async (f: FormData) => { "use server"; f.set("which", "cutoff"); await runTimersNow(f); }}>Run 5 pm cut-off</button><button className="btn ghost sm" formAction={async (f: FormData) => { "use server"; f.set("which", "afternoon"); await runTimersNow(f); }}>Run 3 pm reminder</button></form></div>
       {pm.allow_test_installer && <div className="note small" style={{ margin: "8px 0", borderColor: "#b00020", color: "#b00020" }}><strong>Test installer can be assigned to real quotes.</strong> Switch it off in <Link href="/ops/settings">Settings → Pricing mode</Link> before launch.</div>}
-      <p className="small muted">{counts.map((c) => `${c.status} ${c.n}`).join(" · ")}</p>
+      <p className="small muted">{counts.map((c) => `${JOB_LABELS[c.status as JobState] ?? c.status} ${c.n}`).join(" · ")}</p>
       <p className="small">Earliest install: {earliest.map((e) => `${e.name} ${e.d ? longDate(e.d) : "none"}`).join(" · ")}</p>
       {throttle && <div className="note" style={{ margin: "12px 0" }}><strong>Throttle:</strong> every installer&apos;s earliest date is more than 21 days out. Pause creator and paid spend until capacity frees up (O18).</div>}
       {fullAreas.length > 0 && <div className="note" style={{ margin: "12px 0" }}><strong>Installs before the rebate change are fully booked</strong> in {fullAreas.map((a) => a.postcode).join(", ")}. New prices there now use the next rebate.
         {" "}{fullAreas.reduce((t, a) => t + a.n - a.paid, 0)} customer(s) not yet paid have been offered the new price on their record; <strong>{fullAreas.reduce((t, a) => t + a.paid, 0)} paid customer(s) need a call</strong> to sort a date.</div>}
       {failures.length > 0 && <div className="note" style={{ margin: "12px 0" }}><strong>Something failed in the last 7 days:</strong>
         <ul className="small" style={{ margin: "6px 0 0", paddingLeft: 18 }}>{failures.map((f, i) => <li key={i}><code>{f.where_ as string}</code> ×{f.n as number}: {f.message as string}</li>)}</ul></div>}
-      {alerts.length > 0 && <div className="note" style={{ margin: "12px 0" }}><strong>Needs attention:</strong> {alerts.map((a, i) => <span key={a.id as string}>{i ? " · " : " "}<Link href={`/ops/job/${a.id}`}>{(a.customer_name as string) ?? a.title} ({a.status as string})</Link></span>)}</div>}
+      {alerts.length > 0 && <div className="note" style={{ margin: "12px 0" }}><strong>Needs attention:</strong> {alerts.map((a, i) => <span key={a.id as string}>{i ? " · " : " "}<Link href={`/ops/job/${a.id}`}>{(a.customer_name as string) ?? a.title} ({statusLabel({ status: a.status as JobState, rebook: a.rebook as boolean, install_date: a.install_date as string | null })})</Link></span>)}</div>}
       <div className="mob-only">
         {stage && COLUMNS.includes(stage) ? <>
           <p className="small"><Link href="/ops">← All stages</Link></p>
@@ -63,7 +70,7 @@ export default async function Board({ searchParams }: { searchParams: Promise<{ 
               <Link key={r.id as string} href={`/ops/job/${r.id}`} className="card" style={{ textDecoration: "none", marginBottom: 8, padding: 12, gap: 4 }}>
                 <strong className="small">{(r.customer_name as string) ?? "No name yet"} · {r.postcode as string}</strong>
                 <span className="small muted">{r.title as string}</span>
-                <span className="small">{aud(r.amount as number)}{r.install_date ? ` · ${r.install_date}` : ""}</span>
+                <span className="small">{aud(r.amount as number)}{r.install_date ? ` · ${r.install_date}` : ""}{sub(r) ? ` · ${sub(r)}` : ""}</span>
               </Link>)) : <p className="small muted">Nothing here.</p>}
         </> : <>
           <h3 style={{ fontSize: 13, letterSpacing: ".06em", textTransform: "uppercase", color: "var(--muted)" }}>Stages</h3>
@@ -82,7 +89,7 @@ export default async function Board({ searchParams }: { searchParams: Promise<{ 
               <Link key={r.id as string} href={`/ops/job/${r.id}`} className="card" style={{ textDecoration: "none", marginBottom: 8, padding: 12, gap: 4 }}>
                 <strong className="small">{(r.customer_name as string) ?? "No name yet"} · {r.postcode as string}</strong>
                 <span className="small muted">{r.title as string}</span>
-                <span className="small">{aud(r.amount as number)}{r.install_date ? ` · ${r.install_date}` : ""}</span>
+                <span className="small">{aud(r.amount as number)}{r.install_date ? ` · ${r.install_date}` : ""}{sub(r) ? <strong style={{ color: "var(--accent-dark)" }}> · {sub(r)}</strong> : ""}</span>
               </Link>))}
           </div>))}
       </div>

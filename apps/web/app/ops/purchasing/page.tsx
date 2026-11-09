@@ -5,9 +5,9 @@ import { Step } from "@/components/Step";
 import { requireStaff } from "@/lib/auth";
 import { aud2 } from "@/lib/site";
 import { poAction } from "../actions";
+import { PO_ORDER } from "@/lib/ops";
 
 export const dynamic = "force-dynamic";
-const NEXT: Record<string, [string, string] | undefined> = { draft: ["approved", "Approve"], approved: ["sent", "Mark sent"], sent: ["delivered", "Mark delivered"] };
 
 export default async function Purchasing({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   const me = await requireStaff();
@@ -19,12 +19,12 @@ export default async function Purchasing({ searchParams }: { searchParams: Promi
       <h1 style={{ fontSize: 28 }}>Purchase orders</h1>
       <p className="muted">Drafted from the job&apos;s frozen parts list at our cost. Sending moves the job to gear ordered; when every PO is delivered the job moves to delivered. Supplier cost changes never change the customer&apos;s price.</p>
       {error && <div className="note">{error}</div>}
-      {pos.map((p) => { const n = NEXT[p.status as string]; return (
+      {pos.map((p) => { const to = PO_ORDER.next(p.status as string); return (
         <div key={p.id as string} className="card" style={{ marginBottom: 10 }}>
-          <strong>PO {p.number as number} · {p.supplier as string} · {aud2(p.total as number)} ex GST · {p.status as string}</strong>
+          <strong>PO {p.number as number} · {p.supplier as string} · {aud2(p.total as number)} ex GST · {PO_ORDER.labels[p.status as string] ?? p.status}</strong>
           <span className="small"><Link href={`/ops/job/${p.qid}`}>{(p.customer_name as string) ?? "job"}</Link> · install {(p.d as string) ?? "tbc"}{p.eta ? ` · ETA ${p.eta}` : ""}</span>
           <span className="small muted">{(p.lines as { sku: string; qty: number }[]).map((l) => `${l.qty} × ${l.sku}`).join(" · ")}</span>
-          <div style={{ display: "flex", gap: 6 }}>{n && <Step action={poAction} fields={{ po: p.id as string, to: n[0] }} label={n[1]} />}{p.status !== "delivered" && <Step action={poAction} fields={{ po: p.id as string, to: "cancelled" }} label="Cancel" ghost />}</div>
+          <div style={{ display: "flex", gap: 6 }}>{to && <Step action={poAction} fields={{ po: p.id as string, to }} label={PO_ORDER.label(to)} />}{PO_ORDER.canCancel(p.status as string) && <Step action={poAction} fields={{ po: p.id as string, to: "cancelled" }} label="Cancel" ghost />}</div>
         </div>); })}
     </AdminShell>
   );

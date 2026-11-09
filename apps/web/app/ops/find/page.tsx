@@ -1,3 +1,4 @@
+import { JOB_LABELS, type JobState } from "@dfrnt/engine";
 import Link from "next/link";
 import { db } from "@dfrnt/db";
 import { AdminShell, OPS_GROUPS } from "@/components/Admin";
@@ -26,7 +27,7 @@ export default async function Find({ searchParams }: { searchParams: Promise<{ q
       {q && <><h3>Customers and jobs</h3>
         {jobs.length ? jobs.map((r) => <Link key={r.id as string} href={`/ops/job/${r.id}`} className="card" style={{ textDecoration: "none", marginBottom: 8, padding: 12, gap: 4 }}>
           <strong className="small">{(r.customer_name as string) ?? "No name yet"} · {r.postcode as string}</strong>
-          <span className="small muted">{r.title as string} · {r.status as string}</span><span className="small">{aud(r.amount as number)}</span></Link>)
+          <span className="small muted">{r.title as string} · {JOB_LABELS[r.status as JobState] ?? r.status}</span><span className="small">{aud(r.amount as number)}</span></Link>)
           : <p className="small muted">{q.length < 2 ? "Type at least two letters." : "No customers match."}</p>}</>}
     </AdminShell>
   );

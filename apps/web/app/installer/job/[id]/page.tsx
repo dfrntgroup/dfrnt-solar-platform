@@ -1,3 +1,5 @@
+import { JOB_SETS, nextMoves, statusLabel } from "@dfrnt/engine";
+import { JOB_DAYS_OK } from "@/lib/installer-sets";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
@@ -29,7 +31,7 @@ export default async function InstallerJob({ params, searchParams }: { params: P
   const { menu } = await pricingData();
   const photos = await db()`select kind, path, superseded_at from quote_photos where quote_id = ${id} order by created_at`;
   const urls = await Promise.all(photos.map(async (ph) => ({ kind: ph.kind as string, url: await photoUrl(ph.path as string), old: !!ph.superseded_at })));
-  const waitingFor = ["pricing_installer", "tech_review"].includes(q.status) ? await retakeKinds(q.id) : [];
+  const waitingFor = JOB_SETS.AWAITING_PRICE.includes(q.status) ? await retakeKinds(q.id) : [];
   const label = (k: string) => (PHOTO_COPY as Record<string, [string, string]>)[k]?.[0] ?? k;
   const needed = photosFor(q);
   const site = q.site;
@@ -39,13 +41,15 @@ export default async function InstallerJob({ params, searchParams }: { params: P
   const parts = p.config.bom.filter((b) => !b.included);
   const [instRow] = await db()`select profile, capacity from installers where id = ${me.id}`;
   const estDays = q.job_days ?? jobDays(profileOf(instRow as never), needsOf(q));
-  const bookedish = ["booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed"].includes(q.status);
+  const bookedish = [...JOB_SETS.BOOKED, "installed"].includes(q.status);
+  // What the installer may move this job to, straight from the engine (delivered → on site, on site → installed).
+  const moves = nextMoves(q.status).filter((m) => m.manual && m.to !== "cancelled" && ["on_site", "installed"].includes(m.to));
   const [offer] = await db()`select status, dates::text[] dates from date_offers where quote_id = ${id} and kind = 'installer' and status in ('requested','open') order by created_at desc limit 1`;
   const canDecline = !!q.decline_until && new Date(q.decline_until) > new Date() && !!q.install_date;
   return (
     <AdminShell who={me.business_name} area="installer">
       <p className="small"><Link href={`/installer${me.viaStaff ? `?as=${me.id}` : ""}`}>← My jobs</Link></p>
-      <h1 style={{ fontSize: 26 }}>{q.customer_name} · {q.status}</h1>
+      <h1 style={{ fontSize: 26 }}>{q.customer_name} · {statusLabel(q)}</h1>
       {sp.error && <div className="note">{sp.error}</div>}
       <p>{site ? `${site.address.unit ? site.address.unit + "/" : ""}${site.address.line1}, ${site.address.suburb} ${site.address.postcode}` : ""}{bookedish && q.customer_phone ? <> · <a href={`tel:${q.customer_phone}`}>{q.customer_phone}</a></> : null}</p>
       {q.install_date && !q.rebook && <div className="ok">Install {dayLabel([q.install_date], q.install_part)} · {estDays} crew-day{estDays === 1 ? "" : "s"}{q.booked_via ? ` · booked by ${q.booked_via === "customer" ? "the customer" : q.booked_via === "desk" ? "DFRNT" : q.booked_via === "earlier_offer" ? "the customer (earlier day)" : "the customer from your offered days"}` : ""}</div>}
@@ -85,7 +89,7 @@ export default async function InstallerJob({ params, searchParams }: { params: P
           {canDecline && <form action={cantDoDay} className="card" style={{ marginBottom: 12 }}>{hid}
             <strong>Can&apos;t do {longDate(q.install_date!)}?</strong><span className="small muted">Until {new Date(q.decline_until!).toLocaleString("en-AU", { timeZone: "Australia/Brisbane", weekday: "short", hour: "numeric", minute: "2-digit" })}. The customer picks another of your free days straight away.</span>
             <button className="btn ghost sm">Can&apos;t do this day</button></form>}
-          {["booked", "gear_ordered", "delivered"].includes(q.status) && q.install_date && !q.rebook && !canDecline && <form action={moveDay} className="card" style={{ marginBottom: 12 }}>{hid}
+          {JOB_SETS.HAS_DAY.includes(q.status) && q.install_date && !q.rebook && !canDecline && <form action={moveDay} className="card" style={{ marginBottom: 12 }}>{hid}
             <strong>Move this install</strong><span className="small muted">The customer picks a new day from your free days, inside their rebate deadline.</span>
             <select name="reason" style={input} required defaultValue=""><option value="" disabled>Why?</option><option value="rain">Rain</option><option value="sick">Sick</option><option value="parts">Parts won&apos;t arrive</option></select>
             <button className="btn ghost sm">Move it</button></form>}
@@ -96,18 +100,19 @@ export default async function InstallerJob({ params, searchParams }: { params: P
             {[0, 1, 2].map((n) => <input key={n} type="date" name="date" style={input} required={n === 0} />)}
             <button className="btn sm">Send days to the customer</button>
             <span className="small muted">Connect your Google Calendar and customers book your free days themselves: <Link href={`/installer/calendar${me.viaStaff ? `?as=${me.id}` : ""}`}>Calendar</Link></span></form>}
-          {["pricing_installer", "priced", "signed", "payment_pending", "awaiting_date"].includes(q.status) && <form action={setJobDays} className="card" style={{ marginBottom: 12 }}>{hid}
+          {JOB_DAYS_OK.includes(q.status) && <form action={setJobDays} className="card" style={{ marginBottom: 12 }}>{hid}
             <strong>How long will this job take?</strong><span className="small muted">From the photos. Currently {estDays} crew-day{estDays === 1 ? "" : "s"}{q.job_days ? " (set by you)" : " (from your profile)"}. Customers only see days with this much free time.</span>
             <select name="days" defaultValue={String(estDays)} style={input}>{[0.5, 1, 1.5, 2, 2.5, 3].map((d) => <option key={d} value={d}>{d === 0.5 ? "Half a day" : `${d} day${d === 1 ? "" : "s"}`}</option>)}</select>
             <button className="btn ghost sm">Save</button></form>}
           {q.status === "pricing_installer" && <ReviseForm q={q} action={installerRevise} hidden={hid} />}
-          {["booked", "gear_ordered", "delivered"].includes(q.status) && techs.length > 0 && <form action={setTechnician} className="card" style={{ marginBottom: 12 }}>{hid}
+          {JOB_SETS.HAS_DAY.includes(q.status) && techs.length > 0 && <form action={setTechnician} className="card" style={{ marginBottom: 12 }}>{hid}
             <strong>Technician on this job</strong><select name="technician" defaultValue={(curTech?.technician_id as string) ?? (techs.find((t) => t.is_default)?.id as string)} style={input}>{techs.map((t) => <option key={t.id as string} value={t.id as string}>{t.name as string}</option>)}</select>
             <button className="btn ghost sm">Set technician</button></form>}
           {["booked", "gear_ordered"].includes(q.status) && <div className="ok" style={{ marginBottom: 12 }}>Gear is being ordered and delivered to site before install day.</div>}
-          {q.status === "delivered" && <form action={installerStage} className="card" style={{ marginBottom: 12 }}>{hid}<input type="hidden" name="to" value="on_site" /><button className="btn">I&apos;m on site</button></form>}
-          {q.status === "on_site" && <form action={installerStage} className="card" style={{ marginBottom: 12 }}>{hid}<input type="hidden" name="to" value="installed" /><strong>Commissioned and handed over?</strong><button className="btn">Mark installed</button></form>}
-          {["booked", "gear_ordered", "delivered", "on_site"].includes(q.status) && <form action={installerVariation} className="card">{hid}
+          {moves.map((m) => <form key={m.to} action={installerStage} className="card" style={{ marginBottom: 12 }}>{hid}<input type="hidden" name="to" value={m.to} />
+            {m.to === "installed" ? <><strong>Commissioned and handed over?</strong><span className="small muted">Marks the job installed: your pay line becomes eligible and the STC paperwork starts.</span></> : null}
+            <button className="btn">{m.to === "on_site" ? "I'm on site" : "Mark installed"}</button></form>)}
+          {JOB_SETS.VARIATION_OK.includes(q.status) && <form action={installerVariation} className="card">{hid}
             <strong>Raise a variation</strong><span className="small muted">Work outside the agreed scope pauses until the customer approves.</span>
             <select name="code" style={input}><option value="VAR-CUSTOM">Custom</option>{menu.items.map((i) => <option key={i.code} value={i.code}>{i.description}</option>)}</select>
             <input name="description" placeholder="What and why" style={input} />

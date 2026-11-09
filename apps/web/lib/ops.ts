@@ -36,11 +36,19 @@ export async function draftPOs(quoteId: string, actor: Actor) {
   }
 }
 
+/** Purchase-order lifecycle, declared once: the Ops purchasing page and the job page both read it. */
+export const PO_ORDER = {
+  states: ["draft", "approved", "sent", "delivered"] as const,
+  labels: { draft: "Draft", approved: "Approved", sent: "Sent", delivered: "Delivered", cancelled: "Cancelled" } as Record<string, string>,
+  next(status: string): "approved" | "sent" | "delivered" | null { const i = PO_ORDER.states.indexOf(status as never); return i >= 0 && i < 3 ? (PO_ORDER.states[i + 1] as "approved" | "sent" | "delivered") : null; },
+  label(to: string) { return ({ approved: "Approve", sent: "Mark sent", delivered: "Delivered" } as Record<string, string>)[to] ?? to; },
+  canCancel: (status: string) => status === "draft" || status === "approved" || status === "sent",
+};
 export async function poStep(poId: string, to: "approved" | "sent" | "delivered" | "cancelled", actor: Actor, eta?: string) {
   const [po] = await db()`select id, quote_id, status from purchase_orders where id = ${poId}`;
   if (!po) throw new Error("PO not found");
-  const order = ["draft", "approved", "sent", "delivered"];
-  if (to !== "cancelled" && order.indexOf(to) !== order.indexOf(po.status as string) + 1) throw new Error(`Can't go from ${po.status} to ${to}`);
+  if (to === "cancelled" && !PO_ORDER.canCancel(po.status as string)) throw new Error(`A ${po.status} purchase order can't be cancelled`);
+  if (to !== "cancelled" && PO_ORDER.next(po.status as string) !== to) throw new Error(`Can't go from ${po.status} to ${to}`);
   await write({ actor, action: `purchase_orders.${to}` }, { poId, eta }, async (tx) => {
     await tx`update purchase_orders set status = ${to}, eta = coalesce(${eta ?? null}::date, eta),
       sent_at = case when ${to} = 'sent' then now() else sent_at end, delivered_at = case when ${to} = 'delivered' then now() else delivered_at end where id = ${poId}`;

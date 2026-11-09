@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
-import { TRANSITIONS } from "@dfrnt/engine";
+import { JOB_LABELS, JOB_SETS, nextMoves, statusLabel } from "@dfrnt/engine";
+import { checkoutLabel } from "@/lib/checkout-step";
+import { PO_ORDER } from "@/lib/ops";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
 import { UsageJobCard } from "@/components/UsageJobCard";
-import { getQuoteById, MONEY_MOVES } from "@/lib/jobs";
+import { getQuoteById } from "@/lib/jobs";
 import { photoUrl } from "@/lib/storage";
 import { pricingData } from "@/lib/pricing-data";
 import { aud2 } from "@/lib/site";
@@ -38,15 +40,17 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
   const [fb] = await db()`select formbay_formid, formbay_bstc_id, formbay_status, formbay_complete, formbay_synced_at, formbay_sent_payload is not null sent from quotes where id = ${id}`;
   const [inst] = q.installer_id ? await db()`select formbay_installer_id, business_name from installers where id = ${q.installer_id}` : [];
   const fbJob = buildFormbayJob(q, (inst as never) ?? null);
-  const fbEligible = ["booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed"].includes(q.status);
+  const fbEligible = [...JOB_SETS.BOOKED, "installed"].includes(q.status);
   const pos = await db()`select id, number, supplier, total_ex::float8 total, status from purchase_orders where quote_id = ${id} and status <> 'cancelled' order by number`;
   const received = pays.filter((x) => x.kind !== "refund" && x.status === "received").reduce((a, x) => a + (x.amount as number), 0) - pays.filter((x) => x.kind === "refund" && x.status !== "failed").reduce((a, x) => a + (x.amount as number), 0);
   const vars = await db()`select description, sell_inc::float8 sell_inc, status from variations where quote_id = ${id}`;
   const ledger = await db()`select description, amount_ex::float8 amount_ex, status from pay_ledger where quote_id = ${id}`;
-  const next = TRANSITIONS[q.status].filter((t) => t !== "cancelled");
+  // Change stage offers only the moves the engine marks manual; everything else has its own card below.
+  const manual = nextMoves(q.status).filter((m) => m.manual && m.to !== "cancelled");
+  const owned = nextMoves(q.status).filter((m) => !m.manual && m.to !== "cancelled");
   // Price this job / tech review: what each extra adds for the customer, and the installer's pay for it.
   let extras: Extra[] = [], basePay = 0;
-  if (q.status === "pricing_installer" || q.status === "tech_review") {
+  if (JOB_SETS.AWAITING_PRICE.includes(q.status)) {
     const three = (q.site?.phases ?? q.input.phases) === 3;
     const codes = ["SVC-SWB-HALF", "SVC-SWB-FULL", "SVC-BAT-SLAB", "SVC-BARRIER", "SVC-BOLLARDS", "SVC-TERRACOTTA", "SVC-INST-2STY", "SVC-EXTRA-STRING", three ? "SVC-CABLE-3P" : "SVC-CABLE-1P", "SVC-TRAVEL"];
     try {
@@ -69,7 +73,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
   return (
     <AdminShell who={me.name} area="ops">
       <p className="small"><Link href="/ops">← Board</Link> · <Link href={`/quote/${q.token}`}>Customer record</Link></p>
-      <h1 style={{ fontSize: 26 }}>{q.customer_name ?? "No name yet"} · {q.status}</h1>
+      <h1 style={{ fontSize: 26 }}>{q.customer_name ?? "No name yet"} · {statusLabel(q)}</h1>
       <p className="muted">{q.title} · {p.config.summary}</p>
       {error && <div className="note">{error}</div>}
       <div className="pdp ops-job">
@@ -84,7 +88,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <tr><td>NMI · retailer</td><td className="r">{(site as { nmi?: string }).nmi ?? "not given"} · {(site as { energyRetailer?: string }).energyRetailer ?? "–"}</td></tr>
             <tr><td>Prior battery claim on NMI</td><td className="r">{site.priorBatteryClaim ? "yes" : "no"}</td></tr>
           </tbody></table> : <div>
-            <p className="muted">Not submitted yet. Checkout: {q.design_fee_status === "due" ? "design fee due" : q.site_draft?.address ? `step 3, photos (${urls.length} uploaded)` : q.checkout_at ? "step 2, home details" : "step 1, contact details"}.</p>
+            <p className="muted">Not submitted yet. Checkout: {checkoutLabel(q)}{q.site_draft?.address ? ` (${urls.length} uploaded)` : ""}.</p>
             {q.customer_email && <p className="small">{q.customer_name} · {q.customer_email} · {q.customer_phone ? <a href={`tel:${q.customer_phone}`}>{q.customer_phone}</a> : "no phone"}</p>}
             {q.site_draft?.address && <p className="small">{q.site_draft.address.unit ? `${q.site_draft.address.unit}/` : ""}{q.site_draft.address.line1}, {q.site_draft.address.suburb} {q.site_draft.address.postcode}{q.site_draft.address.gnafPid ? ` · G-NAF ${q.site_draft.address.gnafPid}` : " · typed, not matched"}</p>}
           </div>}
@@ -137,11 +141,11 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <span className="small muted">Marking it received issues a credit for the same amount on this job and sends it to the installer to check.</span>
             <button className="btn" type="submit">Fee received — send to installer</button></form>}
           {REVISABLE.includes(q.status) && <ReviseForm q={q} action={opsRevise} hidden={<input type="hidden" name="id" value={id} />} />}
-          {["booked", "gear_ordered", "delivered"].includes(q.status) && q.install_date && !q.rebook && <form action={opsReleaseDay} className="card" style={{ marginBottom: 12 }}>
+          {JOB_SETS.HAS_DAY.includes(q.status) && q.install_date && !q.rebook && <form action={opsReleaseDay} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Move the install day</strong><span className="small muted">Releases the day; the customer picks a new one and the freed day is offered to customers booked later.</span>
             <select name="reason" style={input} defaultValue="ops"><option value="ops">Our call</option><option value="customer">Customer asked</option><option value="rain">Rain</option><option value="sick">Installer sick</option><option value="parts">Parts</option><option value="declined">Installer can&apos;t do it</option></select>
             <button className="btn ghost sm">Release day</button></form>}
-          {(q.status === "payment_pending" || q.status === "payment_review") && <form action={opsMarkPaid} className="card now" style={{ marginBottom: 12 }}>
+          {JOB_SETS.AWAITING_PAYMENT.includes(q.status) && <form action={opsMarkPaid} className="card now" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Bank transfer {q.payment_reference}</strong><span className="small">Expecting {aud2(p.stack.amount_payable)}</span>
             <button className="btn" type="submit">Funds received — mark paid</button></form>}
           {q.status === "pricing_installer" && <form action={opsPrice} className="card now" style={{ marginBottom: 12 }}>
@@ -157,9 +161,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <input name="note" placeholder="Note" style={input} /><button className="btn" type="submit">Decide</button></form>}
           {(q.status === "awaiting_date" || q.status === "booked") && pos.length === 0 && <div className="card" style={{ marginBottom: 12 }}><strong>Purchase orders</strong><Step action={draftPO} fields={{ id }} label="Draft POs from the parts list" /></div>}
           {pos.length > 0 && <div className="card" style={{ marginBottom: 12 }}><strong>Purchase orders</strong>{pos.map((po) => <span key={po.id as string} className="small">PO {po.number as number} · {po.supplier as string} · {aud2(po.total as number)} · {po.status as string}
-            {po.status === "draft" && <> <Step action={poAction} fields={{ po: po.id as string, to: "approved", back: `/ops/job/${id}` }} label="Approve" /></>}
-            {po.status === "approved" && <> <Step action={poAction} fields={{ po: po.id as string, to: "sent", back: `/ops/job/${id}` }} label="Mark sent" /></>}
-            {po.status === "sent" && <> <Step action={poAction} fields={{ po: po.id as string, to: "delivered", back: `/ops/job/${id}` }} label="Delivered" /></>}</span>)}</div>}
+            {PO_ORDER.next(po.status as string) && <> <Step action={poAction} fields={{ po: po.id as string, to: PO_ORDER.next(po.status as string)!, back: `/ops/job/${id}` }} label={PO_ORDER.label(PO_ORDER.next(po.status as string)!)} /></>}</span>)}</div>}
           {q.status === "cancelled" && received > 0.005 && <form action={refund} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Refund</strong><span className="small">Paid and not yet refunded: {aud2(received)}</span>
             <input name="amount" defaultValue={received.toFixed(2)} style={input} /><input name="note" placeholder="Reason / deductions" style={input} />
@@ -167,22 +169,22 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
           {pays.filter((x) => x.kind === "refund" && x.status === "pending").map((x) => String(x.provider_ref ?? "").startsWith("re_")
             ? <div key={x.id as string} className="card" style={{ marginBottom: 12 }}><strong>Refund {aud2(x.amount as number)} on its way through Stripe</strong><span className="small muted">Back to the customer&apos;s {x.method === "payto" ? "bank account" : "card"}; this marks itself done.</span></div>
             : <div key={x.id as string} className="card" style={{ marginBottom: 12 }}><strong>Refund {aud2(x.amount as number)} to send</strong><Step action={refundSent} fields={{ id, payment: x.id as string }} label="Bank refund sent" /></div>)}
-          {next.length > 0 && <form action={opsAdvance} className="card" style={{ marginBottom: 12 }}>
+          {manual.length > 0 && <form action={opsAdvance} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Change stage</strong>
-            <select name="to" style={input}>{next.filter((t) => !MONEY_MOVES.some(([a, b]) => a === q.status && b === t)).map((t) => <option key={t} value={t}>{t}</option>)}</select>
-            <span className="small muted">Payment and booking stages move through their own buttons, never from here.</span>
+            <select name="to" style={input}>{manual.map((m) => <option key={m.to} value={m.to}>{m.label}</option>)}</select>
+            {owned.length > 0 && <span className="small muted">Also possible from here, through its own button: {owned.map((m) => m.label).join(", ")}.</span>}
             <input name="reason" placeholder="Reason (required)" style={input} />
             <button className="btn" type="submit">Move</button></form>}
-          {["booked", "gear_ordered", "delivered", "on_site"].includes(q.status) && <form action={opsVariation} className="card" style={{ marginBottom: 12 }}>
+          {JOB_SETS.VARIATION_OK.includes(q.status) && <form action={opsVariation} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Raise a variation</strong>
             <select name="code" style={input}>{menu.items.map((i) => <option key={i.code} value={i.code}>{i.description}</option>)}<option value="VAR-CUSTOM">Custom (give installer cost)</option></select>
             <input name="description" placeholder="Description for the customer" style={input} />
             <input name="cost" placeholder="Installer cost ex GST (custom only)" style={input} />
             <button className="btn" type="submit">Send to customer to approve</button></form>}
-          {TRANSITIONS[q.status].includes("cancelled") && <form action={opsCancel} className="card" style={{ marginBottom: 12 }}>
+          {JOB_SETS.CAN_CANCEL.includes(q.status) && <form action={opsCancel} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Cancel</strong><input name="reason" placeholder="Reason" style={input} />
             <button className="btn ghost" type="submit">Cancel job</button></form>}
-          {["installed", "lodged", "settled", "complete", "on_site"].includes(q.status) && <div className="card" style={{ marginBottom: 12 }}>
+          {[...JOB_SETS.INSTALLED, "on_site"].includes(q.status) && <div className="card" style={{ marginBottom: 12 }}>
             <strong>System Record</strong>
             <span className="small">{recDocs.length} document(s){q.serials?.length ? ` · ${q.serials.length} serials` : " · no serials yet"}{q.commissioned_on ? ` · commissioned ${q.commissioned_on}` : ""}</span>
             {recDocs.map((d) => <span key={d.id as string} className="small"><a href={`/quote/${q.token}/file/${d.id}`} target="_blank">{d.title as string}</a></span>)}
@@ -202,7 +204,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
           <div className="card" style={{ marginBottom: 12 }}><strong>Variations</strong>{vars.length ? vars.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.sell_inc as number)} · {x.status as string}</span>) : <span className="small muted">None</span>}</div>
           <div className="card" style={{ marginBottom: 12 }}><strong>Installer pay</strong>{ledger.length ? ledger.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.amount_ex as number)} · {x.status as string}</span>) : <span className="small muted">None yet</span>}</div>
           <div className="card" style={{ marginBottom: 12 }}><strong>Messages</strong>{msgs.length ? msgs.map((m, i) => <span key={i} className="small">{m.template as string} · {m.subject as string} · {m.status as string}</span>) : <span className="small muted">None</span>}</div>
-          {["awaiting_date", "booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed"].includes(q.status) && <JobThread quoteId={id} action={opsMessage} hidden={<input type="hidden" name="id" value={id} />} me="ops" title="Messages (customer and installer see these)" />}
+          {["awaiting_date", ...JOB_SETS.BOOKED, "installed"].includes(q.status) && <JobThread quoteId={id} action={opsMessage} hidden={<input type="hidden" name="id" value={id} />} me="ops" title="Messages (customer and installer see these)" />}
           <form action={addStaffNote} className="card"><input type="hidden" name="id" value={id} /><strong>Note</strong><input name="note" style={input} /><button className="btn ghost sm" type="submit">Add note</button></form>
         </aside>
       </div>

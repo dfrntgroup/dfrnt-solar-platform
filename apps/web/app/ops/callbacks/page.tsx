@@ -4,17 +4,19 @@ import { AdminShell } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
 import { aud } from "@/lib/site";
 import { callbackDone } from "../actions";
+import { checkoutLabel } from "@/lib/checkout-step";
+import { JOB_LABELS, type JobState } from "@dfrnt/engine";
 
 export const dynamic = "force-dynamic";
 
-const STEP = (r: Record<string, unknown>) => r.status !== "secured" ? String(r.status ?? "") : r.design_fee_status === "due" ? "design fee due" : r.has_home ? "step 3: photos" : r.checkout_at ? "step 2: home" : "step 1: details";
+const STEP = (r: Record<string, unknown>) => r.status !== "secured" ? JOB_LABELS[r.status as JobState] ?? String(r.status ?? "") : checkoutLabel(r as never);
 
 /** C5: call-back requests, plus everyone partway through checkout. */
 export default async function Callbacks() {
   const me = await requireStaff();
   const calls = await db()`select c.id, c.created_at, c.name, c.phone, c.page, c.note, c.status, c.done_by, q.id quote_id, q.title, q.status qstatus, q.amount_payable::float8 amount
     from callbacks c left join quotes q on q.id = c.quote_id order by (c.status = 'new') desc, c.created_at desc limit 100`;
-  const partway = await db()`select id, title, customer_name, customer_phone, customer_email, status, design_fee_status, checkout_at, site_draft is not null has_home, amount_payable::float8 amount, reminders,
+  const partway = await db()`select id, title, customer_name, customer_phone, customer_email, status, design_fee_status, checkout_at, site_draft, amount_payable::float8 amount, reminders,
       (select count(distinct kind)::int from quote_photos p where p.quote_id = quotes.id and p.superseded_at is null) photos
     from quotes where status = 'secured' and created_at > now() - interval '30 days' order by coalesce(checkout_at, created_at) desc limit 100`;
   const t = (d: unknown) => new Date(d as string).toLocaleString("en-AU", { timeZone: "Australia/Brisbane", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });

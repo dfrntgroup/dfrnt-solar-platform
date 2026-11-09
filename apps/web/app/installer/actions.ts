@@ -2,7 +2,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { db, write } from "@dfrnt/db";
-import type { JobState } from "@dfrnt/engine";
+import { JOB_LABELS, JOB_SETS, nextMoves, type JobState } from "@dfrnt/engine";
+import { JOB_DAYS_OK } from "@/lib/installer-sets";
 import { requireInstaller } from "@/lib/auth";
 import { advance, getQuoteById, installerPrice, raiseVariation } from "@/lib/jobs";
 
@@ -39,6 +40,8 @@ export async function installerStage(f: FormData) {
     const { me, q } = await own(f);
     const to = s(f, "to") as JobState;
     if (!["on_site", "installed"].includes(to)) throw new Error("Installers can mark on site and installed");
+    // Only the moves the engine allows from where the job is; on hold (variation pending) is the customer's to lift.
+    if (!nextMoves(q.status).some((m) => m.to === to && m.manual)) throw new Error(`This job is ${JOB_LABELS[q.status].toLowerCase()}; it can't be marked ${JOB_LABELS[to].toLowerCase()} from there`);
     await advance(q, to, me.actor, to === "installed" ? "Installer: commissioned and handed over" : "Installer: on site");
   });
 }
@@ -153,7 +156,7 @@ export async function addCrew(f: FormData) {
 export async function removeCrew(f: FormData) {
   const me = await requireInstaller(s(f, "as") || undefined);
   await run(cal(f), async () => {
-    const [busy] = await db()`select 1 from quotes where crew_id = ${s(f, "crew")} and install_date >= current_date and status in ('booked','gear_ordered','delivered')`;
+    const [busy] = await db()`select 1 from quotes where crew_id = ${s(f, "crew")} and install_date >= current_date and status = any(${JOB_SETS.BOOKED as string[]}::quote_status[])`;
     if (busy) throw new Error("This crew has booked jobs. Move them first, or keep the crew.");
     await db()`update installer_crews set active = false where id = ${s(f, "crew")} and installer_id = ${me.id}`;
   });
@@ -216,6 +219,7 @@ export async function offerDays(f: FormData) {
 export async function setJobDays(f: FormData) {
   await run(back(f), async () => {
     const { q } = await own(f);
+    if (!JOB_DAYS_OK.includes(q.status)) throw new Error("The job length is set before the day is booked");
     const d = Number(s(f, "days"));
     if (!(d >= 0.5 && d <= 5)) throw new Error("Between half a day and 5 days");
     await db()`update quotes set job_days = ${Math.round(d * 2) / 2} where id = ${q.id}`;

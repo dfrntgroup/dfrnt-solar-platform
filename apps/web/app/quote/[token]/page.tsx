@@ -6,7 +6,7 @@ import { AGREEMENT, SELLER } from "@/lib/legal";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
-import { BOARD, refundRule, type JobState, type Quote } from "@dfrnt/engine";
+import { JOB_SETS, JOB_STEPS, refundRule, statusLabel, type Quote } from "@dfrnt/engine";
 import { Header, Footer } from "@/components/Header";
 import { PhotoInput } from "@/components/PhotoInput";
 import { getQuote, REVISABLE } from "@/lib/jobs";
@@ -38,14 +38,6 @@ export const dynamic = "force-dynamic";
 const addDay = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86400_000).toISOString().slice(0, 10);
 export const metadata = { title: "Your solar record", robots: { index: false } };
 
-const STEPS: [string, JobState[]][] = [
-  ["Your home", ["saved", "secured", "lapsed"]],
-  ["Price", ["pricing_instant", "pricing_installer", "tech_review", "priced"]],
-  ["Sign + pay", ["signed", "payment_pending", "payment_review"]],
-  ["Book", ["awaiting_date"]],
-  ["Install", ["booked", "gear_ordered", "delivered", "on_site", "variation_pending"]],
-  ["Done", ["installed", "lodged", "settled", "complete"]],
-];
 
 function BankRows({ b }: { b: { account_name: string; bsb: string; account_number: string; bank: string } }) {
   if (!b.bsb || !b.account_number) return <tr><td colSpan={2} className="muted">Bank details are on their way. Call us on 1300 133 768 and we&apos;ll give them to you.</td></tr>;
@@ -93,12 +85,12 @@ export default async function Record({ params, searchParams }: { params: Promise
   if (!q) notFound();
   const shown = q.snapshot ?? q.result;
   const state = q.status;
-  const step = STEPS.findIndex(([, ss]) => ss.includes(state));
+  const step = JOB_STEPS.findIndex((g) => g.states.includes(state));
   const online = stripeReady() && !!publishableKey();
   const financeOpts = (await getSetting("finance")).providers.filter((x) => x.on && x.url);
   const bankAcct = await getSetting("bank");
   const bankOn = !!(bankAcct.bsb && bankAcct.account_number);
-  const sysPay = ["payment_pending", "payment_review"].includes(state)
+  const sysPay = JOB_SETS.AWAITING_PAYMENT.includes(state)
     ? (await db()`select id, method, status from payments where quote_id = ${q.id} and kind = 'system' and status in ('pending','review') order by created_at desc limit 1`)[0] : undefined;
   const paySecret = sysPay && isOnline(sysPay.method as string) && sysPay.status === "pending" && !sp.paid ? await clientSecretFor(sysPay.id as string).catch(() => null) : null;
   const varPays = await db()`select id, variation_id, amount::float8 amount from payments where quote_id = ${q.id} and kind = 'variation' and status = 'pending'`;
@@ -108,7 +100,7 @@ export default async function Record({ params, searchParams }: { params: Promise
   const lapsedSlug = (lapsedRow?.system_slug as string | null) ?? null;
   const lapsedBuild = lapsedRow && !lapsedSlug && String(q.title ?? "").startsWith("Custom") ? (await import("@/lib/builder")).buildHref(lapsedRow.input as never, q.postcode as string) : null;
   const finProv = q.payment_method?.startsWith("finance:") ? (await getSetting("finance")).providers.find((x) => `finance:${x.id}` === q.payment_method) : undefined;
-  const picking = state === "awaiting_date" || (["booked", "gear_ordered", "delivered"].includes(state) && q.rebook);
+  const picking = state === "awaiting_date" || (JOB_SETS.HAS_DAY.includes(state) && q.rebook);
   const choice = picking ? await daysFor(q) : null;
   const { forwardOffer } = await import("@/lib/jobs");
   const fwd = q ? await forwardOffer(q).catch(() => null) : null;
@@ -117,15 +109,15 @@ export default async function Record({ params, searchParams }: { params: Promise
   const signDays = state === "priced" && q.installer_id ? await daysFor(q, { max: 3 }).catch(() => null) : null;
   const [earlier] = ["booked", "gear_ordered"].includes(state) && !q.rebook && sp.offer && /^[0-9a-f-]{36}$/.test(sp.offer)
     ? await db()`select id, dates::text[] dates from date_offers where id = ${sp.offer} and quote_id = ${q.id} and kind = 'earlier' and status = 'open' and expires_at > now()` : [];
-  const threadOpen = ["awaiting_date", "booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed"].includes(state);
+  const threadOpen = ["awaiting_date", ...JOB_SETS.BOOKED, "installed"].includes(state);
   const variations = await db()`select id, description, sell_inc::float8 as sell_inc, status from variations where quote_id = ${q.id} order by created_at`;
   const [mine] = await db()`select code from codes where owner_quote_id = ${q.id} and active`;
   const myCode = mine?.code as string | undefined;
   const docs = ["Signed agreement", "Tax invoice", "Certificate of compliance", "STC assignment form", "Warranty cards"];
-  const canCancel = ["signed", "payment_pending", "payment_review", "awaiting_date", "booked", "gear_ordered", "delivered"].includes(state);
-  const open = ["saved", "secured", "lapsed"].includes(state);
+  const canCancel = JOB_SETS.CAN_CANCEL.includes(state);
+  const open = JOB_SETS.OPEN_CHECKOUT.includes(state);
   const have = open ? await activeKinds(q.id) : new Set<string>();
-  const pricing = state === "pricing_installer" || state === "pricing_instant" || state === "tech_review";
+  const pricing = JOB_SETS.PRICING.includes(state);
   const retakes = pricing ? await retakeKinds(q.id) : [];
   // The launch rule ("installer confirms every job") is not a thing wrong with the home; don't list it as one.
   const checks = (q.pricing_reasons ?? []).filter((r) => r !== "Installer confirms every job" && r !== "No installer covers this postcode yet");
@@ -138,12 +130,12 @@ export default async function Record({ params, searchParams }: { params: Promise
     <>
       <Header postcode={q.postcode} back={`/quote/${token}`} />
       <section><div className="wrap" style={{ maxWidth: 720 }}>
-        <p className="eyebrow">Your solar record · {BOARD[state]}</p>
+        <p className="eyebrow">Your solar record · {statusLabel(q, todayAEST())}</p>
         <h1 style={{ fontSize: 30 }}>{q.title ?? friendlySummary(shown.config.summary)}</h1>
         <p className="muted small">{friendlySummary(shown.config.summary)}</p>
-        {inst && !["saved", "secured", "lapsed"].includes(state) && <p className="small">Installed by <Link href={`/installers/${inst.id}`}>{inst.business_name as string}</Link></p>}
-        {step >= 0 && !open && <div className="filters">{STEPS.map(([n], i) => <span key={n} className={`chip${i === step ? " on" : ""}`} style={{ opacity: i > step ? 0.5 : 1 }}>{i < step ? "✓ " : ""}{n}</span>)}</div>}
-        {error && !["saved", "secured", "lapsed"].includes(state) && <div className="note" style={{ margin: "12px 0" }}>{error}</div>}
+        {inst && !open && <p className="small">Installed by <Link href={`/installers/${inst.id}`}>{inst.business_name as string}</Link></p>}
+        {step >= 0 && !open && <div className="filters">{JOB_STEPS.map(({ label: n }, i) => <span key={n} className={`chip${i === step ? " on" : ""}`} style={{ opacity: i > step ? 0.5 : 1 }}>{i < step ? "✓ " : ""}{n}</span>)}</div>}
+        {error && !open && <div className="note" style={{ margin: "12px 0" }}>{error}</div>}
 
         {rev && (
           <div className="card" style={{ marginTop: 16, borderColor: "var(--teal)" }}>
@@ -216,7 +208,7 @@ export default async function Record({ params, searchParams }: { params: Promise
           <CallBack back={`/quote/${token}`} token={token} state={sp.callback} compact />
         </>)}
 
-        {["secured", "priced", "pricing_installer"].includes(state) && (q.discount_code
+        {JOB_SETS.CODE_OK.includes(state) && (q.discount_code
           ? <p className="small ok" style={{ marginTop: 12 }}>Code {q.discount_code} applied: {aud(q.referral_discount ?? 0)} off before GST.</p>
           : <form action={addCode} style={{ display: "flex", gap: 8, marginTop: 12 }}><input type="hidden" name="token" value={token} />
               <input aria-label="Referral or creator code" name="code" placeholder="Referral or creator code" style={{ ...input, width: 220 }} /><button className="btn ghost sm" type="submit">Apply</button></form>)}
@@ -295,7 +287,7 @@ export default async function Record({ params, searchParams }: { params: Promise
           <Breakdown q={shown} />
         </>)}
 
-        {["awaiting_date", "booked", "gear_ordered", "delivered"].includes(state) && !q.heard_from && (
+        {JOB_SETS.AFTER_PAY.includes(state) && !q.heard_from && (
           <form action={saveHeard} className="card" style={{ marginTop: 16 }}><input type="hidden" name="token" value={token} />
             <strong>Quick one: how did you hear about us?</strong>
             <div className="filters">{([["facebook", "Facebook or Instagram"], ["google", "Google"], ["youtube", "YouTube"], ["friend", "A friend or family"], ["saw_install", "Saw one of our installs"], ["other", "Something else"]] as const).map(([v, t]) =>
@@ -314,10 +306,10 @@ export default async function Record({ params, searchParams }: { params: Promise
             <form action={takeEarlierDay}><input type="hidden" name="token" value={token} /><input type="hidden" name="offer" value={earlier.id as string} /><button className="btn" type="submit">Yes, move me earlier</button></form>
           </div>)}
 
-        {["booked", "gear_ordered", "delivered", "on_site", "variation_pending", "installed", "lodged", "settled", "complete"].includes(state) && (<>
-          {!q.rebook && <div className="ok" style={{ marginTop: 16 }}>{q.install_date ? <>Install day: <strong>{dayLabel([q.install_date], q.install_part)}{q.job_days && q.job_days > 1 ? ` (${q.job_days} days)` : ""}</strong>, arriving 7–8 am.</> : "Installed."} Status: <strong>{BOARD[state]}</strong>.</div>}
-          {["booked", "gear_ordered", "delivered"].includes(state) && <AddOns q={q} add={addAddonAction} remove={removeAddonAction} />}
-          {["booked", "gear_ordered", "delivered"].includes(state) && !q.rebook && (
+        {[...JOB_SETS.BOOKED, ...JOB_SETS.INSTALLED].includes(state) && (<>
+          {!q.rebook && <div className="ok" style={{ marginTop: 16 }}>{q.install_date ? <>Install day: <strong>{dayLabel([q.install_date], q.install_part)}{q.job_days && q.job_days > 1 ? ` (${q.job_days} days)` : ""}</strong>, arriving 7–8 am.</> : "Installed."} Status: <strong>{statusLabel(q)}</strong>.</div>}
+          {JOB_SETS.HAS_DAY.includes(state) && <AddOns q={q} add={addAddonAction} remove={removeAddonAction} />}
+          {JOB_SETS.HAS_DAY.includes(state) && !q.rebook && (
             <form action={saveAccess} className="card" style={{ marginTop: 12 }}><input type="hidden" name="token" value={token} />
               <strong>Access on the day</strong><span className="small muted">Gate code, pets, where to park, who&apos;ll be home. Your installer sees this.</span>
               <textarea name="access" defaultValue={q.access_notes ?? ""} maxLength={1000} style={{ minHeight: 60, padding: 10, border: "1px solid var(--line)", borderRadius: 6, font: "inherit" }} />
@@ -342,10 +334,10 @@ export default async function Record({ params, searchParams }: { params: Promise
                     <button className="btn ghost sm" name="method" value="card" type="submit">Pay by card</button></form>))}
               </div>))}
             {varSecret && publishableKey() && <div id="pay"><StripePay publishableKey={publishableKey()} clientSecret={varSecret} returnUrl={payReturn} label="Pay for this change" /></div>}</>}
-          {["installed", "lodged", "settled", "complete"].includes(state) && myCode && <div className="ok" style={{ marginTop: 16 }}>Your referral code: <strong>{myCode}</strong>. Friends get $250 off, and we pay you $250 after their install.</div>}
+          {JOB_SETS.INSTALLED.includes(state) && myCode && <div className="ok" style={{ marginTop: 16 }}>Your referral code: <strong>{myCode}</strong>. Friends get $250 off, and we pay you $250 after their install.</div>}
           {threadOpen && <JobThread quoteId={q.id} action={customerMessage} hidden={<input type="hidden" name="token" value={token} />} me="customer" />}
           <p className="small"><Link href={`/contact?quote=${token}`}>Questions about your system?</Link></p>
-          {["installed", "lodged", "settled", "complete"].includes(state) ? <><ServicePlan q={q} join={joinPlan} /><SystemRecord q={q} report={reportProblem} transfer={passRecord} sent={sp.sent} /></> : <>
+          {JOB_SETS.INSTALLED.includes(state) ? <><ServicePlan q={q} join={joinPlan} /><SystemRecord q={q} report={reportProblem} transfer={passRecord} sent={sp.sent} /></> : <>
           <h2 style={{ marginTop: 24 }}>Your documents</h2>
           <table className="lines"><tbody>{docs.map((d) => {
             const href = d === "Signed agreement" ? `/quote/${token}/doc/agreement` : d === "Tax invoice" && q.paid_at ? `/quote/${token}/doc/invoice` : null;
@@ -355,7 +347,7 @@ export default async function Record({ params, searchParams }: { params: Promise
           <Breakdown q={shown} />
         </>)}
 
-        {["installed", "lodged", "settled", "complete"].includes(state) && (myReview
+        {JOB_SETS.INSTALLED.includes(state) && (myReview
           ? <><div className="ok" style={{ marginTop: 20 }}>Thanks for your review{myReview.status === "published" ? ". It's live on our reviews page" : ". We publish every review, good or bad, once we've checked it's from this install"}.</div>
             {googleReview && <div className="card" style={{ marginTop: 10 }}><strong>Would you post it on Google too?</strong>
               <span className="small muted">It helps local families find an installer they can trust. Copy your words, then tap the button.</span>
