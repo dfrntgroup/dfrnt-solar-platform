@@ -22,7 +22,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ token: string }
     token: row.token, status: st, created_at: row.created_at, lock_until: row.lock_until, install_date: row.install_date, input: row.input,
     status_label: statusLabel({ status: st, rebook: row.rebook as boolean, install_date: row.install_date as string | null, design_fee_status: row.design_fee_status as string | null, lock_until: row.lock_until as string }),
     next: nextMoves(st).map((m) => ({ to: m.to, label: m.label, via: m.via, tier: m.tier })),
-    price: customerView(price),
+    // One lock date: the job's own (the snapshot's window can be a day out after a re-lock).
+    price: (() => { const v = customerView(price); return { ...v, window: { ...v.window, lock_until: row.lock_until as string } }; })(),
     ...(actor.type === "staff" || actor.type === "agent" ? { internal: { stack: price.stack, config: price.config, rebate: price.rebate } } : {}),
   };
   return new Response(JSON.stringify(body, null, 2), { status: 200, headers: { "content-type": "application/json", "cache-control": "private, no-store" } });

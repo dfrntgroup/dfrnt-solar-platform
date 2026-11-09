@@ -26,6 +26,7 @@ run("record-link API privacy (real database)", () => {
     expect(body.price.you_pay).toBe(out.result.amount_payable);
     expect(body.price.included.length).toBeGreaterThan(0);
     expect(body.internal).toBeUndefined();
+    expect(body.price.window.lock_until).toBe(body.lock_until);
     expect(body.status_label).toBe("Saved");
     expect(res.headers.get("cache-control")).toContain("no-store");
   });
