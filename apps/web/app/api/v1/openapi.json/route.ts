@@ -20,7 +20,9 @@ function doc() {
       requestBody: { required: true, content: { "application/json": { schema: zodToJsonSchema(OPERATIONS["quotes.create"]!.input, { target: "jsonSchema7", $refStrategy: "none" }) } } },
       responses: { "201": { description: "Created" }, "200": { description: "Replayed (same Idempotency-Key)" }, "400": { description: "Invalid" } } } },
     "/quotes/{token}": { get: { operationId: "quotes.get", "x-tier": "R", summary: "Read a saved quote by its record token: state, label and the allowed next moves", parameters: [{ name: "token", in: "path", required: true, schema: { type: "string" } }],
-      responses: { "200": { description: "OK", content: { "application/json": { schema: { type: "object", properties: { status: { $ref: "#/components/schemas/JobState" }, status_label: { type: "string" }, next: { type: "array", items: { $ref: "#/components/schemas/NextMove" } } } } } } }, "404": { description: "Not found" } } } },
+      responses: { "200": { description: "OK", content: { "application/json": { schema: { type: "object", properties: { status: { $ref: "#/components/schemas/JobState" }, status_label: { type: "string" }, next: { type: "array", items: { $ref: "#/components/schemas/NextMove" } },
+        price: { type: "object", description: "The customer's price and system: you_pay, before_rebates, gst, rebates, what's included, rebate STCs, lock window. Never costs, margin or installer pay." },
+        internal: { type: "object", description: "Staff or agent API key only: the full internal price stack." } } } } } }, "404": { description: "Not found" } } } },
     "/mcp": { post: { operationId: "mcp", "x-tier": "R", summary: "MCP (streamable HTTP, JSON): tools/list and tools/call over the operations below. Tier P calls from an agent become proposals for a person.", responses: { "200": { description: "JSON-RPC" } } } },
   };
   const operations = Object.fromEntries(Object.entries(OPERATIONS).map(([name, op]) => [name, {
