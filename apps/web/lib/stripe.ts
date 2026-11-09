@@ -6,6 +6,7 @@ import Stripe from "stripe";
 import { db, write } from "@dfrnt/db";
 import type { JobState } from "@dfrnt/engine";
 import { getSetting, setSetting } from "./settings";
+import { moveRow } from "./lifecycle";
 import { seal, unseal } from "./secret";
 
 export type PayMethod = "payto" | "card";
@@ -148,7 +149,7 @@ export async function applyIntent(pi: Stripe.PaymentIntent) {
       if (q && ["payment_pending", "payment_review"].includes(q.status)) await markPaid(q, STRIPE_ACTOR);
       else {
         // Money arrived for a job that isn't waiting for it (cancelled, or marked paid by hand). Record it and raise it.
-        await db()`update payments set status = 'received', received_at = now() where id = ${p.id}`;
+        await moveRow("payments", p.id as string, "received", STRIPE_ACTOR, { action: "payments.receive_unexpected", set: { received_at: new Date() }, tolerate: true });
         const { openTicket } = await import("./ops");
         await openTicket({ kind: "fault", subject: `Stripe payment on a job in state ${q?.status ?? "unknown"}`, quoteId: p.quote_id as string, name: q?.customer_name ?? undefined, email: q?.customer_email ?? undefined,
           body: `${pi.id} for ${(p.amount as number).toFixed(2)} succeeded but the job is ${q?.status ?? "missing"}. Check whether it needs a refund (Ops → Payments → the job).` }).catch(() => null);

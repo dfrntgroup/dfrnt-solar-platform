@@ -1,5 +1,7 @@
 // Email delivery through Resend. Sending is controlled from Ops → Messages:
 //   held: nothing leaves (default)   test: everything goes to the test address only   live: customers receive their messages
+import { moveRow } from "./lifecycle";
+const MAILER = { type: "system" as const, id: "mailer" };
 import { db } from "@dfrnt/db";
 import { SELLER } from "./legal";
 
@@ -50,16 +52,23 @@ export async function sendEmail(to: string, subject: string, text: string): Prom
 /** Deliver one outbox row according to the current mode. Held rows stay held. */
 export async function deliver(id: string) {
   const { mode, test_to } = await emailSettings();
-  if (mode === "held" || !emailReady()) return "held";
   const [m] = await db()`select recipient, subject, body, status from messages where id = ${id}`;
   if (!m || m.status === "sent") return "skip";
   const to = mode === "test" ? test_to : (m.recipient as string);
-  if (!to) return "held";
+  if (mode === "held" || !emailReady() || !to) {
+    // Nothing can go out: a queued row goes back to held so it isn't stranded (it used to stay queued for ever).
+    if (m.status === "queued") await moveRow("messages", id, "held", MAILER, { tolerate: true }, "queued");
+    return "held";
+  }
   const subject = mode === "test" ? `[TEST to ${m.recipient}] ${m.subject}` : (m.subject as string);
   const r = await sendEmail(to, subject, m.body as string);
-  if (r.ok) await db()`update messages set status = 'sent', sent_at = now(), sent_to = ${to}, provider_id = ${r.id}, error = null, attempts = attempts + 1, last_attempt_at = now() where id = ${id}`;
+  const [a] = await db()`select attempts from messages where id = ${id}`;
+  const attempts = ((a?.attempts as number) ?? 0) + 1;
+  if (r.ok) await moveRow("messages", id, "sent", MAILER, { set: { sent_at: new Date(), sent_to: to, provider_id: r.id, error: null, attempts, last_attempt_at: new Date() }, tolerate: true });
   else {
-    await db()`update messages set status = 'failed', error = ${r.error}, sent_to = ${to}, attempts = attempts + 1, last_attempt_at = now() where id = ${id}`;
+    // A retry that fails again stays failed: no edge needed, just the attempt count.
+    if (m.status === "failed") await db()`update messages set error = ${r.error}, sent_to = ${to}, attempts = ${attempts}, last_attempt_at = now() where id = ${id}`;
+    else await moveRow("messages", id, "failed", MAILER, { set: { error: r.error, sent_to: to, attempts, last_attempt_at: new Date() }, tolerate: true });
     const { report } = await import("./report"); await report("email.deliver", new Error(r.error), { message_id: id, to });
   }
   return r.ok ? "sent" : "failed";

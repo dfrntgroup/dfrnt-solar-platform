@@ -1,3 +1,4 @@
+import { lifecycleLabel } from "@dfrnt/engine";
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
@@ -39,7 +40,7 @@ export default async function Approvals({ searchParams }: { searchParams: Promis
       <h3 style={{ marginTop: 24 }}>Agents</h3>
       <table className="lines"><tbody>{agents.map((a) => <tr key={a.id as string}><td>{a.name as string}</td><td>max tier {a.max_tier as string}</td><td>{a.enabled ? "on" : "off"}</td></tr>)}</tbody></table>
       <h3 style={{ marginTop: 24 }}>Recent decisions</h3>
-      <table className="lines small"><tbody>{recent.map((r, i) => <tr key={i}><td>{r.action as string}</td><td>{r.proposer_id as string}</td><td>{r.status as string}</td><td>{r.name as string}</td></tr>)}</tbody></table>
+      <table className="lines small"><tbody>{recent.map((r, i) => <tr key={i}><td>{r.action as string}</td><td>{r.proposer_id as string}</td><td>{lifecycleLabel("approvals", r.status as string)}</td><td>{r.name as string}</td></tr>)}</tbody></table>
     </AdminShell>
   );
 }

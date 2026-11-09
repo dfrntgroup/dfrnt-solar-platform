@@ -1,3 +1,5 @@
+import { lifecycleLabel } from "@dfrnt/engine";
+import { Step } from "@/components/Step";
 import Link from "next/link";
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
@@ -5,7 +7,7 @@ import { requireStaff } from "@/lib/auth";
 import { getSetting } from "@/lib/settings";
 import { dashboardUrl, publishableKey, stripeReady, stripeTestMode } from "@/lib/stripe";
 import { aud2 } from "@/lib/site";
-import { bankSave, financeSave, stripeReconcile, stripeRegister } from "../actions";
+import { bankSave, financeSave, stripeReconcile, stripeRegister, extraPaymentReceived } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +20,8 @@ export default async function Payments({ searchParams }: { searchParams: Promise
   const bank = await getSetting("bank");
   const pays = await db()`select p.id, p.kind, p.method, p.amount::float8 amount, p.fee::float8 fee, p.status, p.provider_ref, p.provider_status, p.created_at, q.id qid, q.customer_name, q.title
     from payments p left join quotes q on q.id = p.quote_id where p.method in ('card','payto') or p.method like 'finance:%' order by p.created_at desc limit 80`;
+  const extras = await db()`select p.id, p.kind, p.amount::float8 amount, p.reference, q.id qid, q.customer_name, q.title from payments p join quotes q on q.id = p.quote_id
+    where p.kind = 'variation' and p.method = 'bank' and p.status = 'pending' order by p.created_at`;
   const [sum] = await db()`select coalesce(sum(amount) filter (where status = 'received' and kind <> 'refund'), 0)::float8 taken, coalesce(sum(fee), 0)::float8 fees,
     count(*) filter (where status = 'received' and kind <> 'refund')::int n from payments where method in ('card','payto') and created_at > now() - interval '30 days'`;
   const errs = await db()`select id, type, error, received_at from stripe_events where error is not null and handled_at is null order by received_at desc limit 10`;
@@ -59,6 +63,10 @@ export default async function Payments({ searchParams }: { searchParams: Promise
         <button className="btn sm" type="submit">Save</button>
       </form>
 
+      {extras.length > 0 && <><h2>Bank transfers for changes and add-ons</h2>
+      <table className="lines"><tbody>{extras.map((p) => <tr key={p.id as string}>
+        <td><Link href={`/ops/job/${p.qid}`}>{(p.customer_name as string) ?? (p.title as string)}</Link></td><td>{p.kind === "variation" ? "Change to the install" : "Add-on"} · ref {p.reference as string}</td>
+        <td className="r">{aud2(p.amount as number)}</td><td><Step action={extraPaymentReceived} fields={{ payment: p.id as string, id: p.qid as string }} label="Funds received" /></td></tr>)}</tbody></table></>}
       <h2>Online payments</h2>
       <table className="lines"><tbody>
         {pays.map((p) => <tr key={p.id as string}>
@@ -66,7 +74,7 @@ export default async function Payments({ searchParams }: { searchParams: Promise
           <td>{p.qid ? <Link href={`/ops/job/${p.qid}`}>{(p.customer_name as string) ?? (p.title as string)}</Link> : "—"}</td>
           <td>{p.kind as string} · {String(p.method).replace("finance:", "finance ")}</td>
           <td className="r">{aud2(p.amount as number)}{p.fee != null ? <span className="small muted"> fee {aud2(p.fee as number)}</span> : null}</td>
-          <td>{p.status as string}{p.provider_ref ? <> · <a href={dashboardUrl(p.provider_ref as string)} target="_blank" rel="noreferrer">Stripe</a></> : null}</td>
+          <td>{lifecycleLabel("payments", p.status as string)}{p.provider_ref ? <> · <a href={dashboardUrl(p.provider_ref as string)} target="_blank" rel="noreferrer">Stripe</a></> : null}</td>
         </tr>)}
         {!pays.length && <tr><td className="muted">No online payments yet.</td></tr>}
       </tbody></table>

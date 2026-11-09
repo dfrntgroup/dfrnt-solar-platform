@@ -1,3 +1,4 @@
+import { lifecycleLabel } from "@dfrnt/engine";
 import Link from "next/link";
 import { db } from "@dfrnt/db";
 import { AdminShell } from "@/components/Admin";
@@ -13,7 +14,7 @@ export default async function Support() {
       <h1 style={{ fontSize: 28 }}>Support</h1>
       <p className="muted">Reply within 24 hours. Replies go to the customer by email (held until email is switched on).</p>
       <table className="lines"><tbody>{rows.map((t) => <tr key={t.id as string}><td><Link href={`/ops/support/${t.id}`}>{t.subject as string}</Link><br /><span className="small muted">{t.kind as string} · {t.name as string ?? ""}</span></td>
-        <td>{t.status as string}</td><td className="small" style={{ color: t.status !== "closed" && (t.hours as number) > 20 ? "var(--warn)" : undefined }}>{Math.round(t.hours as number)} h</td></tr>)}</tbody></table>
+        <td>{lifecycleLabel("tickets", t.status as string)}</td><td className="small" style={{ color: t.status !== "closed" && (t.hours as number) > 20 ? "var(--warn)" : undefined }}>{Math.round(t.hours as number)} h</td></tr>)}</tbody></table>
     </AdminShell>
   );
 }

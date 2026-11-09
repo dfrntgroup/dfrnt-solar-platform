@@ -271,7 +271,7 @@ export async function payVariationOnline(q: QuoteRow, paymentId: string, method:
   if (v.provider_ref) await stripe().paymentIntents.cancel(v.provider_ref as string).catch(() => null);
   const [fresh] = await db()`insert into payments (quote_id, variation_id, kind, method, amount, reference)
     select quote_id, variation_id, kind, ${method}, amount, reference from payments where id = ${paymentId} returning id`;
-  await db()`update payments set status = 'failed', provider_status = 'replaced' where id = ${paymentId}`;
+  await db()`update payments set status = 'failed', provider_status = 'replaced' where id = ${paymentId} and status = 'pending'`;
   await createIntent({ paymentId: fresh!.id as string, amount: v.amount as number, method, quoteId: q.id, token: q.token, email: q.customer_email, kind: "variation",
     description: `DFRNT Solar ${v.reference} — change to your install` });
   return fresh!.id as string;
@@ -402,6 +402,10 @@ export async function cancel(q: QuoteRow, actor: Actor, reason: string) {
     await offerEarlier(q.installer_id, q.crew_id, q.install_date, q.id).catch(() => 0);
   }
   await db()`update pay_ledger set status = 'accrued', amount_ex = 0 where quote_id = ${q.id} and status in ('accrued','eligible')`;
+  // Tidy what hung off the job (9 Nov 2026): open date offers close, a credit applied to it goes back to the customer, unpaid extras fail.
+  await db()`update date_offers set status = 'lost' where quote_id = ${q.id} and status in ('requested','open')`;
+  if (q.credit_code) await db()`update credits set status = 'issued', applied_quote_id = null where code = ${q.credit_code} and status = 'applied' and expires_on >= current_date`;
+  await db()`update payments set status = 'failed' where quote_id = ${q.id} and kind in ('variation','report') and status = 'pending'`;
   await queueMessage("M7", q.token, q.customer_email, { name: q.customer_name });
 }
 
@@ -413,7 +417,8 @@ export async function applyCode(q: QuoteRow, raw: string) {
   if (credit) {
     await write({ actor: CUSTOMER, action: "quotes.apply_credit" }, { token: q.token, code }, async (tx) => {
       await tx`update quotes set credit_code = ${code}, updated_at = now() where id = ${q.id}`;
-      await tx`update credits set status = 'applied', applied_quote_id = ${q.id} where code = ${code}`;
+      const [c] = await tx`update credits set status = 'applied', applied_quote_id = ${q.id} where code = ${code} and status = 'issued' returning code`;
+      if (!c) throw new Error("That credit has just been used");
       return { entity: "quote", entityId: q.id, event: "quote.credit_applied", result: { code } };
     });
     return repriceFrozen(q);

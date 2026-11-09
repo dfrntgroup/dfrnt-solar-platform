@@ -8,6 +8,7 @@ import { pricingData } from "./pricing-data";
 import { longDate } from "./site";
 import { transitionById } from "./transition";
 import { checkoutLeft } from "./checkout-step";
+import { moveRow, moveRows } from "./lifecycle";
 
 /** Timer moves go through the one door; a row that already moved is skipped without an audit row or event. */
 const setStatus = (id: string, from: JobState, to: JobState, why: string, via?: string, extra: Record<string, unknown> = {}) =>
@@ -96,7 +97,7 @@ export async function runDaily() {
         await queueMessage("M25", m.token as string, m.customer_email as string, { name: m.customer_name as string, renewal: true, date: longDate(m.renews_on as string), amount: `$${m.price}`, reference: m.reference as string });
         await db()`update quotes set reminders = reminders || ${db().json({ [k]: true })} where token = ${m.token}`; planMsgs++;
       }
-      if (days < -30) await db()`update memberships set status = 'lapsed' where id = ${m.id}`;
+      if (days < -30) await moveRow("memberships", m.id as string, "lapsed", SYSTEM, { rationale: "Renewal more than 30 days overdue", tolerate: true }, "active");
     }
   }
   out.service_plan = planMsgs;
@@ -113,6 +114,9 @@ export async function runDaily() {
   await step("energy", async () => (await import("./energy")).runEnergy());
   await step("email_retry", async () => (await import("./email")).retryFailedMessages());
   // Agent proposals expire after 24 h (system expiry: no decided_by; constraint relaxed in 0025). The matching agent action expires with it.
+  await step("credits_expired", () => moveRows("credits", "issued", "expired", SYSTEM, "expires_on < current_date", []));
+  // An agent run left "running" by a crashed process is closed as an error after an hour.
+  await step("runs_closed", () => moveRows("agent_runs", "running", "error", SYSTEM, "started_at < now() - interval '1 hour'", [], { set: { summary: "Closed by the daily timer: the run never finished", finished_at: new Date() } }));
   await step("proposals_expired", async () => {
     const exp = await db()`update approvals set status = 'expired', decided_at = now(), decision_note = 'Expired after 24 h'
       where status = 'pending' and created_at < now() - interval '24 hours' returning id, agent_action_id`;
@@ -162,7 +166,7 @@ export async function runJobSheets() {
     if (j.email) await queueMessage("I4", j.token as string, j.email as string, { title: `${j.title} · ${a?.suburb ?? ""}`, sheet });
     await db()`update quotes set reminders = reminders || '{"sheet":true}' where id = ${j.id}`;
   }
-  await db()`update date_offers set status = 'expired' where kind = 'earlier' and status = 'open' and expires_at < now()`;
+  await moveRows("date_offers", "open", "expired", SYSTEM, "kind = 'earlier' and expires_at < now()", []);
   return jobs.length;
 }
 

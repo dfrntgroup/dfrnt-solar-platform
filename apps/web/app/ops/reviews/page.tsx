@@ -1,3 +1,4 @@
+import { lifecycleLabel } from "@dfrnt/engine";
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
@@ -17,7 +18,7 @@ export default async function OpsReviews() {
       <p className="muted">{pending} waiting. Publish every genuine review, good or bad. Hide only if it isn&apos;t from this install or breaks the rules (abuse, personal details). Reply to anything under 4 stars.</p>
       {rows.map((r) => (
         <div key={r.id as string} className="card" style={{ marginBottom: 12 }}>
-          <p className="small muted">{r.d as string} · {r.first_name as string ?? ""}, {r.suburb as string ?? ""} · {r.business_name as string ?? "no installer"} · <a href={`/ops/job/${r.qid}`}>job</a> · <strong>{r.status as string}</strong></p>
+          <p className="small muted">{r.d as string} · {r.first_name as string ?? ""}, {r.suburb as string ?? ""} · {r.business_name as string ?? "no installer"} · <a href={`/ops/job/${r.qid}`}>job</a> · <strong>{lifecycleLabel("reviews", r.status as string)}</strong></p>
           <p><span className="stars">{"★".repeat(r.rating as number)}{"☆".repeat(5 - (r.rating as number))}</span></p>
           <p>{r.body as string}</p>
           {r.reply && <p className="small muted">Our reply: {r.reply as string}</p>}

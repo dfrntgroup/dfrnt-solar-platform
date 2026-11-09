@@ -1,3 +1,4 @@
+import { lifecycleLabel } from "@dfrnt/engine";
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
@@ -20,7 +21,7 @@ export default async function Credits({ searchParams }: { searchParams: Promise<
           <input name="amount" placeholder="Amount inc GST" style={input} required /><input name="email" placeholder="Customer email (optional)" style={input} /><input name="reason" placeholder="Reason" style={input} required /></div>
         <button className="btn sm">Issue credit</button>
       </form>
-      <table className="lines"><tbody>{rows.map((r) => <tr key={r.code as string}><td><strong>{r.code as string}</strong><br /><span className="small muted">{r.reason as string} · {r.email as string ?? ""}</span></td><td>{aud2(r.a as number)}</td><td>{r.status as string}</td><td className="small">to {r.e as string}</td></tr>)}</tbody></table>
+      <table className="lines"><tbody>{rows.map((r) => <tr key={r.code as string}><td><strong>{r.code as string}</strong><br /><span className="small muted">{r.reason as string} · {r.email as string ?? ""}</span></td><td>{aud2(r.a as number)}</td><td>{lifecycleLabel("credits", r.status as string)}</td><td className="small">to {r.e as string}</td></tr>)}</tbody></table>
     </AdminShell>
   );
 }

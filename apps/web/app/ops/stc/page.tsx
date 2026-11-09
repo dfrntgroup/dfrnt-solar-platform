@@ -1,3 +1,4 @@
+import { lifecycleLabel } from "@dfrnt/engine";
 import Link from "next/link";
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
@@ -22,7 +23,7 @@ export default async function Stc({ searchParams }: { searchParams: Promise<{ er
       {error && <div className="note">{error}</div>}
       <table className="lines"><tbody>{rows.map((r) => (
         <tr key={r.id as string}><td><Link href={`/ops/job/${r.qid}`}>{r.customer_name as string}</Link><br /><span className="small muted">{r.solar_stcs as number} solar + {r.battery_stcs as number} battery · {r.formbay_ref as string ?? ""}</span></td>
-          <td className="r">{aud2(r.ev as number)}</td><td className="r">{r.rv != null ? aud2(r.rv as number) : "—"}</td><td>{r.status as string}</td>
+          <td className="r">{aud2(r.ev as number)}</td><td className="r">{r.rv != null ? aud2(r.rv as number) : "—"}</td><td>{lifecycleLabel("stc_receivables", r.status as string)}</td>
           <td>{r.status === "expected" && <form action={stcAction} style={{ display: "flex", gap: 4 }}><input type="hidden" name="id" value={r.id as string} /><input type="hidden" name="to" value="lodged" /><input name="ref" placeholder="Formbay ref" style={{ ...input, width: 110 }} /><button className="btn sm">Lodged</button></form>}
             {r.status === "lodged" && <form action={stcAction} style={{ display: "flex", gap: 4 }}><input type="hidden" name="id" value={r.id as string} /><input type="hidden" name="to" value="sold" /><input name="realised" placeholder="Sold for $" style={{ ...input, width: 100 }} /><button className="btn sm">Sold</button></form>}
             {r.status === "sold" && <Step action={stcAction} fields={{ id: r.id as string, to: "paid" }} label="Cash received" />}</td></tr>))}</tbody></table>

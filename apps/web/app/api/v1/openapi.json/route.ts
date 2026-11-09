@@ -1,7 +1,7 @@
 // The OpenAPI document is generated from the operations registry (lib/operations.ts), so every operation an agent or API client
 // can call is listed with its real input schema and tier, and job states are an enum (9 Nov 2026).
 import { zodToJsonSchema } from "zod-to-json-schema";
-import { JOB_EFFECTS, JOB_LABELS, JOB_TIERS, QUOTE, STATES } from "@dfrnt/engine";
+import { JOB_EFFECTS, JOB_LABELS, JOB_TIERS, LIFECYCLES, QUOTE, STATES } from "@dfrnt/engine";
 import { json } from "@/lib/api";
 import { OPERATIONS } from "@/lib/operations";
 
@@ -36,6 +36,7 @@ function doc() {
     paths,
     "x-operations": operations,
     "x-job-machine": { states: STATES, labels: JOB_LABELS, edges, effects: JOB_EFFECTS, tiers: JOB_TIERS },
+    "x-lifecycles": Object.fromEntries(Object.entries(LIFECYCLES).map(([t, mch]) => [t, { states: mch.states, labels: mch.labels, transitions: mch.transitions }])),
   };
 }
 

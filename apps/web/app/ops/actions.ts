@@ -42,10 +42,8 @@ export async function ledgerApprove(f: FormData) {
   await run("/ops/ledger", async () => {
     const ids = f.getAll("ids").map(String); if (!ids.length) throw new Error("Tick at least one line");
     const to = s(f, "to") === "paid" ? "paid" : "approved";
-    await write({ actor: me.actor, action: `ledger.${to}` }, { ids }, async (tx) => {
-      await tx`update pay_ledger set status = ${to}, paid_at = ${to === "paid" ? new Date() : null} where id = any(${ids}) and status = ${to === "paid" ? "approved" : "eligible"}`;
-      return { entity: "pay_ledger", entityId: ids.join(","), event: `ledger.${to}`, result: { count: ids.length } };
-    });
+    const { moveRow } = await import("@/lib/lifecycle");
+    for (const id of ids) await moveRow("pay_ledger", id, to, me.actor, { action: `ledger.${to}`, set: to === "paid" ? { paid_at: new Date() } : {}, tolerate: true }, to === "paid" ? "approved" : "eligible");
     if (to === "paid") {
       const { completeIfSettled } = await import("@/lib/ops");
       const qs = await db()`select distinct quote_id from pay_ledger where id = any(${ids})`;
@@ -166,6 +164,11 @@ export async function refund(f: FormData) {
   const me = await requireStaff(); const id = s(f, "id");
   await run(`/ops/job/${id}`, async () => { const { recordRefund } = await import("@/lib/ops"); await recordRefund(id, Number(s(f, "amount")), s(f, "note") || "Refund", me.actor); });
 }
+/** Bank-paid variation or add-on money arrived (bug 7, 9 Nov 2026). */
+export async function extraPaymentReceived(f: FormData) {
+  const me = await requireStaff(); const id = s(f, "id");
+  await run(id ? `/ops/job/${id}` : "/ops/payments", async () => { const { markExtraPaymentReceived } = await import("@/lib/ops"); await markExtraPaymentReceived(s(f, "payment"), me.actor); });
+}
 export async function refundSent(f: FormData) {
   const me = await requireStaff(); const id = s(f, "id");
   await run(`/ops/job/${id}`, async () => { const { markRefundSent } = await import("@/lib/ops"); await markRefundSent(s(f, "payment"), me.actor); });
@@ -204,9 +207,18 @@ export async function createInstallerFromApplication(f: FormData) {
       for (let n = 1; n <= (d.crews ?? 1); n++) await tx`insert into installer_crews (installer_id, name) values (${i!.id}, ${(d.crews ?? 1) === 1 ? "Crew" : `Crew ${n}`})`;
       for (const [n, t] of team.entries()) await tx`insert into technicians (installer_id, name, saa_number, formbay_id, is_default) values (${i!.id}, ${t.name}, ${t.saa}, ${t.formbay_id}, ${n === 0})`;
       if (a.insurance_doc) await tx`insert into installer_documents (installer_id, kind, path, expires_on) values (${i!.id}, 'insurance', ${a.insurance_doc}, ${a.insurance_expiry ?? null})`;
-      await tx`update installer_applications set status = 'accepted' where id = ${a.id}`;
       return { entity: "installer", entityId: i!.id as string, event: "installer.created", result: { id: i!.id, technicians: team.length } };
     });
+    const { moveRow } = await import("@/lib/lifecycle");
+    await moveRow("installer_applications", String(a.id), "accepted", me.actor, { action: "installer_applications.accept" }, "new");
+  });
+}
+/** An application that won't become an installer (no reject path existed before 9 Nov 2026). */
+export async function declineApplication(f: FormData) {
+  const me = await requireStaff();
+  await run("/ops/installers", async () => {
+    const { moveRow } = await import("@/lib/lifecycle");
+    await moveRow("installer_applications", s(f, "id"), "declined", me.actor, { action: "installer_applications.decline", rationale: s(f, "note") || "Declined" }, "new");
   });
 }
 
@@ -215,11 +227,8 @@ export async function reviewDecide(f: FormData) {
   const me = await requireStaff();
   const id = String(f.get("id") ?? ""), to = String(f.get("to") ?? ""), reply = String(f.get("reply") ?? "").trim().slice(0, 2000) || null;
   if (!["published", "hidden", "reply"].includes(to)) redirect("/ops/reviews");
-  await write({ actor: me.actor, action: `reviews.${to}` }, { id, reply }, async (tx) => {
-    if (to === "reply") await tx`update reviews set reply = ${reply} where id = ${id}`;
-    else await tx`update reviews set status = ${to}, published_at = case when ${to} = 'published' then now() else null end where id = ${id}`;
-    return { entity: "review", entityId: id, event: `review.${to}`, result: { id } };
-  });
+  if (to === "reply") await write({ actor: me.actor, action: "reviews.reply" }, { id, reply }, async (tx) => { await tx`update reviews set reply = ${reply} where id = ${id}`; return { entity: "review", entityId: id, event: "review.reply", result: { id } }; });
+  else { const { moveRow } = await import("@/lib/lifecycle"); await moveRow("reviews", id, to, me.actor, { action: `reviews.${to}`, set: { published_at: to === "published" ? new Date() : null }, idempotent: true }); }
   revalidatePath("/reviews"); revalidatePath("/ops/reviews"); redirect("/ops/reviews");
 }
 
@@ -263,7 +272,9 @@ export async function sendTemplateTests(f: FormData) {
 export async function resendMessage(f: FormData) {
   await requireStaff();
   const { deliver } = await import("@/lib/email");
-  await db()`update messages set status = 'queued' where id = ${String(f.get("id"))} and status in ('failed','held')`;
+  const { moveRow } = await import("@/lib/lifecycle");
+  const me2 = await requireStaff();
+  await moveRow("messages", String(f.get("id")), "queued", me2.actor, { action: "messages.resend", tolerate: true });
   await deliver(String(f.get("id")));
   revalidatePath("/ops/messages"); redirect("/ops/messages");
 }
@@ -306,7 +317,7 @@ export async function formbaySyncNow(f: FormData) {
 /* C5 / C8 / C4: call-backs and settings */
 export async function callbackDone(f: FormData) {
   const me = await requireStaff();
-  await run("/ops/callbacks", async () => { await db()`update callbacks set status = 'done', done_at = now(), done_by = ${me.name} where id = ${s(f, "id")}`; });
+  await run("/ops/callbacks", async () => { const { moveRow } = await import("@/lib/lifecycle"); await moveRow("callbacks", s(f, "id"), "done", me.actor, { set: { done_at: new Date(), done_by: me.name }, idempotent: true }, "new"); });
 }
 /** P1/P6 (4 Nov 2026): how jobs get priced, and whether a test installer may be assigned. */
 export async function savePricingMode(f: FormData) {
@@ -507,13 +518,14 @@ export async function saveServicePlan(f: FormData) {
   });
 }
 export async function memberAction(f: FormData) {
-  await requireStaff();
+  const me = await requireStaff();
   await run("/ops/service", async () => {
     const id = s(f, "id"), what = s(f, "what");
-    if (what === "paid") await db()`update memberships set status = 'active', started_on = coalesce(started_on, current_date),
-      renews_on = greatest(coalesce(renews_on, current_date), current_date) + interval '1 year' where id = ${id}`;
+    const { moveRow } = await import("@/lib/lifecycle");
+    // The membership machine: pending or lapsed → active on payment; cancelled is final (it used to be re-activatable).
+    if (what === "paid") await moveRow("memberships", id, "active", me.actor, { action: "memberships.paid", work: async (tx) => { await tx`update memberships set started_on = coalesce(started_on, current_date), renews_on = greatest(coalesce(renews_on, current_date), current_date) + interval '1 year' where id = ${id}`; } });
     else if (what === "visit") await db()`update memberships set last_visit_on = current_date where id = ${id}`;
-    else if (what === "cancel") await db()`update memberships set status = 'cancelled' where id = ${id}`;
+    else if (what === "cancel") await moveRow("memberships", id, "cancelled", me.actor, { action: "memberships.cancel", idempotent: true });
   });
 }
 
@@ -566,7 +578,7 @@ export async function energyRepull(f: FormData) {
 }
 export async function energyRevoked(f: FormData) {
   await requireStaff();
-  await run("/ops/energy", async () => { await db()`update energy_links set revoke_status = 'revoked' where id = ${s(f, "id")}`; });
+  await run("/ops/energy", async () => { await db()`update energy_links set revoke_status = 'revoked' where id = ${s(f, "id")} and revoke_status = 'manual'`; });
 }
 
 /** S2: register this app's own Stripe webhook (signing secret stored sealed, nobody copies it). */

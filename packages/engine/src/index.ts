@@ -7,6 +7,7 @@ export * from "./catalogue";
 export * from "./jobs";
 export * from "./machines";
 export * from "./quote-machine";
+export * from "./lifecycles";
 export * from "./options";
 export * from "./schedule";
 export * from "./usage";

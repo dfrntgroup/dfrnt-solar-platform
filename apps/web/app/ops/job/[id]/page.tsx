@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { db } from "@dfrnt/db";
-import { JOB_LABELS, JOB_SETS, nextMoves, statusLabel } from "@dfrnt/engine";
+import { JOB_SETS, lifecycleLabel, nextMoves, statusLabel } from "@dfrnt/engine";
 import { checkoutLabel } from "@/lib/checkout-step";
 import { PO_ORDER } from "@/lib/ops";
 import { AdminShell, input } from "@/components/Admin";
@@ -160,7 +160,7 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
             <select name="decision" style={input}><option value="price">Proceed — price it (with any surcharge ticked)</option><option value="installer">Send back to an installer</option><option value="decline">Decline the job</option></select>
             <input name="note" placeholder="Note" style={input} /><button className="btn" type="submit">Decide</button></form>}
           {(q.status === "awaiting_date" || q.status === "booked") && pos.length === 0 && <div className="card" style={{ marginBottom: 12 }}><strong>Purchase orders</strong><Step action={draftPO} fields={{ id }} label="Draft POs from the parts list" /></div>}
-          {pos.length > 0 && <div className="card" style={{ marginBottom: 12 }}><strong>Purchase orders</strong>{pos.map((po) => <span key={po.id as string} className="small">PO {po.number as number} · {po.supplier as string} · {aud2(po.total as number)} · {po.status as string}
+          {pos.length > 0 && <div className="card" style={{ marginBottom: 12 }}><strong>Purchase orders</strong>{pos.map((po) => <span key={po.id as string} className="small">PO {po.number as number} · {po.supplier as string} · {aud2(po.total as number)} · {lifecycleLabel("purchase_orders", po.status as string)}
             {PO_ORDER.next(po.status as string) && <> <Step action={poAction} fields={{ po: po.id as string, to: PO_ORDER.next(po.status as string)!, back: `/ops/job/${id}` }} label={PO_ORDER.label(PO_ORDER.next(po.status as string)!)} /></>}</span>)}</div>}
           {q.status === "cancelled" && received > 0.005 && <form action={refund} className="card" style={{ marginBottom: 12 }}>
             <input type="hidden" name="id" value={id} /><strong>Refund</strong><span className="small">Paid and not yet refunded: {aud2(received)}</span>
@@ -200,10 +200,10 @@ export default async function Job({ params, searchParams }: { params: Promise<{ 
                   <span className="small">{b}</span><input name="ref" placeholder="Registration ref" style={{ ...input, width: 150 }} />
                   <label className="small"><input type="checkbox" name="tell" /> email customer</label><button className="btn ghost sm">Mark registered</button></form>)}
           </div>}
-          <div className="card" style={{ marginBottom: 12 }}><strong>Payments</strong>{pays.length ? pays.map((x, i) => <span key={i} className="small">{x.kind as string} · {x.method as string} · {aud2(x.amount as number)} · {x.reference as string} · {x.status as string}{x.fee != null ? ` · fee ${aud2(x.fee as number)}` : ""}{x.provider_ref ? <> · <a href={stripeLink(x.provider_ref as string)} target="_blank" rel="noreferrer">Stripe</a></> : null}</span>) : <span className="small muted">None</span>}</div>
-          <div className="card" style={{ marginBottom: 12 }}><strong>Variations</strong>{vars.length ? vars.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.sell_inc as number)} · {x.status as string}</span>) : <span className="small muted">None</span>}</div>
-          <div className="card" style={{ marginBottom: 12 }}><strong>Installer pay</strong>{ledger.length ? ledger.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.amount_ex as number)} · {x.status as string}</span>) : <span className="small muted">None yet</span>}</div>
-          <div className="card" style={{ marginBottom: 12 }}><strong>Messages</strong>{msgs.length ? msgs.map((m, i) => <span key={i} className="small">{m.template as string} · {m.subject as string} · {m.status as string}</span>) : <span className="small muted">None</span>}</div>
+          <div className="card" style={{ marginBottom: 12 }}><strong>Payments</strong>{pays.length ? pays.map((x, i) => <span key={i} className="small">{x.kind as string} · {x.method as string} · {aud2(x.amount as number)} · {x.reference as string} · {lifecycleLabel("payments", x.status as string)}{x.fee != null ? ` · fee ${aud2(x.fee as number)}` : ""}{x.provider_ref ? <> · <a href={stripeLink(x.provider_ref as string)} target="_blank" rel="noreferrer">Stripe</a></> : null}</span>) : <span className="small muted">None</span>}</div>
+          <div className="card" style={{ marginBottom: 12 }}><strong>Variations</strong>{vars.length ? vars.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.sell_inc as number)} · {lifecycleLabel("variations", x.status as string)}</span>) : <span className="small muted">None</span>}</div>
+          <div className="card" style={{ marginBottom: 12 }}><strong>Installer pay</strong>{ledger.length ? ledger.map((x, i) => <span key={i} className="small">{x.description as string} · {aud2(x.amount_ex as number)} · {lifecycleLabel("pay_ledger", x.status as string)}</span>) : <span className="small muted">None yet</span>}</div>
+          <div className="card" style={{ marginBottom: 12 }}><strong>Messages</strong>{msgs.length ? msgs.map((m, i) => <span key={i} className="small">{m.template as string} · {m.subject as string} · {lifecycleLabel("messages", m.status as string)}</span>) : <span className="small muted">None</span>}</div>
           {["awaiting_date", ...JOB_SETS.BOOKED, "installed"].includes(q.status) && <JobThread quoteId={id} action={opsMessage} hidden={<input type="hidden" name="id" value={id} />} me="ops" title="Messages (customer and installer see these)" />}
           <form action={addStaffNote} className="card"><input type="hidden" name="id" value={id} /><strong>Note</strong><input name="note" style={input} /><button className="btn ghost sm" type="submit">Add note</button></form>
         </aside>

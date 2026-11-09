@@ -232,7 +232,7 @@ export async function pullLink(id: string, opts: { force?: boolean; monthlyOnly?
     }
     await db()`update energy_links set status = 'ready', path = ${path}, fail_reason = null, nmi = ${nmi}, meter_type = ${meter}, state = ${state},
       postcode = coalesce(postcode, ${postcode ?? null}), profile = ${profile ? db().json(profile as never) : null}, tariff = ${db().json(tariff as never)}, sizing = ${db().json(sizing as never)},
-      ready_at = coalesce(ready_at, now()), consent_until = coalesce(consent_until, now() + interval '12 months') where id = ${l.id}`;
+      ready_at = coalesce(ready_at, now()), consent_until = coalesce(consent_until, now() + interval '12 months') where id = ${l.id} and status in ('new','consenting','waiting','fallback')`;   // the link machine: failed is retried through waiting, never straight to ready
     if (days.length) {
       await db()`insert into energy_raw (link_id, days, purge_after) values (${l.id}, ${db().json(days as never)}, now() + make_interval(days => ${set.raw_days}))
         on conflict (link_id) do update set days = excluded.days, pulled_at = now(), purge_after = excluded.purge_after`;
@@ -255,7 +255,7 @@ async function saveMonthly(id: string, days: DayRead[], _set: EnergySettings) {
 }
 
 async function markFallback(id: string, reason: string) {
-  await db()`update energy_links set status = 'fallback', path = 'bill', fail_reason = ${reason} where id = ${id} and status <> 'ready'`;
+  await db()`update energy_links set status = 'fallback', path = 'bill', fail_reason = ${reason} where id = ${id} and status in ('new','consenting','waiting','failed')`;
 }
 
 /** S5: customer disconnects. Revoke with Fiskil, then delete everything derived from their data. */

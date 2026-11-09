@@ -1,5 +1,6 @@
 // G5 campaigns and G4 waitlist alerts. Only people who gave us their email for a price (or asked to hear when we cover
 // their area); every email has an unsubscribe link; sends go through the outbox, so test mode applies.
+import { moveRow } from "./lifecycle";
 import { createHmac } from "node:crypto";
 import { db } from "@dfrnt/db";
 import { quote, rebateWindow } from "@dfrnt/engine";
@@ -66,6 +67,7 @@ export function render(t: string, r: Recipient, until: string, link: string) {
 export async function sendCampaign(id: string, opts: { test?: boolean; testTo?: string; batch?: number } = {}) {
   const [c] = await db()`select id, audience, subject, body, status from campaigns where id = ${id}`;
   if (!c) throw new Error("Campaign not found");
+  if (!opts.test && c.status === "sent") throw new Error("This campaign has been sent. Copy it to send again.");
   const until = await rebateDate();
   const list = await recipients(c.audience as string);
   if (opts.test) {
@@ -86,7 +88,8 @@ export async function sendCampaign(id: string, opts: { test?: boolean; testTo?: 
     await deliver(m!.id as string).catch(() => "failed");
   }
   const left = list.filter((r) => !done.has(r.email)).length - todo.length;
-  await db()`update campaigns set status = ${left > 0 ? "sending" : "sent"}, sent_at = coalesce(sent_at, now()) where id = ${id}`;
+  const to = left > 0 ? "sending" : "sent";
+  if (c.status !== to) await moveRow("campaigns", id, to, { type: "system", id: "campaigns" }, { set: { sent_at: new Date() }, idempotent: true });
   return { sent: todo.length, left };
 }
 
@@ -111,7 +114,8 @@ export async function notifyWaitlist() {
     const body = `Hi ${String(r.name ?? "").split(" ")[0] || "there"},\n\nGood news: we now install at ${r.postcode}.${days.length ? ` The next free install days are ${days.map((d) => longDate(d)).join(", ")}.` : ""}\n\nSee every system priced for your home, installed, with the rebate already off: ${siteUrl()}/systems?postcode=${r.postcode}\n\nDon't want these? Unsubscribe: ${unsubLink(email)}`;
     const [m] = await db()`insert into messages (template, channel, recipient, subject, body) values ('WAITLIST', 'email', ${email}, ${`We now install at ${r.postcode}`}, ${body}) returning id`;
     await deliver(m!.id as string).catch(() => "failed");
-    await db()`update tickets set notified_at = now() where id = ${r.id}`;
+    // Told once, then closed: a waitlist ticket used to sit open in Ops → Support for ever.
+    await moveRow("tickets", r.id as string, "closed", { type: "system", id: "waitlist" }, { action: "tickets.waitlist_notified", set: { notified_at: new Date(), updated_at: new Date() }, idempotent: true });
     sent++;
   }
   return sent;

@@ -1,3 +1,4 @@
+import { lifecycleLabel } from "@dfrnt/engine";
 import { JOB_SETS, statusLabel, type JobState } from "@dfrnt/engine";
 import Link from "next/link";
 import { db } from "@dfrnt/db";
@@ -32,7 +33,7 @@ export default async function InstallerHome({ searchParams }: { searchParams: Pr
       {jobs.map((r) => <Link key={r.id as string} href={q(r.id as string)} className="card" style={{ textDecoration: "none", marginBottom: 8 }}>
         <strong>{r.d ? longDate(r.d as string) : "date tbc"} · {r.customer_name as string} · {r.postcode as string}</strong><span className="small">{r.title as string} · {statusLabel({ status: r.status as JobState, rebook: r.rebook as boolean, install_date: r.d as string | null })}</span></Link>)}
       <h2 style={{ marginTop: 28 }}>Earnings</h2>
-      <table className="lines"><tbody>{earn.map((e) => <tr key={e.status as string}><td>{e.status as string} ({e.n as number})</td><td className="r">{aud2(e.total as number)} ex GST</td></tr>)}</tbody></table>
+      <table className="lines"><tbody>{earn.map((e) => <tr key={e.status as string}><td>{lifecycleLabel("pay_ledger", e.status as string)} ({e.n as number})</td><td className="r">{aud2(e.total as number)} ex GST</td></tr>)}</tbody></table>
       <div className="grid" style={{ marginTop: 28 }}>
         <form action={saveAvailability} className="card">{as}
           <h3>Availability</h3>

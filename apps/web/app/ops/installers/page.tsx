@@ -1,7 +1,7 @@
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
-import { saveInstaller, createInstallerFromApplication } from "../actions";
+import { saveInstaller, createInstallerFromApplication, declineApplication } from "../actions";
 import { Step } from "@/components/Step";
 import { photoUrl } from "@/lib/storage";
 
@@ -30,7 +30,7 @@ export default async function Installers({ searchParams }: { searchParams: Promi
           {d.capacity && d.scope ? <span className="small muted">{d.capacity.jobsPerDay}/day, {d.capacity.leadDays} days&apos; notice, days {d.capacity.workingDays.join(",")} · instant: {d.scope.roofTypes.join("/")} roofs, {d.scope.phases.join("/")}-phase, battery {d.scope.batteryLocations.join("/")}, up to {d.scope.maxStoreys} storey</span> : null}
           {a.notes ? <span className="small muted">{a.notes as string}</span> : null}
           <span className="small muted">Check the licence on the QLD register and SAA numbers on the SAA site before switching them on.</span>
-          <Step action={createInstallerFromApplication} fields={{ id: a.id as string }} label="Create installer (then tick Active below)" /></div>; })}</>}
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><Step action={createInstallerFromApplication} fields={{ id: a.id as string }} label="Create installer (then tick Active below)" /><Step action={declineApplication} fields={{ id: a.id as string }} label="Decline" ghost /></div></div>; })}</>}
       {rows.map((r) => { const c = r.capacity as { jobsPerDay: number; leadDays: number; workingDays: number[]; blackouts: string[] }; return (
         <form key={r.id as string} action={saveInstaller} className="card" style={{ marginBottom: 16 }}>
           <input type="hidden" name="id" value={r.id as string} />

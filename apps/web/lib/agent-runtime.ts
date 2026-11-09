@@ -284,8 +284,8 @@ export async function executeAgentProposal(p: { id: string; proposer_id: string;
     if (!tool) throw new Error("That agent action no longer exists");
     const parsed = tool.input.parse(input);
     const result = await tool.run(parsed, { agentId: p.proposer_id, actor: { type: "agent", id: p.proposer_id }, test: false });
-    if (p.agent_action_id) await db()`update agent_actions set outcome = 'approved', edited = ${wasEdited}, input = ${db().json(parsed as never)}, result = ${db().json((result ?? null) as never)} where id = ${p.agent_action_id}`;
-  } else if (p.agent_action_id) await db()`update agent_actions set outcome = 'rejected' where id = ${p.agent_action_id}`;
+    if (p.agent_action_id) await db()`update agent_actions set outcome = 'approved', edited = ${wasEdited}, input = ${db().json(parsed as never)}, result = ${db().json((result ?? null) as never)} where id = ${p.agent_action_id} and outcome = 'proposed'`;
+  } else if (p.agent_action_id) await db()`update agent_actions set outcome = 'rejected' where id = ${p.agent_action_id} and outcome = 'proposed'`;
   await db()`update approvals set edited = ${wasEdited} where id = ${p.id}`;
 }
 

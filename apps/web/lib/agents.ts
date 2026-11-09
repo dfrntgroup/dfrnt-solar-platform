@@ -8,7 +8,8 @@ export async function propose(agentId: string, action: string, payload: unknown,
 }
 
 export async function executeProposal(id: string, approve: boolean, staffId: string, note?: string, edited?: Record<string, unknown>) {
-  const [p] = await db()`select * from approvals where id = ${id} and status = 'pending'`;
+  // Claim it first: the second of two simultaneous approvers finds nothing to claim and stops here (used to run the operation twice).
+  const [p] = await db()`update approvals set decision_note = coalesce(decision_note, '') where id = ${id} and status = 'pending' returning *`;
   if (!p) throw new Error("Already decided");
   if (new Date(p.created_at as string).getTime() < Date.now() - 24 * 3600_000) {
     await db()`update approvals set status = 'expired', decided_by = ${staffId}, decided_at = now() where id = ${id}`;
@@ -20,5 +21,5 @@ export async function executeProposal(id: string, approve: boolean, staffId: str
     const { executeAgentProposal } = await import("./agent-runtime");
     await executeAgentProposal({ id, proposer_id: p.proposer_id as string, payload: p.payload as never, agent_action_id: (p.agent_action_id as string) ?? null }, approve, edited);
   } else if (approve) await runOperation(p.action as string, p.payload, { type: "agent", id: p.proposer_id as string }, `Approved proposal ${id}${note ? `: ${note}` : ""}`);
-  await db()`update approvals set status = ${approve ? "approved" : "rejected"}, decided_by = ${staffId}, decided_at = now(), decision_note = ${note ?? null} where id = ${id}`;
+  await db()`update approvals set status = ${approve ? "approved" : "rejected"}, decided_by = ${staffId}, decided_at = now(), decision_note = ${note ?? null} where id = ${id} and status = 'pending'`;
 }

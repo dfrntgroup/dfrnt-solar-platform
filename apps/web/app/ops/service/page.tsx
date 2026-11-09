@@ -1,3 +1,4 @@
+import { lifecycleLabel } from "@dfrnt/engine";
 import Link from "next/link";
 import { db } from "@dfrnt/db";
 import { AdminShell } from "@/components/Admin";
@@ -22,8 +23,8 @@ export default async function Service() {
       <p className="muted">{plan.on ? `On at ${aud(plan.price)} a year.` : "Off (switch on in Ops → Settings)."} {rows.filter((r) => r.status === "active").length} active members · {due.length} visits due. Book visits through the Booking desk or the installer&apos;s offered days.</p>
       <table className="lines small"><tbody>
         {rows.map((r) => <tr key={r.id as string}><td><Link href={`/ops/job/${r.qid}`}>{(r.customer_name as string) ?? "Customer"}</Link><br /><span className="muted">{r.postcode as string} · job {r.qs as string}</span></td>
-          <td>{r.status as string} · {aud(r.price as number)} · ref {r.reference as string}<br /><span className="muted">{r.renews_on ? `renews ${longDate(r.renews_on as string)}` : "not started"}{r.last_visit_on ? ` · visited ${longDate(r.last_visit_on as string)}` : ""}</span></td>
-          <td className="r">{r.status !== "active" && r.status !== "cancelled" && <Btn id={r.id as string} what="paid" label="Payment received" />}
+          <td>{lifecycleLabel("memberships", r.status as string)} · {aud(r.price as number)} · ref {r.reference as string}<br /><span className="muted">{r.renews_on ? `renews ${longDate(r.renews_on as string)}` : "not started"}{r.last_visit_on ? ` · visited ${longDate(r.last_visit_on as string)}` : ""}</span></td>
+          <td className="r">{(r.status === "pending" || r.status === "lapsed") && <Btn id={r.id as string} what="paid" label="Payment received" />}
             {r.status === "active" && <><Btn id={r.id as string} what="paid" label="Renewal paid" /> <Btn id={r.id as string} what="visit" label="Visit done" /></>}
             {r.status !== "cancelled" && <Btn id={r.id as string} what="cancel" label="Cancel" />}</td></tr>)}
         {!rows.length && <tr><td className="muted">No members yet.</td></tr>}

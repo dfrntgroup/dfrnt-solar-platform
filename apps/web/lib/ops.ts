@@ -1,4 +1,5 @@
 // Ops back office: purchase orders (O19), refunds (O14), credits (O16), support (O15), STC receivables (O20).
+import { moveRow } from "./lifecycle";
 import { randomBytes } from "node:crypto";
 import { db, write, type Actor } from "@dfrnt/db";
 import { refundRule } from "@dfrnt/engine";
@@ -47,13 +48,9 @@ export const PO_ORDER = {
 export async function poStep(poId: string, to: "approved" | "sent" | "delivered" | "cancelled", actor: Actor, eta?: string) {
   const [po] = await db()`select id, quote_id, status from purchase_orders where id = ${poId}`;
   if (!po) throw new Error("PO not found");
-  if (to === "cancelled" && !PO_ORDER.canCancel(po.status as string)) throw new Error(`A ${po.status} purchase order can't be cancelled`);
-  if (to !== "cancelled" && PO_ORDER.next(po.status as string) !== to) throw new Error(`Can't go from ${po.status} to ${to}`);
-  await write({ actor, action: `purchase_orders.${to}` }, { poId, eta }, async (tx) => {
-    await tx`update purchase_orders set status = ${to}, eta = coalesce(${eta ?? null}::date, eta),
-      sent_at = case when ${to} = 'sent' then now() else sent_at end, delivered_at = case when ${to} = 'delivered' then now() else delivered_at end where id = ${poId}`;
-    return { entity: "purchase_order", entityId: poId, event: `po.${to}`, result: { to } };
-  });
+  if (to !== "cancelled" && PO_ORDER.next(po.status as string) !== to) throw new Error(`Can't go from ${PO_ORDER.labels[po.status as string] ?? po.status} to ${to}`);
+  // The PO machine (engine PURCHASE_ORDER) refuses delivered → cancelled and any skipped step.
+  await moveRow("purchase_orders", poId, to, actor, { action: `purchase_orders.${to}`, set: { ...(eta ? { eta } : {}), ...(to === "sent" ? { sent_at: new Date() } : {}), ...(to === "delivered" ? { delivered_at: new Date() } : {}) } }, po.status as string);
   const q = await getQuoteById(po.quote_id as string);
   if (!q) return;
   if (to === "sent" && q.status === "booked") await advance(q, "gear_ordered", actor, "Purchase order sent to supplier");
@@ -76,21 +73,30 @@ export async function recordRefund(quoteId: string, amount: number, note: string
   const w = await write({ actor, action: "refunds.record", rationale: note }, { quoteId, amount }, async (tx) => {
     const [r] = await tx`insert into payments (quote_id, kind, method, amount, reference, status, refund_rule, note)
       values (${quoteId}, 'refund', ${q.payment_method ?? "bank"}, ${amount}, ${`RF${q.token.slice(0, 6).toUpperCase()}`}, 'pending', ${rule}, ${note}) returning id`;
-    await tx`update stc_receivables set status = 'failed' where quote_id = ${quoteId}`;
     return { entity: "quote", entityId: quoteId, event: "refund.recorded", result: { refund_id: r!.id as string, amount } };
   });
+  // A refunded job's STCs won't be claimed: every receivable still live fails (terminal states are left alone).
+  for (const s of await db()`select id, status from stc_receivables where quote_id = ${quoteId} and status in ('expected','lodged','sold')`)
+    await moveRow("stc_receivables", s.id as string, "failed", actor, { rationale: "Refund recorded", tolerate: true }, s.status as string);
   // S3: card and PayTo refunds go back through Stripe to the original method; the webhook marks them refunded.
   const { isOnline, stripeReady, refundOnline } = await import("./stripe");
   if (isOnline(q.payment_method) && stripeReady()) {
     try { await refundOnline({ refundRowId: w.result.refund_id, quoteId, amount }); }
-    catch (e) { await db()`update payments set status = 'failed', note = ${`${note} · Stripe: ${(e as Error).message}`.slice(0, 500)} where id = ${w.result.refund_id}`; throw e; }
+    catch (e) { await moveRow("payments", w.result.refund_id, "failed", actor, { rationale: "Stripe refund failed", set: { note: `${note} · Stripe: ${(e as Error).message}`.slice(0, 500) }, tolerate: true }, "pending"); throw e; }
   }
 }
 export async function markRefundSent(paymentId: string, actor: Actor) {
-  await write({ actor, action: "refunds.sent" }, { paymentId }, async (tx) => {
-    await tx`update payments set status = 'refunded', received_at = now() where id = ${paymentId} and kind = 'refund'`;
-    return { entity: "payment", entityId: paymentId, event: "refund.sent", result: { ok: true } };
-  });
+  const [p] = await db()`select kind from payments where id = ${paymentId}`;
+  if (p?.kind !== "refund") throw new Error("Not a refund");
+  await moveRow("payments", paymentId, "refunded", actor, { action: "refunds.sent", set: { received_at: new Date() } }, "pending");
+}
+
+/** Bank-paid variations and add-ons: Ops marks the money received (bug 7, 9 Nov 2026; before, only Stripe could). */
+export async function markExtraPaymentReceived(paymentId: string, actor: Actor) {
+  const [p] = await db()`select kind, method, status from payments where id = ${paymentId}`;
+  if (!p || p.kind !== "variation") throw new Error("Only variation and add-on payments are marked received here");
+  if (p.method !== "bank") throw new Error("Card and PayTo payments are confirmed by Stripe");
+  await moveRow("payments", paymentId, "received", actor, { action: "payments.receive_extra", set: { received_at: new Date() } }, "pending");
 }
 
 /* O16: credits */
@@ -120,7 +126,8 @@ export async function replyTicket(id: string, author: string, body: string, inte
   const [t] = await db()`select email, quote_id, subject from tickets where id = ${id}`;
   if (!t) throw new Error("Ticket not found");
   await db()`insert into ticket_replies (ticket_id, author, body, internal) values (${id}, ${author}, ${body}, ${internal})`;
-  await db()`update tickets set status = ${close ? "closed" : internal ? "open" : "waiting"}, updated_at = now() where id = ${id}`;
+  const to = close ? "closed" : internal ? "open" : "waiting";
+  await moveRow("tickets", id, to, { type: "staff", id: author }, { action: `tickets.${to}`, set: { updated_at: new Date() }, idempotent: true });
   if (!internal && t.email) {
     await db()`insert into messages (quote_id, template, channel, recipient, subject, body) values (${t.quote_id}, 'SUPPORT', 'email', ${t.email}, ${`Re: ${t.subject}`}, ${body})`;
   }
@@ -128,11 +135,8 @@ export async function replyTicket(id: string, author: string, body: string, inte
 
 /* O20: STC receivables */
 export async function stcStep(id: string, to: "lodged" | "sold" | "paid" | "failed", actor: Actor, realised?: number, ref?: string) {
-  await write({ actor, action: `stc.${to}` }, { id, realised, ref }, async (tx) => {
-    await tx`update stc_receivables set status = ${to}, realised_value = coalesce(${realised ?? null}::numeric, realised_value),
-      formbay_ref = coalesce(${ref ?? null}, formbay_ref), updated_at = now() where id = ${id}`;
-    return { entity: "stc_receivable", entityId: id, event: `stc.${to}`, result: { to } };
-  });
+  // The STC machine (engine STC_RECEIVABLE) only allows expected → lodged → sold → paid, or failed from any live state.
+  await moveRow("stc_receivables", id, to, actor, { action: `stc.${to}`, set: { ...(realised != null ? { realised_value: realised } : {}), ...(ref ? { formbay_ref: ref } : {}), updated_at: new Date() } });
   const [r] = await db()`select quote_id from stc_receivables where id = ${id}`;
   const q = r ? await getQuoteById(r.quote_id as string) : null;
   if (!q) return;

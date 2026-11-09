@@ -1,3 +1,4 @@
+import { lifecycleLabel } from "@dfrnt/engine";
 import { db } from "@dfrnt/db";
 import { AdminShell, input } from "@/components/Admin";
 import { requireStaff } from "@/lib/auth";
@@ -26,7 +27,7 @@ export default async function Growth({ searchParams }: { searchParams: Promise<{
       <h3>Codes</h3>
       <table className="lines"><tbody>{codes.map((c) => <tr key={c.code as string}><td><strong>{c.code as string}</strong> · {c.kind as string}{c.creator_name ? ` · ${c.creator_name}` : ""}</td><td>{aud2(c.d as number)} off</td><td>{aud2(c.r as number)} reward</td><td>{c.uses as number} uses</td></tr>)}</tbody></table>
       <h3 style={{ marginTop: 20 }}>Payouts</h3>
-      <table className="lines"><tbody>{payouts.map((p) => <tr key={p.id as string}><td>{p.code as string}</td><td>for {p.customer_name as string}</td><td>{aud2(p.amount as number)}</td><td>{p.status as string}</td>
+      <table className="lines"><tbody>{payouts.map((p) => <tr key={p.id as string}><td>{p.code as string}</td><td>for {p.customer_name as string}</td><td>{aud2(p.amount as number)}</td><td>{lifecycleLabel("payouts", p.status as string)}</td>
         <td>{p.status === "eligible" && <form action={markPayoutPaid}><input type="hidden" name="id" value={p.id as string} /><button className="btn ghost sm">Mark paid</button></form>}</td></tr>)}</tbody></table>
     </AdminShell>
   );
