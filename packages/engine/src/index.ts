@@ -5,6 +5,8 @@ export * from "./config";
 export * from "./quote";
 export * from "./catalogue";
 export * from "./jobs";
+export * from "./machines";
+export * from "./quote-machine";
 export * from "./options";
 export * from "./schedule";
 export * from "./usage";

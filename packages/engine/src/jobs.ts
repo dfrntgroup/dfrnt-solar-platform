@@ -11,8 +11,8 @@ export type JobState = (typeof STATES)[number];
 export const TRANSITIONS: Record<JobState, JobState[]> = {
   saved: ["secured", "expired"],
   secured: ["pricing_instant", "pricing_installer", "tech_review", "lapsed"],
-  pricing_instant: ["priced"],
-  pricing_installer: ["priced", "pricing_installer", "tech_review", "lapsed"],
+  pricing_instant: ["priced", "tech_review"],   // tech_review: rescue if the instant freeze failed (9 Nov 2026)
+  pricing_installer: ["priced", "tech_review", "lapsed"],   // the self-loop (reassignment) was never a status change; removed 9 Nov 2026
   tech_review: ["pricing_installer", "priced", "declined"],
   priced: ["signed", "declined", "lapsed", "pricing_installer"],
   signed: ["payment_pending", "cancelled"],
@@ -30,7 +30,7 @@ export const TRANSITIONS: Record<JobState, JobState[]> = {
   complete: [], cancelled: [], expired: [], lapsed: ["secured"], declined: [],
 };
 
-/** Ops board column for each state (O1). */
+/** Ops board column for each state (O1). Labels for people live in quote-machine.ts (JOB_LABELS); this is the column grouping. */
 export const BOARD: Record<JobState, string> = {
   saved: "Saved", secured: "Pricing", pricing_instant: "Pricing", pricing_installer: "Pricing", tech_review: "Tech review",
   priced: "Quoted", signed: "Pending payment", payment_pending: "Pending payment", payment_review: "Payment review",
