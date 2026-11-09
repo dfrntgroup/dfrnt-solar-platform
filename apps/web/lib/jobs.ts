@@ -3,7 +3,7 @@
 import { db, write, type Actor } from "@dfrnt/db";
 import {
   autoStacks, instantPriceBlockers, isManualEdge, JOB_SETS, QUOTE, quote, rebateWindow, variationAmount, variationLine,
-  labourLines, requiredPhotos, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest, requestFromLine,
+  labourLines, requiredPhotos, type ConfigInput, type JobState, type Quote, type SiteAnswers, type StandardScope, type LabourRequest, requestFromLine, type Tier,
 } from "@dfrnt/engine";
 import { manualTransition, registerHook, transition, type Tx } from "./transition";
 import { todayAEST } from "./api";
@@ -308,7 +308,9 @@ export async function markPaid(q: QuoteRow, actor: Actor) {
 /** Edges "Change stage" never takes, derived from the machine (kept for callers that still import it). */
 export const MONEY_MOVES: [JobState, JobState][] = QUOTE.edges.filter((e) => !isManualEdge(e.from, e.to)).map((e) => [e.from, e.to]);
 export async function advance(q: QuoteRow, to: JobState, actor: Actor, rationale: string) {
-  return manualTransition(q, to, actor, rationale);
+  let maxTier: Tier | undefined;
+  if (actor.type === "agent") { const [a] = await db()`select max_tier from agents where id = ${actor.id}`; maxTier = (a?.max_tier as Tier | undefined) ?? "P"; }
+  return manualTransition(q, to, actor, rationale, maxTier);
 }
 
 /* Inline hooks: work an edge always needs, inside the same transaction as the move. */

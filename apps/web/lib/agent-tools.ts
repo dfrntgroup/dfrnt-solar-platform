@@ -3,7 +3,7 @@
 // refunds, roles, keys or deletes. Customer-facing messages go through safety checks in the runtime.
 import { z } from "zod";
 import { db } from "@dfrnt/db";
-import { BOARD, type JobState } from "@dfrnt/engine";
+import { JOB_SETS, nextMoves, requiredPhotos, STALE, statusLabel, type JobState } from "@dfrnt/engine";
 import type { Actor } from "@dfrnt/db";
 
 export interface ToolCtx { agentId: string; actor: Actor; test: boolean; fixture?: Record<string, unknown> }
@@ -28,17 +28,19 @@ const body = z.string().min(2).max(1200);
 
 /** The customer-safe view of a job: no costs, margins or installer pay. */
 async function record(quoteId: string) {
-  const [q] = await db()`select q.id, q.token, q.status, q.title, q.customer_name, q.postcode, q.install_date::text install_date, q.install_part, q.lock_until::text lock_until,
+  const [q] = await db()`select q.id, q.token, q.status, q.title, q.customer_name, q.postcode, q.install_date::text install_date, q.install_part, q.lock_until::text lock_until, q.rebook, q.design_fee_status, q.input,
       q.amount_payable::float8 amount_payable, q.payment_method, q.paid_at, q.signed_at, q.site is not null has_site, i.business_name installer, i.phone installer_phone
     from quotes q left join installers i on i.id = q.installer_id where q.id = ${quoteId}`;
   if (!q) return null;
   const photos = await db()`select kind from quote_photos where quote_id = ${quoteId} and superseded_at is null`;
   const msgs = await db()`select author, body, created_at from job_messages where quote_id = ${quoteId} order by created_at desc limit 6`;
   const vars = await db()`select description, sell_inc::float8 amount, status from variations where quote_id = ${quoteId} and status in ('proposed','approved')`;
-  const need = ["switchboard", "meter", "roof", "battery_location"].filter((k) => !photos.some((p) => p.kind === k));
+  // Battery-only jobs want the existing inverter, not the roof (engine requiredPhotos; the agent used to hard-code the solar set).
+  const need = requiredPhotos(((q.input as { panelCount?: number } | null)?.panelCount ?? 0) > 0).filter((k) => !photos.some((p) => p.kind === k));
   return {
     quote_id: q.id, first_name: String(q.customer_name ?? "").split(" ")[0] || null, system: q.title, postcode: q.postcode,
-    stage: BOARD[q.status as JobState] ?? q.status, install_date: q.install_date, install_part: q.install_part, installer: q.installer, price_locked_until: q.lock_until,
+    status: q.status, stage: statusLabel({ status: q.status as JobState, rebook: q.rebook as boolean, install_date: q.install_date as string | null, design_fee_status: q.design_fee_status as string | null }),
+    next: nextMoves(q.status as JobState).map((m) => ({ to: m.to, label: m.label, via: m.via, tier: m.tier })), install_date: q.install_date, install_part: q.install_part, installer: q.installer, price_locked_until: q.lock_until,
     you_pay: q.amount_payable, paid: !!q.paid_at, signed: !!q.signed_at, payment_method: q.payment_method,
     photos_missing: q.has_site ? need : [], changes_waiting: vars,
     recent_messages: msgs.reverse().map((m) => ({ from: m.author, text: String(m.body).slice(0, 400), at: m.created_at })),
@@ -78,7 +80,7 @@ export const TOOLS: AgentTool[] = [
   {
     name: "request_retake", agents: ["support"], label: "Ask for a photo retake", kind: "write", editable: "why",
     description: "Ask the customer to retake one photo (switchboard, meter, roof or battery_location) and say why in one sentence.",
-    input: z.object({ quote_id: uuid, which: z.enum(["switchboard", "meter", "roof", "battery_location"]), why: z.string().min(5).max(300) }),
+    input: z.object({ quote_id: uuid, which: z.enum(["switchboard", "meter", "roof", "battery_location", "existing_inverter"]), why: z.string().min(5).max(300) }),
     message: async (i) => ({ to: await quoteEmail(i.quote_id), body: i.why }),
     preview: (i) => `Retake ${String(i.which).replace("_", " ")}: ${i.why}`,
     run: async (i) => {
@@ -113,18 +115,20 @@ export const TOOLS: AgentTool[] = [
   },
   {
     name: "list_stuck_jobs", agents: ["ops"], label: "Find stuck jobs", kind: "read",
-    description: "Jobs that have sat too long: installer pricing over a day, photos missing over two days, unpaid after three days, no install day two days after paying, booked within five days with no purchase order.",
+    description: `Jobs that have sat too long, by the one stale table the board and crons use: installer pricing over ${STALE.pricing_installer.nudge_hours} h, tech review over ${STALE.tech_review.alert_hours} h, photos missing over two days, bank transfer unpaid after ${STALE.payment_pending.remind_days[0]} days, no install day ${STALE.awaiting_date.desk_hours} h after paying, a booked job that lost its day, booked within ${STALE.booked.po_days_before_install} days with no purchase order.`,
     input: z.object({}), preview: () => "List stuck jobs",
     run: (_i, ctx) => fixtureOr(ctx, "stuck", async () => db()`
       select id quote_id, status, title, customer_name, postcode, extract(day from now() - updated_at)::int days,
         case
-          when status in ('pricing_installer','tech_review') and updated_at < now() - interval '1 day' then 'Installer hasn''t priced it'
+          when status = 'pricing_installer' and coalesce(pricing_requested_at, updated_at) < now() - ${`${STALE.pricing_installer.nudge_hours} hours`}::interval then 'Installer hasn''t priced it'
+          when status = 'tech_review' and updated_at < now() - ${`${STALE.tech_review.alert_hours} hours`}::interval then 'Waiting on tech review'
           when status = 'secured' and site is null and updated_at < now() - interval '2 days' then 'Customer hasn''t sent home details or photos'
-          when status = 'payment_pending' and updated_at < now() - interval '3 days' then 'Unpaid'
-          when status = 'awaiting_date' and updated_at < now() - interval '2 days' then 'Paid but no install day'
-          when status = 'booked' and install_date <= current_date + 5 and not exists (select 1 from purchase_orders p where p.quote_id = quotes.id and p.status <> 'cancelled') then 'No purchase order and install is close'
+          when status = 'payment_pending' and payment_method = 'bank' and updated_at < now() - ${`${STALE.payment_pending.remind_days[0]} days`}::interval then 'Unpaid'
+          when status = 'awaiting_date' and paid_at < now() - ${`${STALE.awaiting_date.desk_hours} hours`}::interval then 'Paid but no install day'
+          when status = any(${JOB_SETS.BOOKED as string[]}::quote_status[]) and rebook then 'Booked but lost its day'
+          when status = 'booked' and install_date <= current_date + ${STALE.booked.po_days_before_install} and not exists (select 1 from purchase_orders p where p.quote_id = quotes.id and p.status <> 'cancelled') then 'No purchase order and install is close'
         end reason
-      from quotes where status in ('pricing_installer','tech_review','secured','payment_pending','awaiting_date','booked')
+      from quotes where status in ('pricing_installer','tech_review','secured','payment_pending','awaiting_date') or status = any(${JOB_SETS.BOOKED as string[]}::quote_status[])
       order by updated_at limit 60`.then((r) => r.filter((x) => x.reason))),
   },
   {

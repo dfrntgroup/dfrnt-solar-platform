@@ -248,13 +248,13 @@ run("job lifecycle (real database)", () => {
     });
   });
 
-  it("P2: the 3 pm run reminds the installer once about a job waiting since before 2 pm", async () => {
+  it("P2: the 3 pm run reminds the installer once about a job waiting longer than the stale table allows (4 h)", async () => {
     const { runAfternoon } = await import("@/lib/timers");
     await withMode({ installer_confirms_all: true, allow_test_installer: true }, async () => {
       let q = await securedQuote("Nudge");
       await J.submitSite(q, SITE, { name: "Nudge", email: "nudge@example.test", phone: "0400000000" });
       q = (await J.getQuote(q.token))!;
-      await db()`update quotes set pricing_requested_at = now() - interval '3 hours' where id = ${q.id}`;
+      await db()`update quotes set pricing_requested_at = now() - interval '5 hours' where id = ${q.id}`;
       const r = await runAfternoon();
       if ("weekend" in r) { expect(r.nudged).toBe(0); return; }
       expect((await msgs(q.id, "I6")).length).toBe(1);

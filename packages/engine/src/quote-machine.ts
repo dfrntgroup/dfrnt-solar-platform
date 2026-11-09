@@ -132,7 +132,8 @@ export const BOARD_COLUMNS: readonly string[] = Object.freeze([...new Set(JOB_SE
  * and the crons all read it.
  */
 export const STALE = {
-  pricing_installer: { nudge_hours: 4, reassign_hours: 24 },
+  /** nudge: the 3 pm reminder and the board alert. cutoff_hours: at the 5 pm cut-off, a price asked for this long before it is reassigned (the "by 5 pm" promise to installers). */
+  pricing_installer: { nudge_hours: 4, cutoff_hours: 1 },
   pricing_instant: { rescue_hours: 1 },
   tech_review: { alert_hours: 24 },
   payment_pending: { remind_days: [3, 6] as readonly number[], release_days: 7 },

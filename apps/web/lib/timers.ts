@@ -3,7 +3,7 @@ import { db, write } from "@dfrnt/db";
 import { todayAEST } from "./api";
 import { queueMessage } from "./messages";
 import { SYSTEM } from "./jobs";
-import { rebateWindow, type JobState } from "@dfrnt/engine";
+import { rebateWindow, STALE, type JobState } from "@dfrnt/engine";
 import { pricingData } from "./pricing-data";
 import { longDate } from "./site";
 import { transitionById } from "./transition";
@@ -32,12 +32,12 @@ export async function runDaily() {
   for (const q of pending) {
     const r = (q.reminders ?? {}) as Record<string, string>;
     if (q.payment_method && q.payment_method !== "bank") continue;   // PayTo/card/finance don't get bank-transfer reminders or the release
-    if (q.age >= 7) {
+    if (q.age >= STALE.payment_pending.release_days) {
       const out = await setStatus(q.id as string, "payment_pending", "signed", "Bank transfer not received in 7 days; released", "release", { payment_method: null });
       if (out.changed) { await db()`update payments set status = 'failed' where quote_id = ${q.id} and kind = 'system' and method = 'bank' and status = 'pending'`; released++; }
       continue;
     }
-    for (const day of [3, 6]) if (q.age >= day && !r[`bank_${day}`]) {
+    for (const day of STALE.payment_pending.remind_days) if (q.age >= day && !r[`bank_${day}`]) {
       await queueMessage("PAY", q.token as string, q.customer_email as string, { name: q.customer_name as string, amount: q.amount, reference: q.payment_reference as string });
       await db()`update quotes set reminders = reminders || ${db().json({ [`bank_${day}`]: today })} where id = ${q.id}`;
       reminded++;
@@ -175,7 +175,7 @@ export async function runCutoff() {
   if (dow === 0 || dow === 6) return { followups, sheets, reassigned: 0, to_ops: 0, weekend: true };
   // One clock for "the installer is late": the moment the price was asked for (set at submit, reassignment and photo retake).
   const waiting = await db()`select id, installer_id, postcode, pricing_reasons, tried_installers from quotes
-    where status = 'pricing_installer' and coalesce(pricing_requested_at, updated_at) < now() - interval '1 hour'`;
+    where status = 'pricing_installer' and coalesce(pricing_requested_at, updated_at) < now() - ${`${STALE.pricing_installer.cutoff_hours} hours`}::interval`;
   let reassigned = 0, toOps = 0;
   const { allow_test_installer: allowTest } = await (await import("./settings")).getSetting("pricing_mode");
   for (const q of waiting) {
@@ -195,7 +195,7 @@ export async function runCutoff() {
       toOps++;
     }
   }
-  const stuck = await db()`select id from quotes where status = 'pricing_instant' and updated_at < now() - interval '1 hour'`;
+  const stuck = await db()`select id from quotes where status = 'pricing_instant' and updated_at < now() - ${`${STALE.pricing_instant.rescue_hours} hours`}::interval`;
   for (const q of stuck) { const out = await setStatus(q.id as string, "pricing_instant", "tech_review", "Instant price never froze; rescued to tech review"); if (out.changed) toOps++; }
   return { followups, sheets, reassigned, to_ops: toOps };
 }
@@ -205,7 +205,7 @@ export async function runAfternoon() {
   const dow = new Date(Date.now() + 10 * 3600_000).getUTCDay();
   if (dow === 0 || dow === 6) return { nudged: 0, weekend: true };
   const waiting = await db()`select q.id, q.token, q.title, q.installer_id, i.email, i.business_name from quotes q join installers i on i.id = q.installer_id
-    where q.status = 'pricing_installer' and coalesce(q.pricing_requested_at, q.updated_at) < now() - interval '1 hour' and not (q.reminders ? 'price_nudge')`;
+    where q.status = 'pricing_installer' and coalesce(q.pricing_requested_at, q.updated_at) < now() - ${`${STALE.pricing_installer.nudge_hours} hours`}::interval and not (q.reminders ? 'price_nudge')`;
   let nudged = 0;
   for (const q of waiting) {
     if (!q.email) continue;
